@@ -1,0 +1,260 @@
+import Image from 'next/image';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
+import {
+  Breadcrumbs,
+  DetailHeader,
+  EmptyMini,
+  Field,
+  FieldGrid,
+  Section,
+} from '@/components/detail-shell';
+import {
+  INDUSTRY_LABEL,
+  MARKET_SEGMENT_LABEL,
+  type Client,
+  type ProjectStatus,
+  type ServiceTier,
+} from '@/lib/types';
+import ClientRowActions from '../row-actions';
+
+const TIER_LABEL: Record<ServiceTier, string> = {
+  ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
+  ipo: 'IPO', agm_egm: 'AGM/EGM', social_media: 'Social Media', event_management: 'Event Management',
+};
+
+const STATUS_DOT: Record<ProjectStatus, string> = {
+  pending: 'bg-aegis-gold',
+  upcoming: 'bg-aegis-blue',
+  completed: 'bg-aegis-gray-300',
+};
+
+type Project = {
+  project_id: string;
+  deliverable_name: string;
+  status: ProjectStatus;
+  deadline: string | null;
+};
+
+type Meeting = {
+  meeting_id: string;
+  meeting_format: 'physical' | 'online';
+  meeting_date: string;
+  attendees: string | null;
+  key_takeaways: string | null;
+  analysts: { institution_name: string } | null;
+};
+
+export default async function ClientDetailPage({
+  params,
+}: {
+  params: Promise<{ client_id: string }>;
+}) {
+  const { client_id } = await params;
+  const supabase = await createClient();
+
+  const [clientRes, projectsRes, meetingsRes] = await Promise.all([
+    supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
+    supabase
+      .from('projects')
+      .select('project_id, deliverable_name, status, deadline')
+      .eq('client_id', client_id)
+      .order('deadline', { ascending: true, nullsFirst: false }),
+    supabase
+      .from('meetings')
+      .select('meeting_id, meeting_format, meeting_date, attendees, key_takeaways, analysts ( institution_name )')
+      .eq('client_id', client_id)
+      .order('meeting_date', { ascending: false })
+      .limit(10),
+  ]);
+
+  const client = clientRes.data as Client | null;
+  if (!client) notFound();
+
+  const projects = (projectsRes.data ?? []) as Project[];
+  const meetings = (meetingsRes.data ?? []) as unknown as Meeting[];
+
+  return (
+    <div>
+      <Breadcrumbs
+        items={[
+          { href: '/clients', label: 'Clients' },
+          { label: client.corporate_name },
+        ]}
+      />
+
+      <DetailHeader
+        title={
+          <span className="flex items-center gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50">
+              {client.logo_url ? (
+                <Image
+                  src={client.logo_url}
+                  alt={client.corporate_name}
+                  width={48}
+                  height={48}
+                  unoptimized
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <span className="text-[10px] font-medium uppercase text-aegis-gray-300">
+                  {client.corporate_name.slice(0, 2)}
+                </span>
+              )}
+            </span>
+            <span>{client.corporate_name}</span>
+          </span>
+        }
+        subtitle={
+          [
+            client.ticker_code && `Ticker ${client.ticker_code}`,
+            client.industry && INDUSTRY_LABEL[client.industry],
+            client.market_segment && MARKET_SEGMENT_LABEL[client.market_segment],
+          ].filter(Boolean).join(' · ') || undefined
+        }
+        badges={
+          <div className="flex flex-wrap gap-1.5">
+            {client.service_tier.map((t) => (
+              <span
+                key={t}
+                className="inline-flex rounded-full bg-aegis-navy-50 px-2.5 py-0.5 text-xs font-medium text-aegis-navy"
+              >
+                {TIER_LABEL[t]}
+              </span>
+            ))}
+          </div>
+        }
+        actions={<ClientRowActions row={client} />}
+      />
+
+      <Section title="Profile">
+        <FieldGrid>
+          <Field label="Company name">{client.corporate_name}</Field>
+          <Field label="Ticker code">
+            {client.ticker_code ?? <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="Industry">
+            {client.industry ? INDUSTRY_LABEL[client.industry] : <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="Market segment">
+            {client.market_segment ? MARKET_SEGMENT_LABEL[client.market_segment] : <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="CEO">
+            {client.ceo_name ?? <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="CFO">
+            {client.cfo_name ?? <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="Financial year end">
+            {client.financial_year_end ?? <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="Current financial quarter">
+            {client.financial_quarter
+              ? new Date(client.financial_quarter).toLocaleDateString()
+              : <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="IPO status">
+            {client.ipo_status
+              ? <span className="capitalize">{client.ipo_status}</span>
+              : <span className="text-aegis-gray-300">—</span>}
+          </Field>
+          <Field label="Internal controls audit">
+            {client.internal_controls_audit ? 'Yes' : 'No'}
+          </Field>
+        </FieldGrid>
+      </Section>
+
+      {client.advisory_syndicate != null &&
+        Array.isArray(client.advisory_syndicate) &&
+        (client.advisory_syndicate as unknown[]).length > 0 && (
+          <Section title="Advisory syndicate">
+            <ul className="flex flex-wrap gap-2">
+              {(client.advisory_syndicate as string[]).map((adv, i) => (
+                <li
+                  key={i}
+                  className="inline-flex rounded-md border border-aegis-gray-100 bg-aegis-gray-50/60 px-3 py-1 text-xs text-aegis-gray"
+                >
+                  {String(adv)}
+                </li>
+              ))}
+            </ul>
+          </Section>
+        )}
+
+      <Section
+        title={`Projects (${projects.length})`}
+        action={
+          <Link href="/projects" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
+            View all →
+          </Link>
+        }
+      >
+        {projects.length === 0 ? (
+          <EmptyMini>No projects logged for this client yet.</EmptyMini>
+        ) : (
+          <ul className="divide-y divide-aegis-gray-100">
+            {projects.map((p) => (
+              <li key={p.project_id} className="flex items-center gap-3 py-2.5">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status]}`} />
+                <Link
+                  href={`/projects/${p.project_id}`}
+                  className="flex-1 truncate text-sm font-medium text-aegis-navy hover:text-aegis-orange"
+                >
+                  {p.deliverable_name}
+                </Link>
+                <span className="shrink-0 text-xs capitalize text-aegis-gray-500">{p.status}</span>
+                <span className="shrink-0 text-xs tabular-nums text-aegis-gray-500">
+                  {p.deadline ? new Date(p.deadline).toLocaleDateString() : '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        title={`Recent meetings (${meetings.length})`}
+        action={
+          <Link href="/meetings" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
+            View all →
+          </Link>
+        }
+      >
+        {meetings.length === 0 ? (
+          <EmptyMini>No meetings logged with this client yet.</EmptyMini>
+        ) : (
+          <ul className="divide-y divide-aegis-gray-100">
+            {meetings.map((m) => (
+              <li key={m.meeting_id} className="py-3">
+                <div className="flex items-center gap-2">
+                  <Link
+                    href={`/meetings/${m.meeting_id}`}
+                    className="text-xs font-medium tabular-nums text-aegis-navy hover:text-aegis-orange"
+                  >
+                    {new Date(m.meeting_date).toLocaleString(undefined, {
+                      dateStyle: 'medium', timeStyle: 'short',
+                    })}
+                  </Link>
+                  <span className="text-aegis-gray-200">·</span>
+                  <span className="text-[11px] uppercase tracking-wide text-aegis-gray-500">
+                    {m.meeting_format}
+                  </span>
+                  {m.analysts?.institution_name && (
+                    <>
+                      <span className="text-aegis-gray-200">·</span>
+                      <span className="text-xs text-aegis-gray-500">{m.analysts.institution_name}</span>
+                    </>
+                  )}
+                </div>
+                {m.key_takeaways && (
+                  <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.key_takeaways}</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+    </div>
+  );
+}

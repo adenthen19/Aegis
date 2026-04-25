@@ -1,0 +1,143 @@
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import PageHeader from '@/components/page-header';
+import DataTable, { type SortState } from '@/components/data-table';
+import SearchInput from '@/components/ui/search-input';
+import Pagination from '@/components/ui/pagination';
+import FilterTabs from '@/components/ui/filter-tabs';
+import type { Meeting } from '@/lib/types';
+import NewMeeting from './new-meeting';
+import MeetingRowActions from './row-actions';
+
+type MeetingRow = Meeting & {
+  clients: { corporate_name: string } | null;
+  analysts: { institution_name: string } | null;
+};
+
+const PAGE_SIZE = 25;
+const SORTABLE = new Set(['meeting_date', 'meeting_format', 'created_at']);
+
+export default async function MeetingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; sort?: string; dir?: string; page?: string; format?: string }>;
+}) {
+  const params = await searchParams;
+  const q = params.q?.trim() ?? '';
+  const format = params.format;
+  const sort = SORTABLE.has(params.sort ?? '') ? params.sort! : 'meeting_date';
+  const dir: 'asc' | 'desc' = params.dir === 'asc' ? 'asc' : 'desc';
+  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+
+  const supabase = await createClient();
+  const [meetingsRes, clientsRes, analystsRes] = await Promise.all([
+    (async () => {
+      let query = supabase.from('meetings')
+        .select('*, clients ( corporate_name ), analysts ( institution_name )', { count: 'exact' });
+      if (q) query = query.or(`attendees.ilike.%${q}%,key_takeaways.ilike.%${q}%`);
+      if (format === 'physical' || format === 'online') query = query.eq('meeting_format', format);
+      query = query.order(sort, { ascending: dir === 'asc' });
+      query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      return query;
+    })(),
+    supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
+    supabase.from('analysts').select('investor_id, institution_name').order('institution_name'),
+  ]);
+
+  const rows = (meetingsRes.data ?? []) as MeetingRow[];
+  const clientsList = clientsRes.data ?? [];
+  const analystsList = analystsRes.data ?? [];
+  const total = meetingsRes.count ?? 0;
+  const error = meetingsRes.error;
+  const sortState: SortState = { sort, dir };
+
+  return (
+    <div>
+      <PageHeader
+        title="Meeting Minutes & Engagement Mapping"
+        description="Logged engagements between clients, investors, and Aegis."
+        action={<NewMeeting clients={clientsList} analysts={analystsList} />}
+      />
+
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchInput placeholder="Search by attendees or takeaways…" />
+        <FilterTabs
+          paramName="format"
+          options={[
+            { value: '', label: 'All' },
+            { value: 'physical', label: 'Physical' },
+            { value: 'online', label: 'Online' },
+          ]}
+        />
+      </div>
+
+      {error && <p className="mb-4 text-sm text-aegis-orange-600">{error.message}</p>}
+
+      <DataTable<MeetingRow>
+        rows={rows}
+        sortState={sortState}
+        emptyMessage={q || format ? 'No meetings match the current filter.' : 'No meetings logged.'}
+        columns={[
+          {
+            header: 'Date',
+            sortKey: 'meeting_date',
+            cell: (r) => (
+              <Link
+                href={`/meetings/${r.meeting_id}`}
+                className="tabular-nums font-medium text-aegis-navy hover:text-aegis-orange"
+              >
+                {new Date(r.meeting_date).toLocaleString(undefined, {
+                  dateStyle: 'medium', timeStyle: 'short',
+                })}
+              </Link>
+            ),
+          },
+          {
+            header: 'Format',
+            sortKey: 'meeting_format',
+            cell: (r) => (
+              <span
+                className={[
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset',
+                  r.meeting_format === 'physical'
+                    ? 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20'
+                    : 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+                ].join(' ')}
+              >
+                {r.meeting_format}
+              </span>
+            ),
+          },
+          {
+            header: 'Client',
+            cell: (r) => r.clients?.corporate_name ?? <span className="text-aegis-gray-300">—</span>,
+          },
+          {
+            header: 'Investor',
+            cell: (r) => r.analysts?.institution_name ?? <span className="text-aegis-gray-300">—</span>,
+          },
+          {
+            header: 'Attendees',
+            cell: (r) => r.attendees ?? <span className="text-aegis-gray-300">—</span>,
+          },
+          {
+            header: 'Key Takeaways',
+            cell: (r) => (
+              <span className="line-clamp-2 block max-w-md text-xs text-aegis-gray-500">
+                {r.key_takeaways ?? '—'}
+              </span>
+            ),
+          },
+          {
+            header: '',
+            cell: (r) => (
+              <MeetingRowActions row={r} clients={clientsList} analysts={analystsList} />
+            ),
+          },
+        ]}
+      />
+
+      <Pagination total={total} page={page} pageSize={PAGE_SIZE} />
+    </div>
+  );
+}

@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  /* Aegis brand palette */
+  --color-aegis-navy: #1c5592;
+  --color-aegis-navy-50: #eaf1f9;
+  --color-aegis-navy-100: #c6d8ec;
+  --color-aegis-navy-700: #174677;
+  --color-aegis-navy-800: #123962;
+
+  --color-aegis-blue: #61b5d9;
+  --color-aegis-blue-50: #eef7fb;
+  --color-aegis-blue-100: #d3ecf5;
+
+  --color-aegis-orange: #ee7724;
+  --color-aegis-orange-50: #fdf1e7;
+  --color-aegis-orange-600: #d96712;
+
+  --color-aegis-gold: #f2b44a;
+  --color-aegis-gold-50: #fdf6e7;
+
+  --color-aegis-gray: #595959;
+  --color-aegis-gray-50: #f7f7f7;
+  --color-aegis-gray-100: #ededed;
+  --color-aegis-gray-200: #d9d9d9;
+  --color-aegis-gray-300: #b8b8b8;
+  --color-aegis-gray-500: #7a7a7a;
+  --color-aegis-gray-700: #3f3f3f;
+  --color-aegis-gray-900: #1f1f1f;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: #ffffff;
+  color: var(--color-aegis-gray);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-aegis-navy);
+  color: #ffffff;
+}
+
+/* Subtle, on-brand scrollbar for sidebar/nav surfaces.
+   Reserves a stable gutter so content doesn't shift when scrollbar appears. */
+.aegis-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(97, 181, 217, 0.25) transparent;
+  scrollbar-gutter: stable;
+}
+.aegis-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.aegis-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.aegis-scroll::-webkit-scrollbar-thumb {
+  background: rgba(97, 181, 217, 0.2);
+  border-radius: 9999px;
+  transition: background 0.15s ease;
+}
+.aegis-scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(97, 181, 217, 0.4);
+}
+.aegis-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(97, 181, 217, 0.6);
+}
