@@ -141,10 +141,10 @@ export default function LoginPage() {
           </div>
 
           <h1 className="text-3xl font-semibold tracking-tight text-aegis-navy">
-            Welcome.
+            Welcome back.
           </h1>
           <p className="mt-2 mb-10 text-sm text-aegis-gray-500">
-            Sign in to continue.
+            Sign in with your Aegis email to continue.
           </p>
 
           <form onSubmit={onSubmit} className="space-y-5">
