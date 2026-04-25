@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx --yes create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --skip-install --no-turbopack)",
+      "Bash(npx --yes create-next-app@latest _scaffold --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --skip-install --no-turbopack)",
+      "Bash(npx --yes create-next-app@latest aegis-app --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --skip-install --no-turbopack)",
+      "Bash(shopt -s dotglob)",
+      "Bash(mv aegis-app/* .)",
+      "Bash(rmdir aegis-app *)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(cat \"C:\\\\\\\\Users\\\\\\\\DELL\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\c--Users-DELL--gemini-antigravity-scratch-Aegis\\\\\\\\fe1ba3c3-7be1-4b48-9c2c-a4f6794f1e5b\\\\\\\\tasks\\\\\\\\bcthfws95.output\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} → %{redirect_url}\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(curl -s -o /dev/null -w \"/login → HTTP %{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"/dashboard → HTTP %{http_code} \\(redirect: %{redirect_url}\\)\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"login=%{http_code} dashboard=%{http_code}\\\\n\" \"http://localhost:3000/login\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s \"http://localhost:3000/login\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"login=%{http_code} logo=%{http_code}\\\\n\" \"http://localhost:3000/login\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"logo asset=%{http_code} \\(%{size_download} bytes\\)\\\\n\" \"http://localhost:3000/aegis_logo.png\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -sI \"http://localhost:3000/aegis_logo.png\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"login=%{http_code}\\\\n\" \"http://localhost:3000/login\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} login=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/login\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"clients=%{http_code} analysts=%{http_code} media=%{http_code} projects=%{http_code} meetings=%{http_code}\\\\n\" \"http://localhost:3000/clients\" \"http://localhost:3000/analysts\" \"http://localhost:3000/media\" \"http://localhost:3000/projects\" \"http://localhost:3000/meetings\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} clients=%{http_code} analysts=%{http_code} media=%{http_code} projects=%{http_code} meetings=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/clients\" \"http://localhost:3000/analysts\" \"http://localhost:3000/media\" \"http://localhost:3000/projects\" \"http://localhost:3000/meetings\")",
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} clients=%{http_code} clients-search=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/clients?q=test&sort=ticker_code&dir=desc&page=2\" \"http://localhost:3000/clients/00000000-0000-0000-0000-000000000000\")"
+    ]
+  }
+}
