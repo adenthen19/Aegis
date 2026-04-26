@@ -2,7 +2,13 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type { ServiceTier, IpoStatus, Industry, MarketSegment } from '@/lib/types';
+import type {
+  ServiceTier,
+  IpoStatus,
+  Industry,
+  MarketSegment,
+  DeliverableKind,
+} from '@/lib/types';
 import {
   SERVICE_TIER_CODES as SERVICE_TIERS,
   IPO_STATUS_CODES as IPO_STATUSES,
@@ -10,6 +16,55 @@ import {
   MARKET_SEGMENT_CODES as MARKET_SEGMENTS,
   CLIENT_IMPORT_HEADERS,
 } from '@/lib/client-import';
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+async function seedClientDeliverables(
+  supabase: SupabaseClient,
+  client_id: string,
+  service_tiers: ServiceTier[],
+): Promise<void> {
+  if (service_tiers.length === 0) return;
+
+  const [templatesRes, existingRes] = await Promise.all([
+    supabase
+      .from('deliverable_templates')
+      .select('template_id, service_tier, kind, label, default_target_count')
+      .eq('is_active', true)
+      .in('service_tier', service_tiers),
+    supabase
+      .from('client_deliverables')
+      .select('template_id')
+      .eq('client_id', client_id)
+      .not('template_id', 'is', null),
+  ]);
+
+  if (templatesRes.error || !templatesRes.data) return;
+
+  const alreadySeeded = new Set(
+    (existingRes.data ?? []).map((r) => r.template_id as string),
+  );
+  type SeedRow = {
+    template_id: string;
+    service_tier: ServiceTier;
+    kind: DeliverableKind;
+    label: string;
+    default_target_count: number | null;
+  };
+  const toInsert = (templatesRes.data as SeedRow[])
+    .filter((t) => !alreadySeeded.has(t.template_id))
+    .map((t) => ({
+      client_id,
+      template_id: t.template_id,
+      service_tier: t.service_tier,
+      kind: t.kind,
+      label: t.label,
+      target_count: t.kind === 'recurring' ? t.default_target_count : null,
+    }));
+
+  if (toInsert.length === 0) return;
+  await supabase.from('client_deliverables').insert(toInsert);
+}
 
 export type ActionState = { ok: boolean; error: string | null };
 
@@ -119,8 +174,14 @@ export async function createClientAction(
   const payload = readPayload(formData);
   if (!payload.ok) return { ok: false, error: payload.error };
 
-  const { error } = await supabase.from('clients').insert(payload.value);
-  if (error) return { ok: false, error: error.message };
+  const { data: created, error } = await supabase
+    .from('clients')
+    .insert(payload.value)
+    .select('client_id')
+    .single();
+  if (error || !created) return { ok: false, error: error?.message ?? 'Failed to create client.' };
+
+  await seedClientDeliverables(supabase, created.client_id as string, payload.value.service_tier);
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');
@@ -143,6 +204,8 @@ export async function updateClientAction(
 
   const { error } = await supabase.from('clients').update(payload.value).eq('client_id', client_id);
   if (error) return { ok: false, error: error.message };
+
+  await seedClientDeliverables(supabase, client_id, payload.value.service_tier);
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');
@@ -340,7 +403,10 @@ export async function importClientsAction(
     };
   }
 
-  const { error } = await supabase.from('clients').insert(payloads);
+  const { data: insertedClients, error } = await supabase
+    .from('clients')
+    .insert(payloads)
+    .select('client_id, service_tier');
   if (error) {
     return {
       ok: false,
@@ -349,6 +415,14 @@ export async function importClientsAction(
       skipped: errors.length + payloads.length,
       errors,
     };
+  }
+
+  for (const c of insertedClients ?? []) {
+    await seedClientDeliverables(
+      supabase,
+      c.client_id as string,
+      (c.service_tier ?? []) as ServiceTier[],
+    );
   }
 
   revalidatePath('/clients');

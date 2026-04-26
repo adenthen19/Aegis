@@ -148,6 +148,94 @@ export type Profile = {
   role: UserRole;
 };
 
+export type DeliverableKind =
+  | 'one_off'
+  | 'recurring'
+  | 'event_triggered'
+  | 'ongoing';
+
+export type DeliverableStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'not_applicable';
+
+export const DELIVERABLE_KIND_LABEL: Record<DeliverableKind, string> = {
+  one_off: 'One-off',
+  recurring: 'Recurring',
+  event_triggered: 'Event-triggered',
+  ongoing: 'Ongoing',
+};
+
+export const DELIVERABLE_STATUS_LABEL: Record<DeliverableStatus, string> = {
+  pending: 'Pending',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  not_applicable: 'Not applicable',
+};
+
+export type DeliverableTemplate = {
+  template_id: string;
+  service_tier: ServiceTier;
+  kind: DeliverableKind;
+  label: string;
+  default_target_count: number | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScheduleStatus =
+  | 'planned'
+  | 'confirmed'
+  | 'completed'
+  | 'cancelled';
+
+export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
+  planned: 'Planned',
+  confirmed: 'Confirmed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+export type DeliverableSchedule = {
+  schedule_id: string;
+  client_deliverable_id: string;
+  meeting_id: string | null;
+  scheduled_at: string;
+  location: string | null;
+  status: ScheduleStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ScheduleAttendee = {
+  attendee_id: string;
+  schedule_id: string;
+  investor_id: string | null;
+  name: string | null;
+  affiliation: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+export type ClientDeliverable = {
+  client_deliverable_id: string;
+  client_id: string;
+  template_id: string | null;
+  service_tier: ServiceTier;
+  kind: DeliverableKind;
+  label: string;
+  status: DeliverableStatus;
+  target_count: number | null;
+  completed_count: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ActionItem = {
   action_item_id: string;
   meeting_id: string | null;

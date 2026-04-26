@@ -15,6 +15,7 @@ import {
   MARKET_SEGMENT_LABEL,
   type ActionItem,
   type Client,
+  type ClientDeliverable,
   type Profile,
   type ProjectStatus,
   type ServiceTier,
@@ -22,6 +23,8 @@ import {
 import ClientRowActions from '../row-actions';
 import ActionItemToggle from '../../meetings/action-item-toggle';
 import NewTodo from '../../todos/new-todo';
+import DeliverablesSection from './deliverables-section';
+import NewCustomCommitment from './new-custom-commitment';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -80,6 +83,9 @@ export default async function ClientDetailPage({
     allClientsRes,
     allProfilesRes,
     userRes,
+    deliverablesRes,
+    schedulesRes,
+    analystsListRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
@@ -113,6 +119,25 @@ export default async function ClientDetailPage({
       .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
       .order('display_name'),
     supabase.auth.getUser(),
+    supabase
+      .from('client_deliverables')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('service_tier', { ascending: true })
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('deliverable_schedule')
+      .select(
+        '*, ' +
+          'client_deliverables!inner ( client_id ), ' +
+          'attendees:deliverable_schedule_attendees ( *, analysts ( full_name, institution_name ) )',
+      )
+      .eq('client_deliverables.client_id', client_id)
+      .order('scheduled_at', { ascending: true }),
+    supabase
+      .from('analysts')
+      .select('investor_id, institution_name, full_name')
+      .order('institution_name'),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -138,6 +163,45 @@ export default async function ClientDetailPage({
   const allClients = allClientsRes.data ?? [];
   const allProfiles = (allProfilesRes.data ?? []) as Profile[];
   const currentUserId = userRes.data.user?.id ?? null;
+  const deliverables = (deliverablesRes.data ?? []) as ClientDeliverable[];
+  const openDeliverableCount = deliverables.filter(
+    (d) => d.status !== 'completed' && d.status !== 'not_applicable',
+  ).length;
+
+  type ScheduleAttendeeJoin = {
+    attendee_id: string;
+    schedule_id: string;
+    investor_id: string | null;
+    name: string | null;
+    affiliation: string | null;
+    note: string | null;
+    created_at: string;
+    analysts: { full_name: string | null; institution_name: string } | null;
+  };
+  type ScheduleJoin = {
+    schedule_id: string;
+    client_deliverable_id: string;
+    meeting_id: string | null;
+    scheduled_at: string;
+    location: string | null;
+    status: 'planned' | 'confirmed' | 'completed' | 'cancelled';
+    notes: string | null;
+    created_at: string;
+    updated_at: string;
+    attendees: ScheduleAttendeeJoin[] | null;
+  };
+  const schedulesRaw = (schedulesRes.data ?? []) as unknown as ScheduleJoin[];
+  const schedulesByDeliverable: Record<string, (ScheduleJoin & { attendees: ScheduleAttendeeJoin[] })[]> = {};
+  for (const s of schedulesRaw) {
+    const list = schedulesByDeliverable[s.client_deliverable_id] ?? [];
+    list.push({ ...s, attendees: s.attendees ?? [] });
+    schedulesByDeliverable[s.client_deliverable_id] = list;
+  }
+  const analystsList = (analystsListRes.data ?? []) as {
+    investor_id: string;
+    institution_name: string;
+    full_name: string | null;
+  }[];
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -252,6 +316,22 @@ export default async function ClientDetailPage({
             </ul>
           </Section>
         )}
+
+      <Section
+        title={`Commitments (${openDeliverableCount} open · ${deliverables.length} total)`}
+        action={
+          <NewCustomCommitment
+            clientId={client.client_id}
+            clientTiers={client.service_tier}
+          />
+        }
+      >
+        <DeliverablesSection
+          rows={deliverables}
+          schedulesByDeliverable={schedulesByDeliverable}
+          analysts={analystsList}
+        />
+      </Section>
 
       <Section
         title={`Open to-dos (${todos.length})`}
