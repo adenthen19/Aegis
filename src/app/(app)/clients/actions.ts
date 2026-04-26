@@ -15,7 +15,14 @@ import {
   MARKET_SEGMENT_CODES as MARKET_SEGMENTS,
   CLIENT_IMPORT_HEADERS,
 } from '@/lib/client-import';
+import {
+  IMPORT_INITIAL,
+  parseCsv,
+  type ImportRowError,
+  type ImportState,
+} from '@/lib/csv';
 import { seedDeliverablesForEngagement } from './seeding-helpers';
+import { seedRegulatoryDeliverables } from './regulatory-helpers';
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -29,6 +36,7 @@ async function createDefaultEngagement(
   supabase: SupabaseClient,
   client_id: string,
   service_tiers: ServiceTier[],
+  fye: string | null,
 ): Promise<string | null> {
   if (service_tiers.length === 0) return null;
 
@@ -62,6 +70,15 @@ async function createDefaultEngagement(
     client_id,
     service_tiers,
   );
+
+  await seedRegulatoryDeliverables(supabase, {
+    engagement_id: data.engagement_id as string,
+    client_id,
+    fye,
+    start_date: start,
+    end_date: end,
+    service_tiers,
+  });
 
   return data.engagement_id as string;
 }
@@ -185,6 +202,7 @@ export async function createClientAction(
     supabase,
     created.client_id as string,
     payload.value.service_tier,
+    payload.value.financial_year_end,
   );
 
   revalidatePath('/clients');
@@ -237,53 +255,9 @@ export async function deleteClientAction(client_id: string): Promise<ActionState
 
 // ---- Bulk import from CSV ----
 
-export type ImportRowError = { row: number; message: string };
-export type ImportState = {
-  ok: boolean;
-  error: string | null;
-  imported: number;
-  skipped: number;
-  errors: ImportRowError[];
-};
-
-const IMPORT_INITIAL: ImportState = {
-  ok: false,
-  error: null,
-  imported: 0,
-  skipped: 0,
-  errors: [],
-};
-
-function parseCsv(text: string): string[][] {
-  // Strip UTF-8 BOM if present.
-  const cleaned = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const rows: string[][] = [];
-  let current: string[] = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < cleaned.length; i++) {
-    const ch = cleaned[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (cleaned[i + 1] === '"') { field += '"'; i++; }
-        else inQuotes = false;
-      } else {
-        field += ch;
-      }
-    } else {
-      if (ch === '"') inQuotes = true;
-      else if (ch === ',') { current.push(field); field = ''; }
-      else if (ch === '\n') { current.push(field); rows.push(current); current = []; field = ''; }
-      else field += ch;
-    }
-  }
-  if (field !== '' || current.length) {
-    current.push(field);
-    rows.push(current);
-  }
-  return rows.filter((r) => r.some((c) => c.trim() !== ''));
-}
+// ImportRowError, ImportState, IMPORT_INITIAL, parseCsv now live in lib/csv.ts
+// for reuse across analyst and media imports.
+export type { ImportRowError, ImportState };
 
 function parseBoolean(raw: string | undefined): boolean {
   if (!raw) return false;
@@ -423,12 +397,22 @@ export async function importClientsAction(
     };
   }
 
-  for (const c of insertedClients ?? []) {
-    await createDefaultEngagement(
-      supabase,
-      c.client_id as string,
-      (c.service_tier ?? []) as ServiceTier[],
-    );
+  // Re-fetch the imported clients with FYE so we can seed regulatory events
+  // alongside the default engagement.
+  const insertedIds = (insertedClients ?? []).map((c) => c.client_id as string);
+  if (insertedIds.length > 0) {
+    const { data: clientsWithFye } = await supabase
+      .from('clients')
+      .select('client_id, service_tier, financial_year_end')
+      .in('client_id', insertedIds);
+    for (const c of clientsWithFye ?? []) {
+      await createDefaultEngagement(
+        supabase,
+        c.client_id as string,
+        (c.service_tier ?? []) as ServiceTier[],
+        (c.financial_year_end as string | null) ?? null,
+      );
+    }
   }
 
   revalidatePath('/clients');

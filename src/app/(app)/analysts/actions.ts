@@ -3,10 +3,22 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { AnalystType } from '@/lib/types';
+import {
+  IMPORT_INITIAL,
+  parseCsv,
+  type ImportRowError,
+  type ImportState,
+} from '@/lib/csv';
+import {
+  ANALYST_IMPORT_HEADERS,
+  ANALYST_TYPE_CODES,
+} from '@/lib/analyst-import';
 
 export type ActionState = { ok: boolean; error: string | null };
 
 const ANALYST_TYPES: AnalystType[] = ['buy_side', 'sell_side'];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type AnalystPayload = {
   full_name: string | null;
@@ -130,4 +142,131 @@ export async function deleteAnalystAction(investor_id: string): Promise<ActionSt
   revalidatePath('/meetings');
   revalidatePath('/dashboard');
   return { ok: true, error: null };
+}
+
+// ---- Bulk import from CSV ----
+
+export type { ImportRowError, ImportState };
+
+type ImportPayload = {
+  institution_name: string;
+  full_name: string | null;
+  analyst_type: AnalystType;
+  email: string | null;
+  contact_number: string | null;
+};
+
+function buildImportPayload(
+  record: Record<string, string>,
+): { ok: true; value: ImportPayload } | { ok: false; error: string } {
+  const institution_name = record.institution_name?.trim();
+  if (!institution_name) {
+    return { ok: false, error: 'institution_name is required.' };
+  }
+
+  const type_raw = record.analyst_type?.trim();
+  if (!type_raw || !ANALYST_TYPE_CODES.includes(type_raw as AnalystType)) {
+    return {
+      ok: false,
+      error: `analyst_type must be one of: ${ANALYST_TYPE_CODES.join(', ')}.`,
+    };
+  }
+
+  const email = record.email?.trim().toLowerCase() || null;
+  if (email && !EMAIL_RE.test(email)) {
+    return { ok: false, error: `email "${email}" is invalid.` };
+  }
+
+  return {
+    ok: true,
+    value: {
+      institution_name,
+      full_name: record.full_name?.trim() || null,
+      analyst_type: type_raw as AnalystType,
+      email,
+      contact_number: record.contact_number?.trim() || null,
+    },
+  };
+}
+
+export async function importAnalystsAction(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ...IMPORT_INITIAL, error: 'You must be signed in.' };
+
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    return { ...IMPORT_INITIAL, error: 'Please choose a CSV file to import.' };
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    return { ...IMPORT_INITIAL, error: 'File is too large. Limit is 2 MB.' };
+  }
+
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    return { ...IMPORT_INITIAL, error: 'The file is empty.' };
+  }
+
+  const headers = rows[0].map((h) => h.trim().toLowerCase());
+  const required = ANALYST_IMPORT_HEADERS;
+  const missing = required.filter((h) => !headers.includes(h));
+  if (missing.length > 0) {
+    return {
+      ...IMPORT_INITIAL,
+      error: `Missing required column(s): ${missing.join(', ')}. Download a fresh template and re-paste your data.`,
+    };
+  }
+
+  const dataRows = rows.slice(1);
+  if (dataRows.length === 0) {
+    return { ...IMPORT_INITIAL, error: 'No data rows found beneath the header row.' };
+  }
+
+  const payloads: ImportPayload[] = [];
+  const errors: ImportRowError[] = [];
+
+  dataRows.forEach((row, idx) => {
+    const record: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      record[h] = row[i] ?? '';
+    });
+    const built = buildImportPayload(record);
+    if (built.ok) payloads.push(built.value);
+    else errors.push({ row: idx + 2, message: built.error });
+  });
+
+  if (payloads.length === 0) {
+    return {
+      ok: false,
+      error: 'No valid rows to import. Fix the errors below and try again.',
+      imported: 0,
+      skipped: errors.length,
+      errors,
+    };
+  }
+
+  const { error } = await supabase.from('analysts').insert(payloads);
+  if (error) {
+    return {
+      ok: false,
+      error: `Database error: ${error.message}`,
+      imported: 0,
+      skipped: errors.length + payloads.length,
+      errors,
+    };
+  }
+
+  revalidatePath('/analysts');
+  revalidatePath('/dashboard');
+  return {
+    ok: true,
+    error: null,
+    imported: payloads.length,
+    skipped: errors.length,
+    errors,
+  };
 }

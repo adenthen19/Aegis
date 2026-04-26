@@ -9,6 +9,7 @@ import type {
 } from '@/lib/types';
 import { SERVICE_TIER_CODES as SERVICE_TIERS } from '@/lib/client-import';
 import { seedDeliverablesForEngagement } from './seeding-helpers';
+import { seedRegulatoryDeliverables } from './regulatory-helpers';
 
 export type ActionState = { ok: boolean; error: string | null };
 
@@ -150,6 +151,21 @@ export async function createEngagementAction(
     parsed.value.service_tier,
   );
 
+  // Pull the client's FYE so we can also seed Bursa regulatory deliverables.
+  const { data: clientRow } = await supabase
+    .from('clients')
+    .select('financial_year_end')
+    .eq('client_id', parsed.value.client_id)
+    .maybeSingle();
+  await seedRegulatoryDeliverables(supabase, {
+    engagement_id: created.engagement_id as string,
+    client_id: parsed.value.client_id,
+    fye: (clientRow?.financial_year_end as string | null) ?? null,
+    start_date: parsed.value.start_date,
+    end_date: parsed.value.end_date,
+    service_tiers: parsed.value.service_tier,
+  });
+
   revalidatePath(`/clients/${parsed.value.client_id}`);
   revalidatePath('/clients');
   revalidatePath('/dashboard');
@@ -184,6 +200,23 @@ export async function updateEngagementAction(
     parsed.value.client_id,
     parsed.value.service_tier,
   );
+
+  // Date changes can pull more fiscal years into scope (e.g. extending the
+  // engagement by 6 months). Re-run the regulatory seeder; existing keys are
+  // skipped so we don't duplicate or overwrite user edits.
+  const { data: clientRow } = await supabase
+    .from('clients')
+    .select('financial_year_end')
+    .eq('client_id', parsed.value.client_id)
+    .maybeSingle();
+  await seedRegulatoryDeliverables(supabase, {
+    engagement_id,
+    client_id: parsed.value.client_id,
+    fye: (clientRow?.financial_year_end as string | null) ?? null,
+    start_date: parsed.value.start_date,
+    end_date: parsed.value.end_date,
+    service_tiers: parsed.value.service_tier,
+  });
 
   revalidatePath(`/clients/${parsed.value.client_id}`);
   revalidatePath('/clients');

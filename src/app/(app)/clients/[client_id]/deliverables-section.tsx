@@ -72,12 +72,28 @@ export default function DeliverablesSection({
     );
   }
 
+  // Within a tier: dated rows first (soonest due first), then undated rows.
+  // Inside each bucket, fall back to created_at ascending so display order is
+  // deterministic.
+  function compareDeliverables(
+    a: ClientDeliverable,
+    b: ClientDeliverable,
+  ): number {
+    const ad = a.due_date ? a.due_date : null;
+    const bd = b.due_date ? b.due_date : null;
+    if (ad && bd) return ad.localeCompare(bd);
+    if (ad) return -1;
+    if (bd) return 1;
+    return (a.created_at ?? '').localeCompare(b.created_at ?? '');
+  }
+
   const grouped = new Map<ServiceTier, ClientDeliverable[]>();
   for (const r of rows) {
     const list = grouped.get(r.service_tier) ?? [];
     list.push(r);
     grouped.set(r.service_tier, list);
   }
+  for (const list of grouped.values()) list.sort(compareDeliverables);
 
   return (
     <div className="space-y-5">
@@ -176,6 +192,35 @@ function DeliverableRow({
             <span className="text-[10px] uppercase tracking-wide text-aegis-gray-300">
               {DELIVERABLE_KIND_LABEL[row.kind]}
             </span>
+            {row.auto_generated_key?.startsWith('bursa:') && (
+              <span className="inline-flex items-center rounded-full bg-aegis-orange-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-orange/30">
+                Bursa
+              </span>
+            )}
+            {(() => {
+              if (!row.due_date) return null;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const due = new Date(row.due_date);
+              const isOpen =
+                row.status !== 'completed' && row.status !== 'not_applicable';
+              const isOverdue = isOpen && due < today;
+              return (
+                <span
+                  className={[
+                    'text-[11px] tabular-nums',
+                    isOverdue
+                      ? 'font-medium text-red-600'
+                      : 'text-aegis-gray-500',
+                  ].join(' ')}
+                >
+                  {isOverdue ? 'Overdue · ' : 'Due '}
+                  {new Date(row.due_date).toLocaleDateString(undefined, {
+                    dateStyle: 'medium',
+                  })}
+                </span>
+              );
+            })()}
           </div>
           <p className="mt-1 text-sm text-aegis-gray">{row.label}</p>
           {isRecurring && target != null && (

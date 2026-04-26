@@ -20,6 +20,7 @@ import {
   type ActionState,
   deleteDocumentAction,
   getDocumentDownloadUrlAction,
+  linkExternalDocumentAction,
   uploadDocumentAction,
 } from '../documents-actions';
 
@@ -111,6 +112,8 @@ function DocumentRow({ row }: { row: Document }) {
     });
   }
 
+  const isExternal = !!row.external_url;
+
   return (
     <li className="flex items-start gap-3 px-3 py-2.5">
       <div className="min-w-0 flex-1">
@@ -126,6 +129,16 @@ function DocumentRow({ row }: { row: Document }) {
           <span className="inline-flex items-center rounded-full bg-aegis-blue-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
             {DOCUMENT_CATEGORY_LABEL[row.category]}
           </span>
+          {isExternal && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-aegis-gray-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-aegis-gray-500 ring-1 ring-inset ring-aegis-gray-200">
+              <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M14 4h6v6" />
+                <path d="M20 4l-8 8" />
+                <path d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
+              </svg>
+              Link
+            </span>
+          )}
           {row.version > 1 && (
             <span className="text-[10px] uppercase tracking-wide text-aegis-gray-300">
               v{row.version}
@@ -138,6 +151,17 @@ function DocumentRow({ row }: { row: Document }) {
             <span className="tabular-nums">{formatBytes(row.size_bytes)}</span>
           )}
           {row.mime_type && <span>{row.mime_type}</span>}
+          {isExternal && row.external_url && (
+            <span className="truncate text-aegis-gray-300">
+              {(() => {
+                try {
+                  return new URL(row.external_url).host;
+                } catch {
+                  return row.external_url;
+                }
+              })()}
+            </span>
+          )}
         </div>
         {row.description && (
           <p className="mt-1 whitespace-pre-wrap text-[11px] text-aegis-gray-500">
@@ -190,6 +214,8 @@ function DocumentRow({ row }: { row: Document }) {
   );
 }
 
+type Mode = 'upload' | 'link';
+
 function UploadModal({
   open,
   onClose,
@@ -206,86 +232,219 @@ function UploadModal({
     meeting_id?: string;
   };
 }) {
+  const [mode, setMode] = useState<Mode>('upload');
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Add document"
+      description="Upload a file to our private storage, or paste a Google Drive / SharePoint / OneDrive link to keep storage light."
+    >
+      <div className="mb-4 flex gap-1 rounded-md border border-aegis-gray-200 bg-aegis-gray-50 p-1">
+        <button
+          type="button"
+          onClick={() => setMode('upload')}
+          className={[
+            'flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors',
+            mode === 'upload'
+              ? 'bg-white text-aegis-navy shadow-sm'
+              : 'text-aegis-gray-500 hover:text-aegis-navy',
+          ].join(' ')}
+        >
+          Upload file
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('link')}
+          className={[
+            'flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors',
+            mode === 'link'
+              ? 'bg-white text-aegis-navy shadow-sm'
+              : 'text-aegis-gray-500 hover:text-aegis-navy',
+          ].join(' ')}
+        >
+          Link external
+        </button>
+      </div>
+
+      {mode === 'upload' ? (
+        <UploadFileForm clientId={clientId} scope={scope} onDone={onClose} />
+      ) : (
+        <LinkExternalForm clientId={clientId} scope={scope} onDone={onClose} />
+      )}
+    </Modal>
+  );
+}
+
+function ScopeInputs({
+  clientId,
+  scope,
+}: {
+  clientId: string;
+  scope?: {
+    engagement_id?: string;
+    client_deliverable_id?: string;
+    schedule_id?: string;
+    meeting_id?: string;
+  };
+}) {
+  return (
+    <>
+      <input type="hidden" name="client_id" value={clientId} />
+      {scope?.engagement_id && (
+        <input type="hidden" name="engagement_id" value={scope.engagement_id} />
+      )}
+      {scope?.client_deliverable_id && (
+        <input
+          type="hidden"
+          name="client_deliverable_id"
+          value={scope.client_deliverable_id}
+        />
+      )}
+      {scope?.schedule_id && (
+        <input type="hidden" name="schedule_id" value={scope.schedule_id} />
+      )}
+      {scope?.meeting_id && (
+        <input type="hidden" name="meeting_id" value={scope.meeting_id} />
+      )}
+    </>
+  );
+}
+
+function UploadFileForm({
+  clientId,
+  scope,
+  onDone,
+}: {
+  clientId: string;
+  scope?: {
+    engagement_id?: string;
+    client_deliverable_id?: string;
+    schedule_id?: string;
+    meeting_id?: string;
+  };
+  onDone: () => void;
+}) {
   const [state, action] = useActionState(uploadDocumentAction, initialState);
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>('');
 
   useEffect(() => {
     if (state.ok) {
-      onClose();
+      onDone();
       setFileName('');
       if (fileRef.current) fileRef.current.value = '';
     }
-  }, [state, onClose]);
+  }, [state, onDone]);
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Upload document"
-      description="PDF / DOCX / images / decks. Max 25 MB."
-    >
-      <form action={action} className="space-y-4">
-        <input type="hidden" name="client_id" value={clientId} />
-        {scope?.engagement_id && (
-          <input type="hidden" name="engagement_id" value={scope.engagement_id} />
-        )}
-        {scope?.client_deliverable_id && (
-          <input
-            type="hidden"
-            name="client_deliverable_id"
-            value={scope.client_deliverable_id}
-          />
-        )}
-        {scope?.schedule_id && (
-          <input type="hidden" name="schedule_id" value={scope.schedule_id} />
-        )}
-        {scope?.meeting_id && (
-          <input type="hidden" name="meeting_id" value={scope.meeting_id} />
-        )}
+    <form action={action} className="space-y-4">
+      <ScopeInputs clientId={clientId} scope={scope} />
 
-        <div>
-          <label
-            htmlFor="document-file"
-            className="mb-1.5 block text-xs font-medium uppercase tracking-[0.06em] text-aegis-gray-500"
-          >
-            File <span className="ml-0.5 text-aegis-orange">*</span>
-          </label>
-          <input
-            ref={fileRef}
-            id="document-file"
-            name="file"
-            type="file"
-            required
-            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
-            className="block w-full text-sm text-aegis-gray file:mr-3 file:rounded-md file:border-0 file:bg-aegis-navy file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-aegis-navy-700"
-          />
-        </div>
-
-        <TextField
-          name="name"
-          label="Display name"
-          placeholder={fileName || 'Defaults to the file name'}
-        />
-
-        <SelectField
-          name="category"
-          label="Category"
+      <div>
+        <label
+          htmlFor="document-file"
+          className="mb-1.5 block text-xs font-medium uppercase tracking-[0.06em] text-aegis-gray-500"
+        >
+          File <span className="ml-0.5 text-aegis-orange">*</span>
+        </label>
+        <input
+          ref={fileRef}
+          id="document-file"
+          name="file"
+          type="file"
           required
-          defaultValue="other"
-          options={CATEGORY_OPTIONS}
+          onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
+          className="block w-full text-sm text-aegis-gray file:mr-3 file:rounded-md file:border-0 file:bg-aegis-navy file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-aegis-navy-700"
         />
+        <p className="mt-1 text-[11px] text-aegis-gray-300">PDF / DOCX / images / decks. Max 25 MB.</p>
+      </div>
 
-        <TextAreaField
-          name="description"
-          label="Description"
-          rows={2}
-          placeholder="Optional context"
-        />
+      <TextField
+        name="name"
+        label="Display name"
+        placeholder={fileName || 'Defaults to the file name'}
+      />
 
-        <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
-      </form>
-    </Modal>
+      <SelectField
+        name="category"
+        label="Category"
+        required
+        defaultValue="other"
+        options={CATEGORY_OPTIONS}
+      />
+
+      <TextAreaField
+        name="description"
+        label="Description"
+        rows={2}
+        placeholder="Optional context"
+      />
+
+      <FormError message={state.error} />
+      <FormActions onCancel={onDone} />
+    </form>
+  );
+}
+
+function LinkExternalForm({
+  clientId,
+  scope,
+  onDone,
+}: {
+  clientId: string;
+  scope?: {
+    engagement_id?: string;
+    client_deliverable_id?: string;
+    schedule_id?: string;
+    meeting_id?: string;
+  };
+  onDone: () => void;
+}) {
+  const [state, action] = useActionState(linkExternalDocumentAction, initialState);
+
+  useEffect(() => {
+    if (state.ok) onDone();
+  }, [state, onDone]);
+
+  return (
+    <form action={action} className="space-y-4">
+      <ScopeInputs clientId={clientId} scope={scope} />
+
+      <TextField
+        name="external_url"
+        type="url"
+        label="Document URL"
+        required
+        placeholder="https://docs.google.com/document/d/…"
+        hint="Paste a Drive, SharePoint, OneDrive, or any HTTPS link. Make sure the destination is shared with the team."
+      />
+
+      <TextField
+        name="name"
+        label="Display name"
+        required
+        placeholder="e.g. Q1 FY2026 Press Release"
+      />
+
+      <SelectField
+        name="category"
+        label="Category"
+        required
+        defaultValue="other"
+        options={CATEGORY_OPTIONS}
+      />
+
+      <TextAreaField
+        name="description"
+        label="Description"
+        rows={2}
+        placeholder="Optional context"
+      />
+
+      <FormError message={state.error} />
+      <FormActions onCancel={onDone} />
+    </form>
   );
 }

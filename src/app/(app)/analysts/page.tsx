@@ -8,6 +8,7 @@ import type { Analyst } from '@/lib/types';
 import NewAnalyst from './new-analyst';
 import AnalystRowActions from './row-actions';
 import ExportAnalystEmails from './export-emails';
+import ImportAnalysts from './import-analysts';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['full_name', 'institution_name', 'analyst_type', 'email', 'created_at']);
@@ -46,6 +47,7 @@ export default async function AnalystsPage({
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
             <ExportAnalystEmails />
+            <ImportAnalysts />
             <NewAnalyst />
           </div>
         }

@@ -8,6 +8,7 @@ import type { MediaContact } from '@/lib/types';
 import NewMediaContact from './new-media-contact';
 import MediaRowActions from './row-actions';
 import ExportMediaEmails from './export-emails';
+import ImportMedia from './import-media';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['full_name', 'company_name', 'state', 'email', 'created_at']);
@@ -46,6 +47,7 @@ export default async function MediaPage({
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
             <ExportMediaEmails />
+            <ImportMedia />
             <NewMediaContact />
           </div>
         }

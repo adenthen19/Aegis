@@ -209,7 +209,9 @@ export type Document = {
   coverage_id: string | null;
   pr_value_report_id: string | null;
   name: string;
-  file_path: string;
+  // Exactly one of file_path / external_url is set per row.
+  file_path: string | null;
+  external_url: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   category: DocumentCategory;
@@ -474,6 +476,8 @@ export type ClientDeliverable = {
   target_count: number | null;
   completed_count: number;
   notes: string | null;
+  due_date: string | null;
+  auto_generated_key: string | null;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;
