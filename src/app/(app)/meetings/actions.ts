@@ -279,6 +279,17 @@ export async function toggleActionItemAction(
     return { ok: false, error: 'Invalid status.' };
   }
 
+  type LinkRow = {
+    client_id: string | null;
+    meetings: { client_id: string | null } | null;
+  };
+  const { data: rowRaw } = await supabase
+    .from('action_items')
+    .select('client_id, meeting_id, meetings ( client_id )')
+    .eq('action_item_id', action_item_id)
+    .maybeSingle();
+  const row = rowRaw as unknown as LinkRow | null;
+
   const { error } = await supabase
     .from('action_items')
     .update({
@@ -291,5 +302,7 @@ export async function toggleActionItemAction(
 
   revalidatePath('/todos');
   revalidatePath('/meetings');
+  const linkedClientId = row?.client_id ?? row?.meetings?.client_id ?? null;
+  if (linkedClientId) revalidatePath(`/clients/${linkedClientId}`);
   return { ok: true, error: null };
 }

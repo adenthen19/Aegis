@@ -150,7 +150,8 @@ export type Profile = {
 
 export type ActionItem = {
   action_item_id: string;
-  meeting_id: string;
+  meeting_id: string | null;
+  client_id: string | null;
   item: string;
   pic_user_id: string | null;
   due_date: string | null;

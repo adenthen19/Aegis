@@ -13,11 +13,15 @@ import {
 import {
   INDUSTRY_LABEL,
   MARKET_SEGMENT_LABEL,
+  type ActionItem,
   type Client,
+  type Profile,
   type ProjectStatus,
   type ServiceTier,
 } from '@/lib/types';
 import ClientRowActions from '../row-actions';
+import ActionItemToggle from '../../meetings/action-item-toggle';
+import NewTodo from '../../todos/new-todo';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -46,6 +50,16 @@ type Meeting = {
   analysts: { institution_name: string } | null;
 };
 
+type Todo = ActionItem & {
+  profiles: { display_name: string | null; email: string } | null;
+  meetings: { meeting_id: string; meeting_date: string } | null;
+};
+
+function profileLabel(p: { display_name: string | null; email: string } | null): string {
+  if (!p) return 'Unassigned';
+  return p.display_name || p.email;
+}
+
 export default async function ClientDetailPage({
   params,
 }: {
@@ -54,7 +68,19 @@ export default async function ClientDetailPage({
   const { client_id } = await params;
   const supabase = await createClient();
 
-  const [clientRes, projectsRes, meetingsRes] = await Promise.all([
+  const profileSelect =
+    'profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role )';
+
+  const [
+    clientRes,
+    projectsRes,
+    meetingsRes,
+    directTodosRes,
+    meetingTodosRes,
+    allClientsRes,
+    allProfilesRes,
+    userRes,
+  ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
       .from('projects')
@@ -67,6 +93,26 @@ export default async function ClientDetailPage({
       .eq('client_id', client_id)
       .order('meeting_date', { ascending: false })
       .limit(10),
+    supabase
+      .from('action_items')
+      .select(`*, ${profileSelect}, meetings ( meeting_id, meeting_date )`)
+      .eq('client_id', client_id)
+      .eq('status', 'open')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('action_items')
+      .select(`*, ${profileSelect}, meetings!inner ( meeting_id, meeting_date, client_id )`)
+      .eq('meetings.client_id', client_id)
+      .eq('status', 'open')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }),
+    supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
+    supabase
+      .from('profiles')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .order('display_name'),
+    supabase.auth.getUser(),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -74,6 +120,31 @@ export default async function ClientDetailPage({
 
   const projects = (projectsRes.data ?? []) as Project[];
   const meetings = (meetingsRes.data ?? []) as unknown as Meeting[];
+
+  const todoMap = new Map<string, Todo>();
+  for (const t of (directTodosRes.data ?? []) as unknown as Todo[]) {
+    todoMap.set(t.action_item_id, t);
+  }
+  for (const t of (meetingTodosRes.data ?? []) as unknown as Todo[]) {
+    if (!todoMap.has(t.action_item_id)) todoMap.set(t.action_item_id, t);
+  }
+  const todos = Array.from(todoMap.values()).sort((a, b) => {
+    const ad = a.due_date ?? '￿';
+    const bd = b.due_date ?? '￿';
+    if (ad !== bd) return ad.localeCompare(bd);
+    return (a.created_at ?? '').localeCompare(b.created_at ?? '');
+  });
+
+  const allClients = allClientsRes.data ?? [];
+  const allProfiles = (allProfilesRes.data ?? []) as Profile[];
+  const currentUserId = userRes.data.user?.id ?? null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  function isOverdue(due: string | null): boolean {
+    if (!due) return false;
+    return new Date(due) < today;
+  }
 
   return (
     <div>
@@ -181,6 +252,64 @@ export default async function ClientDetailPage({
             </ul>
           </Section>
         )}
+
+      <Section
+        title={`Open to-dos (${todos.length})`}
+        action={
+          currentUserId ? (
+            <NewTodo
+              clients={allClients}
+              profiles={allProfiles}
+              currentUserId={currentUserId}
+              defaultClientId={client.client_id}
+              triggerLabel="Add to-do"
+            />
+          ) : null
+        }
+      >
+        {todos.length === 0 ? (
+          <EmptyMini>No pending to-dos for this client.</EmptyMini>
+        ) : (
+          <ul className="space-y-1.5">
+            {todos.map((t) => {
+              const overdue = isOverdue(t.due_date);
+              return (
+                <li
+                  key={t.action_item_id}
+                  className="flex items-start gap-3 rounded-md border border-aegis-gray-100 bg-white px-3 py-2"
+                >
+                  <ActionItemToggle actionItemId={t.action_item_id} status={t.status} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-aegis-gray">{t.item}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-aegis-gray-500">
+                      <span>PIC: {profileLabel(t.profiles)}</span>
+                      {t.due_date && (
+                        <span className={overdue ? 'font-medium text-red-600' : ''}>
+                          {overdue ? 'Overdue · ' : 'Due '}
+                          {new Date(t.due_date).toLocaleDateString(undefined, {
+                            dateStyle: 'medium',
+                          })}
+                        </span>
+                      )}
+                      {t.meetings && (
+                        <Link
+                          href={`/meetings/${t.meetings.meeting_id}`}
+                          className="text-aegis-navy hover:text-aegis-orange"
+                        >
+                          From meeting ·{' '}
+                          {new Date(t.meetings.meeting_date).toLocaleDateString(undefined, {
+                            dateStyle: 'medium',
+                          })}
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Section>
 
       <Section
         title={`Projects (${projects.length})`}
