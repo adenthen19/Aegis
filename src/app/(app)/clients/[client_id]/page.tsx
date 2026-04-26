@@ -40,6 +40,7 @@ import StakeholdersSection from './stakeholders-section';
 import DocumentsSection from './documents-section';
 import PressReleasesSection from './press-releases-section';
 import PrValueReportsSection from './pr-value-reports-section';
+import ClientTabs from './client-tabs';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -379,239 +380,268 @@ export default async function ClientDetailPage({
         actions={<ClientRowActions row={client} />}
       />
 
-      <Section title="Profile">
-        <FieldGrid>
-          <Field label="Company name">{client.corporate_name}</Field>
-          <Field label="Ticker code">
-            {client.ticker_code ?? <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="Industry">
-            {client.industry ? INDUSTRY_LABEL[client.industry] : <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="Market segment">
-            {client.market_segment ? MARKET_SEGMENT_LABEL[client.market_segment] : <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="Financial year end">
-            {client.financial_year_end ?? <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="Current financial quarter">
-            {client.financial_quarter
-              ? new Date(client.financial_quarter).toLocaleDateString()
-              : <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="IPO status">
-            {client.ipo_status
-              ? <span className="capitalize">{client.ipo_status}</span>
-              : <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="Internal controls audit">
-            {client.internal_controls_audit ? 'Yes' : 'No'}
-          </Field>
-        </FieldGrid>
-      </Section>
-
-      <Section title={`Stakeholders (${stakeholders.length})`}>
-        <StakeholdersSection clientId={client.client_id} rows={stakeholders} />
-      </Section>
-
-      <Section title={`Engagements (${engagements.length})`}>
-        <EngagementsSection
-          clientId={client.client_id}
-          clientTiers={client.service_tier}
-          engagements={engagements}
-        />
-      </Section>
-
-      <Section
-        title={
-          activeEngagement
-            ? `Commitments — ${activeEngagement.name} (${openDeliverableCount} open · ${deliverables.length} total)`
-            : `Commitments (${openDeliverableCount} open · ${deliverables.length} total)`
-        }
-        action={
-          activeEngagement ? (
-            <NewCustomCommitment
-              clientId={client.client_id}
-              clientTiers={activeEngagement.service_tier}
-            />
-          ) : null
-        }
+      <ClientTabs
+        counts={{
+          engagements: engagements.length,
+          press: pressReleases.length + prValueReports.length,
+          todos: todos.length,
+          documents: documents.length,
+        }}
       >
-        {!activeEngagement ? (
-          <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
-            No active engagement. Open one above to start tracking commitments.
-          </p>
-        ) : (
-          <DeliverablesSection
-            rows={deliverables}
-            schedulesByDeliverable={schedulesByDeliverable}
-            analysts={analystsList}
-          />
-        )}
-      </Section>
+        {{
+          overview: (
+            <>
+              <Section title="Profile">
+                <FieldGrid>
+                  <Field label="Company name">{client.corporate_name}</Field>
+                  <Field label="Ticker code">
+                    {client.ticker_code ?? <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="Industry">
+                    {client.industry ? INDUSTRY_LABEL[client.industry] : <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="Market segment">
+                    {client.market_segment ? MARKET_SEGMENT_LABEL[client.market_segment] : <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="Financial year end">
+                    {client.financial_year_end ?? <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="Current financial quarter">
+                    {client.financial_quarter
+                      ? new Date(client.financial_quarter).toLocaleDateString()
+                      : <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="IPO status">
+                    {client.ipo_status
+                      ? <span className="capitalize">{client.ipo_status}</span>
+                      : <span className="text-aegis-gray-300">—</span>}
+                  </Field>
+                  <Field label="Internal controls audit">
+                    {client.internal_controls_audit ? 'Yes' : 'No'}
+                  </Field>
+                </FieldGrid>
+              </Section>
 
-      <Section
-        title={`Open to-dos (${todos.length})`}
-        action={
-          currentUserId ? (
-            <NewTodo
-              clients={allClients}
-              profiles={allProfiles}
-              currentUserId={currentUserId}
-              defaultClientId={client.client_id}
-              triggerLabel="Add to-do"
-            />
-          ) : null
-        }
-      >
-        {todos.length === 0 ? (
-          <EmptyMini>No pending to-dos for this client.</EmptyMini>
-        ) : (
-          <ul className="space-y-1.5">
-            {todos.map((t) => {
-              const overdue = isOverdue(t.due_date);
-              return (
-                <li
-                  key={t.action_item_id}
-                  className="flex items-start gap-3 rounded-md border border-aegis-gray-100 bg-white px-3 py-2"
-                >
-                  <ActionItemToggle actionItemId={t.action_item_id} status={t.status} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-aegis-gray">{t.item}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-aegis-gray-500">
-                      <span>PIC: {profileLabel(t.profiles)}</span>
-                      {t.due_date && (
-                        <span className={overdue ? 'font-medium text-red-600' : ''}>
-                          {overdue ? 'Overdue · ' : 'Due '}
-                          {new Date(t.due_date).toLocaleDateString(undefined, {
-                            dateStyle: 'medium',
-                          })}
-                        </span>
-                      )}
-                      {t.meetings && (
-                        <Link
-                          href={`/meetings/${t.meetings.meeting_id}`}
-                          className="text-aegis-navy hover:text-aegis-orange"
-                        >
-                          From meeting ·{' '}
-                          {new Date(t.meetings.meeting_date).toLocaleDateString(undefined, {
-                            dateStyle: 'medium',
-                          })}
-                        </Link>
-                      )}
-                    </div>
-                    {isRegulatoryPreworkKey(t.auto_generated_key) && (
-                      <RegulatoryPreworkButtons
-                        autoKey={t.auto_generated_key as string}
-                        clientName={client.corporate_name}
-                        deadline={t.due_date}
-                        contact={primaryPreworkContact}
-                      />
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Section>
+              <Section title={`Stakeholders (${stakeholders.length})`}>
+                <StakeholdersSection clientId={client.client_id} rows={stakeholders} />
+              </Section>
+            </>
+          ),
 
-      <Section title={`Press releases (${pressReleases.length})`}>
-        <PressReleasesSection
-          clientId={client.client_id}
-          pressReleases={pressReleases}
-          coverageByPress={coverageByPress}
-          unlinkedCoverage={unlinkedCoverage}
-          pressReleaseCommitments={pressReleaseCommitments}
-          mediaContacts={mediaContacts}
-        />
-      </Section>
+          engagements: (
+            <>
+              <Section title={`Engagements (${engagements.length})`}>
+                <EngagementsSection
+                  clientId={client.client_id}
+                  clientTiers={client.service_tier}
+                  engagements={engagements}
+                />
+              </Section>
 
-      <Section title={`PR value reports (${prValueReports.length})`}>
-        <PrValueReportsSection
-          clientId={client.client_id}
-          reports={prValueReports}
-          primaryEmail={primaryStakeholderEmail}
-        />
-      </Section>
-
-      <Section title={`Documents (${documents.length})`}>
-        <DocumentsSection clientId={client.client_id} documents={documents} />
-      </Section>
-
-      <Section
-        title={`Projects (${projects.length})`}
-        action={
-          <Link href="/projects" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
-            View all →
-          </Link>
-        }
-      >
-        {projects.length === 0 ? (
-          <EmptyMini>No projects logged for this client yet.</EmptyMini>
-        ) : (
-          <ul className="divide-y divide-aegis-gray-100">
-            {projects.map((p) => (
-              <li key={p.project_id} className="flex items-center gap-3 py-2.5">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status]}`} />
-                <Link
-                  href={`/projects/${p.project_id}`}
-                  className="flex-1 truncate text-sm font-medium text-aegis-navy hover:text-aegis-orange"
-                >
-                  {p.deliverable_name}
-                </Link>
-                <span className="shrink-0 text-xs capitalize text-aegis-gray-500">{p.status}</span>
-                <span className="shrink-0 text-xs tabular-nums text-aegis-gray-500">
-                  {p.deadline ? new Date(p.deadline).toLocaleDateString() : '—'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section
-        title={`Recent meetings (${meetings.length})`}
-        action={
-          <Link href="/meetings" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
-            View all →
-          </Link>
-        }
-      >
-        {meetings.length === 0 ? (
-          <EmptyMini>No meetings logged with this client yet.</EmptyMini>
-        ) : (
-          <ul className="divide-y divide-aegis-gray-100">
-            {meetings.map((m) => (
-              <li key={m.meeting_id} className="py-3">
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/meetings/${m.meeting_id}`}
-                    className="text-xs font-medium tabular-nums text-aegis-navy hover:text-aegis-orange"
-                  >
-                    {new Date(m.meeting_date).toLocaleString(undefined, {
-                      dateStyle: 'medium', timeStyle: 'short',
-                    })}
-                  </Link>
-                  <span className="text-aegis-gray-200">·</span>
-                  <span className="text-[11px] uppercase tracking-wide text-aegis-gray-500">
-                    {m.meeting_format}
-                  </span>
-                  {m.analysts?.institution_name && (
-                    <>
-                      <span className="text-aegis-gray-200">·</span>
-                      <span className="text-xs text-aegis-gray-500">{m.analysts.institution_name}</span>
-                    </>
-                  )}
-                </div>
-                {m.key_takeaways && (
-                  <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.key_takeaways}</p>
+              <Section
+                title={
+                  activeEngagement
+                    ? `Commitments — ${activeEngagement.name} (${openDeliverableCount} open · ${deliverables.length} total)`
+                    : `Commitments (${openDeliverableCount} open · ${deliverables.length} total)`
+                }
+                action={
+                  activeEngagement ? (
+                    <NewCustomCommitment
+                      clientId={client.client_id}
+                      clientTiers={activeEngagement.service_tier}
+                    />
+                  ) : null
+                }
+              >
+                {!activeEngagement ? (
+                  <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
+                    No active engagement. Open one above to start tracking commitments.
+                  </p>
+                ) : (
+                  <DeliverablesSection
+                    rows={deliverables}
+                    schedulesByDeliverable={schedulesByDeliverable}
+                    analysts={analystsList}
+                  />
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+              </Section>
+            </>
+          ),
+
+          press: (
+            <>
+              <Section title={`Press releases (${pressReleases.length})`}>
+                <PressReleasesSection
+                  clientId={client.client_id}
+                  pressReleases={pressReleases}
+                  coverageByPress={coverageByPress}
+                  unlinkedCoverage={unlinkedCoverage}
+                  pressReleaseCommitments={pressReleaseCommitments}
+                  mediaContacts={mediaContacts}
+                />
+              </Section>
+
+              <Section title={`PR value reports (${prValueReports.length})`}>
+                <PrValueReportsSection
+                  clientId={client.client_id}
+                  reports={prValueReports}
+                  primaryEmail={primaryStakeholderEmail}
+                />
+              </Section>
+            </>
+          ),
+
+          todos: (
+            <>
+              <Section
+                title={`Open to-dos (${todos.length})`}
+                action={
+                  currentUserId ? (
+                    <NewTodo
+                      clients={allClients}
+                      profiles={allProfiles}
+                      currentUserId={currentUserId}
+                      defaultClientId={client.client_id}
+                      triggerLabel="Add to-do"
+                    />
+                  ) : null
+                }
+              >
+                {todos.length === 0 ? (
+                  <EmptyMini>No pending to-dos for this client.</EmptyMini>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {todos.map((t) => {
+                      const overdue = isOverdue(t.due_date);
+                      return (
+                        <li
+                          key={t.action_item_id}
+                          className="flex items-start gap-3 rounded-md border border-aegis-gray-100 bg-white px-3 py-2"
+                        >
+                          <ActionItemToggle actionItemId={t.action_item_id} status={t.status} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm text-aegis-gray">{t.item}</p>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-aegis-gray-500">
+                              <span>PIC: {profileLabel(t.profiles)}</span>
+                              {t.due_date && (
+                                <span className={overdue ? 'font-medium text-red-600' : ''}>
+                                  {overdue ? 'Overdue · ' : 'Due '}
+                                  {new Date(t.due_date).toLocaleDateString(undefined, {
+                                    dateStyle: 'medium',
+                                  })}
+                                </span>
+                              )}
+                              {t.meetings && (
+                                <Link
+                                  href={`/meetings/${t.meetings.meeting_id}`}
+                                  className="text-aegis-navy hover:text-aegis-orange"
+                                >
+                                  From meeting ·{' '}
+                                  {new Date(t.meetings.meeting_date).toLocaleDateString(undefined, {
+                                    dateStyle: 'medium',
+                                  })}
+                                </Link>
+                              )}
+                            </div>
+                            {isRegulatoryPreworkKey(t.auto_generated_key) && (
+                              <RegulatoryPreworkButtons
+                                autoKey={t.auto_generated_key as string}
+                                clientName={client.corporate_name}
+                                deadline={t.due_date}
+                                contact={primaryPreworkContact}
+                              />
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Section>
+
+              <Section
+                title={`Recent meetings (${meetings.length})`}
+                action={
+                  <Link href="/meetings" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
+                    View all →
+                  </Link>
+                }
+              >
+                {meetings.length === 0 ? (
+                  <EmptyMini>No meetings logged with this client yet.</EmptyMini>
+                ) : (
+                  <ul className="divide-y divide-aegis-gray-100">
+                    {meetings.map((m) => (
+                      <li key={m.meeting_id} className="py-3">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/meetings/${m.meeting_id}`}
+                            className="text-xs font-medium tabular-nums text-aegis-navy hover:text-aegis-orange"
+                          >
+                            {new Date(m.meeting_date).toLocaleString(undefined, {
+                              dateStyle: 'medium', timeStyle: 'short',
+                            })}
+                          </Link>
+                          <span className="text-aegis-gray-200">·</span>
+                          <span className="text-[11px] uppercase tracking-wide text-aegis-gray-500">
+                            {m.meeting_format}
+                          </span>
+                          {m.analysts?.institution_name && (
+                            <>
+                              <span className="text-aegis-gray-200">·</span>
+                              <span className="text-xs text-aegis-gray-500">{m.analysts.institution_name}</span>
+                            </>
+                          )}
+                        </div>
+                        {m.key_takeaways && (
+                          <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.key_takeaways}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+
+              <Section
+                title={`Projects (${projects.length})`}
+                action={
+                  <Link href="/projects" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
+                    View all →
+                  </Link>
+                }
+              >
+                {projects.length === 0 ? (
+                  <EmptyMini>No projects logged for this client yet.</EmptyMini>
+                ) : (
+                  <ul className="divide-y divide-aegis-gray-100">
+                    {projects.map((p) => (
+                      <li key={p.project_id} className="flex items-center gap-3 py-2.5">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status]}`} />
+                        <Link
+                          href={`/projects/${p.project_id}`}
+                          className="flex-1 truncate text-sm font-medium text-aegis-navy hover:text-aegis-orange"
+                        >
+                          {p.deliverable_name}
+                        </Link>
+                        <span className="shrink-0 text-xs capitalize text-aegis-gray-500">{p.status}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-aegis-gray-500">
+                          {p.deadline ? new Date(p.deadline).toLocaleDateString() : '—'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Section>
+            </>
+          ),
+
+          documents: (
+            <Section title={`Documents (${documents.length})`}>
+              <DocumentsSection clientId={client.client_id} documents={documents} />
+            </Section>
+          ),
+        }}
+      </ClientTabs>
     </div>
   );
 }
