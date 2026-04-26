@@ -41,7 +41,7 @@ export default async function MeetingsPage({
           '*, clients ( corporate_name ), analysts ( institution_name ), meeting_attendees ( user_id ), action_items ( * )',
           { count: 'exact' },
         );
-      if (q) query = query.or(`location.ilike.%${q}%,summary.ilike.%${q}%,other_remarks.ilike.%${q}%,key_takeaways.ilike.%${q}%`);
+      if (q) query = query.or(`location.ilike.%${q}%,summary.ilike.%${q}%,other_remarks.ilike.%${q}%`);
       if (format === 'physical' || format === 'online') query = query.eq('meeting_format', format);
       if (type === 'internal' || type === 'briefing') query = query.eq('meeting_type', type);
       query = query.order(sort, { ascending: dir === 'asc' });

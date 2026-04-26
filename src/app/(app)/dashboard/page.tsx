@@ -18,7 +18,6 @@ type MeetingRow = {
   meeting_date: string;
   summary: string | null;
   other_remarks: string | null;
-  key_takeaways: string | null;
   clients: { corporate_name: string } | null;
   analysts: { institution_name: string } | null;
 };
@@ -99,7 +98,7 @@ export default async function DashboardPage() {
     supabase
       .from('meetings')
       .select(
-        'meeting_id, meeting_format, meeting_type, meeting_date, summary, other_remarks, key_takeaways, clients ( corporate_name ), analysts ( institution_name )',
+        'meeting_id, meeting_format, meeting_type, meeting_date, summary, other_remarks, clients ( corporate_name ), analysts ( institution_name )',
       )
       .order('meeting_date', { ascending: false })
       .limit(4),
@@ -349,7 +348,7 @@ export default async function DashboardPage() {
           ) : (
             <ul className="mt-2 divide-y divide-aegis-gray-100">
               {meetings.map((m) => {
-                const preview = m.summary || m.other_remarks || m.key_takeaways;
+                const preview = m.summary || m.other_remarks;
                 const title =
                   [m.clients?.corporate_name, m.analysts?.institution_name].filter(Boolean).join(' × ') ||
                   (m.meeting_type === 'internal' ? 'Internal meeting' : '—');

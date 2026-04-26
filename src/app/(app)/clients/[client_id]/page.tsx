@@ -64,8 +64,7 @@ type Meeting = {
   meeting_id: string;
   meeting_format: 'physical' | 'online';
   meeting_date: string;
-  attendees: string | null;
-  key_takeaways: string | null;
+  summary: string | null;
   analysts: { institution_name: string } | null;
 };
 
@@ -118,7 +117,7 @@ export default async function ClientDetailPage({
       .order('deadline', { ascending: true, nullsFirst: false }),
     supabase
       .from('meetings')
-      .select('meeting_id, meeting_format, meeting_date, attendees, key_takeaways, analysts ( institution_name )')
+      .select('meeting_id, meeting_format, meeting_date, summary, analysts ( institution_name )')
       .eq('client_id', client_id)
       .order('meeting_date', { ascending: false })
       .limit(10),
@@ -593,8 +592,8 @@ export default async function ClientDetailPage({
                             </>
                           )}
                         </div>
-                        {m.key_takeaways && (
-                          <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.key_takeaways}</p>
+                        {m.summary && (
+                          <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.summary}</p>
                         )}
                       </li>
                     ))}

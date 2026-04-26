@@ -103,24 +103,12 @@ type ClientPayload = {
   industry: Industry | null;
   market_segment: MarketSegment | null;
   financial_year_end: string | null;
-  ceo_name: string | null;
-  cfo_name: string | null;
   logo_url: string | null;
   service_tier: ServiceTier[];
   ipo_status: IpoStatus | null;
   financial_quarter: string | null;
   internal_controls_audit: boolean;
-  advisory_syndicate: unknown;
 };
-
-function parseJson(raw: string | undefined | null): { ok: true; value: unknown } | { ok: false; error: string } {
-  if (!raw || !raw.trim()) return { ok: true, value: [] };
-  try {
-    return { ok: true, value: JSON.parse(raw) };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Invalid JSON.' };
-  }
-}
 
 function validateFinancialYearEnd(raw: string | null): { ok: true; value: string | null } | { ok: false; error: string } {
   if (!raw) return { ok: true, value: null };
@@ -140,14 +128,11 @@ function readPayload(formData: FormData): { ok: true; value: ClientPayload } | {
   const industry_raw = formData.get('industry')?.toString();
   const market_raw = formData.get('market_segment')?.toString();
   const fye_raw = formData.get('financial_year_end')?.toString().trim() || null;
-  const ceo_name = formData.get('ceo_name')?.toString().trim() || null;
-  const cfo_name = formData.get('cfo_name')?.toString().trim() || null;
   const logo_url = formData.get('logo_url')?.toString().trim() || null;
   const service_tiers = formData.getAll('service_tier').map((t) => t.toString());
   const ipo_status_raw = formData.get('ipo_status')?.toString();
   const financial_quarter_raw = formData.get('financial_quarter')?.toString();
   const internal_controls_audit = formData.get('internal_controls_audit') === 'true';
-  const advisory_raw = formData.get('advisory_syndicate')?.toString();
 
   if (!corporate_name) return { ok: false, error: 'Company name is required.' };
   if (service_tiers.length === 0) return { ok: false, error: 'At least one service tier is required.' };
@@ -169,9 +154,6 @@ function readPayload(formData: FormData): { ok: true; value: ClientPayload } | {
   const fye = validateFinancialYearEnd(fye_raw);
   if (!fye.ok) return { ok: false, error: fye.error };
 
-  const advisory = parseJson(advisory_raw);
-  if (!advisory.ok) return { ok: false, error: `Advisory syndicate JSON: ${advisory.error}` };
-
   return {
     ok: true,
     value: {
@@ -180,14 +162,11 @@ function readPayload(formData: FormData): { ok: true; value: ClientPayload } | {
       industry,
       market_segment,
       financial_year_end: fye.value,
-      ceo_name,
-      cfo_name,
       logo_url,
       service_tier: validTiers,
       ipo_status,
       financial_quarter: financial_quarter_raw || null,
       internal_controls_audit,
-      advisory_syndicate: advisory.value,
     },
   };
 }
@@ -325,14 +304,11 @@ function buildImportPayload(
       industry: (industry_raw as Industry) || null,
       market_segment: (market_raw as MarketSegment) || null,
       financial_year_end: fye.value,
-      ceo_name: record.ceo_name?.trim() || null,
-      cfo_name: record.cfo_name?.trim() || null,
       logo_url: null,
       service_tier: validTiers,
       ipo_status: (ipo_raw as IpoStatus) || null,
       financial_quarter: record.financial_quarter?.trim() || null,
       internal_controls_audit: parseBoolean(record.internal_controls_audit),
-      advisory_syndicate: [],
     },
   };
 }

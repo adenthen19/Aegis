@@ -11,8 +11,7 @@ type Meeting = {
   meeting_id: string;
   meeting_format: 'physical' | 'online';
   meeting_date: string;
-  attendees: string | null;
-  key_takeaways: string | null;
+  summary: string | null;
   clients: { corporate_name: string } | null;
 };
 
@@ -28,7 +27,7 @@ export default async function AnalystDetailPage({
     supabase.from('analysts').select('*').eq('investor_id', investor_id).maybeSingle(),
     supabase
       .from('meetings')
-      .select('meeting_id, meeting_format, meeting_date, attendees, key_takeaways, clients ( corporate_name )')
+      .select('meeting_id, meeting_format, meeting_date, summary, clients ( corporate_name )')
       .eq('investor_id', investor_id)
       .order('meeting_date', { ascending: false })
       .limit(20),
@@ -128,8 +127,8 @@ export default async function AnalystDetailPage({
                     </>
                   )}
                 </div>
-                {m.key_takeaways && (
-                  <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.key_takeaways}</p>
+                {m.summary && (
+                  <p className="mt-1 line-clamp-2 text-xs text-aegis-gray-500">{m.summary}</p>
                 )}
               </li>
             ))}

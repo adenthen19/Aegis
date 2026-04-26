@@ -138,11 +138,7 @@ export default async function MeetingDetailPage({
 
       <Section title="Attendees">
         {meeting.meeting_attendees.length === 0 ? (
-          meeting.attendees ? (
-            <p className="text-sm text-aegis-gray">{meeting.attendees}</p>
-          ) : (
-            <EmptyMini>No attendees recorded.</EmptyMini>
-          )
+          <EmptyMini>No attendees recorded.</EmptyMini>
         ) : (
           <ul className="flex flex-wrap gap-2">
             {meeting.meeting_attendees.map((a) => (
@@ -176,10 +172,6 @@ export default async function MeetingDetailPage({
           {meeting.summary ? (
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-aegis-gray">
               {meeting.summary}
-            </p>
-          ) : meeting.key_takeaways ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-aegis-gray">
-              {meeting.key_takeaways}
             </p>
           ) : (
             <EmptyMini>No summary recorded.</EmptyMini>
@@ -222,10 +214,10 @@ export default async function MeetingDetailPage({
         )}
       </Section>
 
-      {(meeting.other_remarks || meeting.key_takeaways) && (
+      {meeting.other_remarks && (
         <Section title="Other remarks">
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-aegis-gray">
-            {meeting.other_remarks ?? meeting.key_takeaways}
+            {meeting.other_remarks}
           </p>
         </Section>
       )}

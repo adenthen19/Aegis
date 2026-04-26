@@ -3,7 +3,6 @@ export type ServiceTier =
   | 'ipo' | 'agm_egm' | 'social_media' | 'event_management';
 export type IpoStatus = 'readiness' | 'roadshow' | 'pricing';
 export type AnalystType = 'buy_side' | 'sell_side';
-export type PreferredContactMethod = 'email' | 'phone' | 'slack' | 'in_person';
 export type MeetingFormat = 'physical' | 'online';
 export type MeetingType = 'internal' | 'briefing';
 export type ActionItemStatus = 'open' | 'done';
@@ -37,14 +36,11 @@ export type Client = {
   industry: Industry | null;
   market_segment: MarketSegment | null;
   financial_year_end: string | null; // 'MM-DD'
-  ceo_name: string | null;
-  cfo_name: string | null;
   logo_url: string | null;
   service_tier: ServiceTier[];
   ipo_status: IpoStatus | null;
   financial_quarter: string | null;
   internal_controls_audit: boolean;
-  advisory_syndicate: unknown;
   created_at: string;
   updated_at: string;
 };
@@ -82,10 +78,8 @@ export type Analyst = {
   analyst_type: AnalystType;
   contact_number: string | null;
   email: string | null;
-  // Legacy columns retained for any pre-existing rows; not edited via the UI anymore.
-  asset_class_focus: string | null;
-  aum_bracket: number | null;
-  interaction_history: unknown;
+  // Sentiment score is a -1.0..+1.0 rolling figure rendered on the dashboard.
+  // Will be populated by Phase 4 AI scoring of meetings + coverage.
   sentiment_score: number | null;
   created_at: string;
   updated_at: string;
@@ -98,12 +92,6 @@ export type MediaContact = {
   state: string | null;
   contact_number: string | null;
   email: string | null;
-  // Legacy columns retained for any pre-existing rows; not edited via the UI anymore.
-  specific_beat_coverage: string | null;
-  preferred_contact_method: PreferredContactMethod | null;
-  recent_articles: string[];
-  social_media_profiles: Record<string, string>;
-  spoc: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -126,11 +114,9 @@ export type Meeting = {
   meeting_format: MeetingFormat;
   meeting_date: string;
   location: string | null;
-  attendees: string | null; // legacy free-text, kept for backward-compat
   agenda_items: string[];
   summary: string | null;
   other_remarks: string | null;
-  key_takeaways: string | null; // legacy
   created_at: string;
   updated_at: string;
 };

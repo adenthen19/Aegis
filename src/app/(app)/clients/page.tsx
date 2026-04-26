@@ -37,7 +37,7 @@ export default async function ClientsPage({
   const supabase = await createClient();
   let query = supabase.from('clients').select('*', { count: 'exact' });
   if (q) {
-    query = query.or(`corporate_name.ilike.%${q}%,ticker_code.ilike.%${q}%,ceo_name.ilike.%${q}%,cfo_name.ilike.%${q}%`);
+    query = query.or(`corporate_name.ilike.%${q}%,ticker_code.ilike.%${q}%`);
   }
   query = query.order(sort, { ascending: dir === 'asc' });
   query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

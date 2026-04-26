@@ -3,7 +3,6 @@
 import {
   CheckboxField,
   DateTimeField,
-  JsonField,
   MultiCheckboxField,
   SelectField,
   TextField,
@@ -88,21 +87,6 @@ export default function ClientFormFields({ initial }: { initial?: Client }) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <TextField
-          name="ceo_name"
-          label="CEO"
-          placeholder="e.g. Jane Tan"
-          defaultValue={initial?.ceo_name ?? undefined}
-        />
-        <TextField
-          name="cfo_name"
-          label="CFO"
-          placeholder="e.g. Ahmad Hassan"
-          defaultValue={initial?.cfo_name ?? undefined}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <TextField
           name="financial_year_end"
           label="Financial year end"
           placeholder="MM-DD (e.g. 12-31)"
@@ -140,18 +124,10 @@ export default function ClientFormFields({ initial }: { initial?: Client }) {
         defaultChecked={initial?.internal_controls_audit ?? false}
       />
 
-      <JsonField
-        name="advisory_syndicate"
-        label="Advisory syndicate (JSON)"
-        defaultValue={
-          initial?.advisory_syndicate
-            ? JSON.stringify(initial.advisory_syndicate, null, 2)
-            : ''
-        }
-        placeholder={'["Goldman Sachs", "Morgan Stanley"]'}
-        hint="JSON array of advisor firm names. Leave blank for none."
-        rows={3}
-      />
+      <p className="text-[11px] text-aegis-gray-300">
+        CEO, CFO, advisors, and other contacts are now managed under the
+        Stakeholders section on the client profile.
+      </p>
     </>
   );
 }

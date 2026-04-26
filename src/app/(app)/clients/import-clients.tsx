@@ -85,7 +85,7 @@ export default function ImportClients() {
               ))}
             </ul>
             <p className="mt-2 text-[11px] text-aegis-gray-300">
-              Logo and advisory syndicate aren&apos;t imported — set them per-client after import.
+              Logo and stakeholders (CEO, CFO, advisors, etc.) aren&apos;t imported — set them per-client after import.
             </p>
           </section>
 

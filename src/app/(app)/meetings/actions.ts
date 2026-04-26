@@ -16,7 +16,6 @@ type MeetingPayload = {
   meeting_format: MeetingFormat;
   meeting_date: string;
   location: string | null;
-  attendees: string | null;
   agenda_items: string[];
   summary: string | null;
   other_remarks: string | null;
@@ -89,10 +88,6 @@ function readForm(formData: FormData): { ok: true; value: ParsedForm } | { ok: f
     });
   }
 
-  // Free-text attendees field is no longer in the form; null it so we don't
-  // carry stale data across edits. Old rows keep whatever they had until edited.
-  const attendees: string | null = null;
-
   return {
     ok: true,
     value: {
@@ -103,7 +98,6 @@ function readForm(formData: FormData): { ok: true; value: ParsedForm } | { ok: f
         meeting_format: format_raw as MeetingFormat,
         meeting_date,
         location,
-        attendees,
         agenda_items,
         summary,
         other_remarks,
