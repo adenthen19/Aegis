@@ -7,7 +7,6 @@ import type {
   IpoStatus,
   Industry,
   MarketSegment,
-  DeliverableKind,
 } from '@/lib/types';
 import {
   SERVICE_TIER_CODES as SERVICE_TIERS,
@@ -16,54 +15,55 @@ import {
   MARKET_SEGMENT_CODES as MARKET_SEGMENTS,
   CLIENT_IMPORT_HEADERS,
 } from '@/lib/client-import';
+import { seedDeliverablesForEngagement } from './seeding-helpers';
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
-async function seedClientDeliverables(
+/**
+ * On client creation we open a default 12-month retainer engagement so
+ * commitments have somewhere to live. The user can rename it, change the
+ * dates, or split out additional engagements (e.g. a separate IPO scope)
+ * from the client profile afterwards.
+ */
+async function createDefaultEngagement(
   supabase: SupabaseClient,
   client_id: string,
   service_tiers: ServiceTier[],
-): Promise<void> {
-  if (service_tiers.length === 0) return;
+): Promise<string | null> {
+  if (service_tiers.length === 0) return null;
 
-  const [templatesRes, existingRes] = await Promise.all([
-    supabase
-      .from('deliverable_templates')
-      .select('template_id, service_tier, kind, label, default_target_count')
-      .eq('is_active', true)
-      .in('service_tier', service_tiers),
-    supabase
-      .from('client_deliverables')
-      .select('template_id')
-      .eq('client_id', client_id)
-      .not('template_id', 'is', null),
-  ]);
+  const today = new Date();
+  const start = today.toISOString().slice(0, 10);
+  const oneYearOut = new Date(today);
+  oneYearOut.setFullYear(today.getFullYear() + 1);
+  const end = oneYearOut.toISOString().slice(0, 10);
 
-  if (templatesRes.error || !templatesRes.data) return;
-
-  const alreadySeeded = new Set(
-    (existingRes.data ?? []).map((r) => r.template_id as string),
-  );
-  type SeedRow = {
-    template_id: string;
-    service_tier: ServiceTier;
-    kind: DeliverableKind;
-    label: string;
-    default_target_count: number | null;
-  };
-  const toInsert = (templatesRes.data as SeedRow[])
-    .filter((t) => !alreadySeeded.has(t.template_id))
-    .map((t) => ({
+  const { data, error } = await supabase
+    .from('engagements')
+    .insert({
       client_id,
-      template_id: t.template_id,
-      service_tier: t.service_tier,
-      kind: t.kind,
-      label: t.label,
-      target_count: t.kind === 'recurring' ? t.default_target_count : null,
-    }));
+      name: 'Initial engagement',
+      engagement_type: 'retainer',
+      status: 'active',
+      start_date: start,
+      end_date: end,
+      service_tier: service_tiers,
+      currency: 'MYR',
+      scope_summary:
+        'Auto-generated default engagement. Edit name, dates, contract value, and scope to match the actual contract.',
+    })
+    .select('engagement_id')
+    .single();
+  if (error || !data) return null;
 
-  if (toInsert.length === 0) return;
-  await supabase.from('client_deliverables').insert(toInsert);
+  await seedDeliverablesForEngagement(
+    supabase,
+    data.engagement_id as string,
+    client_id,
+    service_tiers,
+  );
+
+  return data.engagement_id as string;
 }
 
 export type ActionState = { ok: boolean; error: string | null };
@@ -181,7 +181,11 @@ export async function createClientAction(
     .single();
   if (error || !created) return { ok: false, error: error?.message ?? 'Failed to create client.' };
 
-  await seedClientDeliverables(supabase, created.client_id as string, payload.value.service_tier);
+  await createDefaultEngagement(
+    supabase,
+    created.client_id as string,
+    payload.value.service_tier,
+  );
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');
@@ -205,7 +209,9 @@ export async function updateClientAction(
   const { error } = await supabase.from('clients').update(payload.value).eq('client_id', client_id);
   if (error) return { ok: false, error: error.message };
 
-  await seedClientDeliverables(supabase, client_id, payload.value.service_tier);
+  // We no longer seed deliverables on client tier changes — commitments are
+  // now scoped to engagements. To pull in templates for a newly-added tier,
+  // edit the engagement and add the tier there.
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');
@@ -418,7 +424,7 @@ export async function importClientsAction(
   }
 
   for (const c of insertedClients ?? []) {
-    await seedClientDeliverables(
+    await createDefaultEngagement(
       supabase,
       c.client_id as string,
       (c.service_tier ?? []) as ServiceTier[],

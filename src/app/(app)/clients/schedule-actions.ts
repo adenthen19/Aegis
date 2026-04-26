@@ -9,6 +9,7 @@ import type {
   ServiceTier,
 } from '@/lib/types';
 import { SERVICE_TIER_CODES as SERVICE_TIERS } from '@/lib/client-import';
+import { getActiveEngagementForClient } from './engagements-helpers';
 
 export type ActionState = { ok: boolean; error: string | null };
 
@@ -25,17 +26,18 @@ async function fetchParent(
   supabase: SupabaseClient,
   client_deliverable_id: string,
 ): Promise<
-  | { client_id: string; kind: DeliverableKind; target_count: number | null }
+  | { client_id: string; engagement_id: string; kind: DeliverableKind; target_count: number | null }
   | null
 > {
   const { data } = await supabase
     .from('client_deliverables')
-    .select('client_id, kind, target_count')
+    .select('client_id, engagement_id, kind, target_count')
     .eq('client_deliverable_id', client_deliverable_id)
     .maybeSingle();
   if (!data) return null;
   return {
     client_id: data.client_id as string,
+    engagement_id: data.engagement_id as string,
     kind: data.kind as DeliverableKind,
     target_count: (data.target_count as number | null) ?? null,
   };
@@ -145,7 +147,14 @@ export async function createScheduleAction(
 
   const { data: created, error } = await supabase
     .from('deliverable_schedule')
-    .insert({ client_deliverable_id, scheduled_at, location, notes, status })
+    .insert({
+      client_deliverable_id,
+      engagement_id: parent.engagement_id,
+      scheduled_at,
+      location,
+      notes,
+      status,
+    })
     .select('schedule_id')
     .single();
   if (error || !created) {
@@ -402,8 +411,18 @@ export async function addCustomCommitmentAction(
     target_count = n;
   }
 
+  const active = await getActiveEngagementForClient(supabase, client_id);
+  if (!active) {
+    return {
+      ok: false,
+      error:
+        'This client has no active engagement. Create one before adding commitments.',
+    };
+  }
+
   const { error } = await supabase.from('client_deliverables').insert({
     client_id,
+    engagement_id: active.engagement_id,
     template_id: null,
     service_tier: tier_raw as ServiceTier,
     kind,

@@ -16,6 +16,7 @@ import {
   type ActionItem,
   type Client,
   type ClientDeliverable,
+  type Engagement,
   type Profile,
   type ProjectStatus,
   type ServiceTier,
@@ -25,6 +26,7 @@ import ActionItemToggle from '../../meetings/action-item-toggle';
 import NewTodo from '../../todos/new-todo';
 import DeliverablesSection from './deliverables-section';
 import NewCustomCommitment from './new-custom-commitment';
+import EngagementsSection from './engagements-section';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -86,6 +88,7 @@ export default async function ClientDetailPage({
     deliverablesRes,
     schedulesRes,
     analystsListRes,
+    engagementsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
@@ -138,6 +141,11 @@ export default async function ClientDetailPage({
       .from('analysts')
       .select('investor_id, institution_name, full_name')
       .order('institution_name'),
+    supabase
+      .from('engagements')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('start_date', { ascending: false }),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -163,7 +171,16 @@ export default async function ClientDetailPage({
   const allClients = allClientsRes.data ?? [];
   const allProfiles = (allProfilesRes.data ?? []) as Profile[];
   const currentUserId = userRes.data.user?.id ?? null;
-  const deliverables = (deliverablesRes.data ?? []) as ClientDeliverable[];
+  const allDeliverables = (deliverablesRes.data ?? []) as ClientDeliverable[];
+  const engagements = (engagementsRes.data ?? []) as Engagement[];
+  const activeEngagement =
+    engagements.find((e) => e.status === 'active') ?? null;
+  // Scope the visible commitments to the active engagement so the on-track
+  // view reflects the current contract period. Deliverables on past
+  // engagements remain queryable via the engagements list itself.
+  const deliverables = activeEngagement
+    ? allDeliverables.filter((d) => d.engagement_id === activeEngagement.engagement_id)
+    : allDeliverables;
   const openDeliverableCount = deliverables.filter(
     (d) => d.status !== 'completed' && d.status !== 'not_applicable',
   ).length;
@@ -181,11 +198,14 @@ export default async function ClientDetailPage({
   type ScheduleJoin = {
     schedule_id: string;
     client_deliverable_id: string;
+    engagement_id: string;
     meeting_id: string | null;
     scheduled_at: string;
     location: string | null;
     status: 'planned' | 'confirmed' | 'completed' | 'cancelled';
     notes: string | null;
+    created_by_user_id: string | null;
+    updated_by_user_id: string | null;
     created_at: string;
     updated_at: string;
     attendees: ScheduleAttendeeJoin[] | null;
@@ -317,20 +337,40 @@ export default async function ClientDetailPage({
           </Section>
         )}
 
+      <Section title={`Engagements (${engagements.length})`}>
+        <EngagementsSection
+          clientId={client.client_id}
+          clientTiers={client.service_tier}
+          engagements={engagements}
+        />
+      </Section>
+
       <Section
-        title={`Commitments (${openDeliverableCount} open · ${deliverables.length} total)`}
+        title={
+          activeEngagement
+            ? `Commitments — ${activeEngagement.name} (${openDeliverableCount} open · ${deliverables.length} total)`
+            : `Commitments (${openDeliverableCount} open · ${deliverables.length} total)`
+        }
         action={
-          <NewCustomCommitment
-            clientId={client.client_id}
-            clientTiers={client.service_tier}
-          />
+          activeEngagement ? (
+            <NewCustomCommitment
+              clientId={client.client_id}
+              clientTiers={activeEngagement.service_tier}
+            />
+          ) : null
         }
       >
-        <DeliverablesSection
-          rows={deliverables}
-          schedulesByDeliverable={schedulesByDeliverable}
-          analysts={analystsList}
-        />
+        {!activeEngagement ? (
+          <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
+            No active engagement. Open one above to start tracking commitments.
+          </p>
+        ) : (
+          <DeliverablesSection
+            rows={deliverables}
+            schedulesByDeliverable={schedulesByDeliverable}
+            analysts={analystsList}
+          />
+        )}
       </Section>
 
       <Section

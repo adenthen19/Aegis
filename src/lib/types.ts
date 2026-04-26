@@ -148,6 +148,51 @@ export type Profile = {
   role: UserRole;
 };
 
+export type EngagementType = 'retainer' | 'ipo' | 'agm' | 'one_off' | 'crisis';
+
+export type EngagementStatus =
+  | 'draft'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled';
+
+export const ENGAGEMENT_TYPE_LABEL: Record<EngagementType, string> = {
+  retainer: 'Retainer',
+  ipo: 'IPO',
+  agm: 'AGM/EGM',
+  one_off: 'One-off',
+  crisis: 'Crisis',
+};
+
+export const ENGAGEMENT_STATUS_LABEL: Record<EngagementStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  paused: 'Paused',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+export type Engagement = {
+  engagement_id: string;
+  client_id: string;
+  name: string;
+  engagement_type: EngagementType;
+  status: EngagementStatus;
+  start_date: string;
+  end_date: string | null;
+  service_tier: ServiceTier[];
+  contract_value: number | null;
+  currency: string;
+  billing_terms: string | null;
+  scope_summary: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DeliverableKind =
   | 'one_off'
   | 'recurring'
@@ -202,11 +247,14 @@ export const SCHEDULE_STATUS_LABEL: Record<ScheduleStatus, string> = {
 export type DeliverableSchedule = {
   schedule_id: string;
   client_deliverable_id: string;
+  engagement_id: string;
   meeting_id: string | null;
   scheduled_at: string;
   location: string | null;
   status: ScheduleStatus;
   notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -224,6 +272,7 @@ export type ScheduleAttendee = {
 export type ClientDeliverable = {
   client_deliverable_id: string;
   client_id: string;
+  engagement_id: string;
   template_id: string | null;
   service_tier: ServiceTier;
   kind: DeliverableKind;
@@ -232,6 +281,8 @@ export type ClientDeliverable = {
   target_count: number | null;
   completed_count: number;
   notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 };
