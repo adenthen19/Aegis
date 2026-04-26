@@ -338,15 +338,15 @@ export default async function ClientDetailPage({
       <DetailHeader
         title={
           <span className="flex items-center gap-4">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50">
+            <span className="flex h-14 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50 p-1.5">
               {client.logo_url ? (
                 <Image
                   src={client.logo_url}
                   alt={client.corporate_name}
-                  width={48}
-                  height={48}
+                  width={224}
+                  height={112}
                   unoptimized
-                  className="h-full w-full object-contain"
+                  className="max-h-full max-w-full object-contain"
                 />
               ) : (
                 <span className="text-[10px] font-medium uppercase text-aegis-gray-300">

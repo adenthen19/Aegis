@@ -65,15 +65,15 @@ export default function ClientLogoUpload({
       </span>
 
       <div className="flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-200 bg-aegis-gray-50">
+        <div className="flex h-20 w-40 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-200 bg-aegis-gray-50 p-2">
           {url ? (
             <Image
               src={url}
               alt="Client logo"
-              width={64}
-              height={64}
+              width={320}
+              height={160}
               unoptimized
-              className="h-full w-full object-contain"
+              className="max-h-full max-w-full object-contain"
             />
           ) : (
             <span className="text-[10px] uppercase tracking-wide text-aegis-gray-300">

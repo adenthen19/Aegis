@@ -74,15 +74,15 @@ export default async function ClientsPage({
           {
             header: 'Logo',
             cell: (r) => (
-              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-aegis-gray-100 bg-aegis-gray-50">
+              <div className="flex h-10 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-aegis-gray-100 bg-aegis-gray-50 p-1">
                 {r.logo_url ? (
                   <Image
                     src={r.logo_url}
                     alt={r.corporate_name}
-                    width={40}
-                    height={40}
+                    width={160}
+                    height={80}
                     unoptimized
-                    className="h-full w-full object-contain"
+                    className="max-h-full max-w-full object-contain"
                   />
                 ) : (
                   <span className="text-[10px] font-medium uppercase text-aegis-gray-300">
