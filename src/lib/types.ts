@@ -148,6 +148,75 @@ export type Profile = {
   role: UserRole;
 };
 
+export type StakeholderCategory = 'executive' | 'board' | 'advisor' | 'other';
+
+export const STAKEHOLDER_CATEGORY_LABEL: Record<StakeholderCategory, string> = {
+  executive: 'Executive',
+  board: 'Board',
+  advisor: 'Advisor',
+  other: 'Other',
+};
+
+export type ClientStakeholder = {
+  stakeholder_id: string;
+  client_id: string;
+  category: StakeholderCategory;
+  role: string;
+  full_name: string;
+  email: string | null;
+  phone: string | null;
+  is_primary: boolean;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DocumentCategory =
+  | 'press_release'
+  | 'qa_pack'
+  | 'media_kit'
+  | 'results'
+  | 'board_pack'
+  | 'clipping'
+  | 'report'
+  | 'contract'
+  | 'other';
+
+export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
+  press_release: 'Press release',
+  qa_pack: 'Q&A pack',
+  media_kit: 'Media kit',
+  results: 'Results',
+  board_pack: 'Board pack',
+  clipping: 'Clipping',
+  report: 'Report',
+  contract: 'Contract',
+  other: 'Other',
+};
+
+export type Document = {
+  document_id: string;
+  client_id: string;
+  engagement_id: string | null;
+  client_deliverable_id: string | null;
+  schedule_id: string | null;
+  meeting_id: string | null;
+  name: string;
+  file_path: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  category: DocumentCategory;
+  description: string | null;
+  version: number;
+  replaces_document_id: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type EngagementType = 'retainer' | 'ipo' | 'agm' | 'one_off' | 'crisis';
 
 export type EngagementStatus =

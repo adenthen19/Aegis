@@ -16,6 +16,8 @@ import {
   type ActionItem,
   type Client,
   type ClientDeliverable,
+  type ClientStakeholder,
+  type Document,
   type Engagement,
   type Profile,
   type ProjectStatus,
@@ -27,6 +29,8 @@ import NewTodo from '../../todos/new-todo';
 import DeliverablesSection from './deliverables-section';
 import NewCustomCommitment from './new-custom-commitment';
 import EngagementsSection from './engagements-section';
+import StakeholdersSection from './stakeholders-section';
+import DocumentsSection from './documents-section';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -89,6 +93,8 @@ export default async function ClientDetailPage({
     schedulesRes,
     analystsListRes,
     engagementsRes,
+    stakeholdersRes,
+    documentsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
@@ -146,6 +152,17 @@ export default async function ClientDetailPage({
       .select('*')
       .eq('client_id', client_id)
       .order('start_date', { ascending: false }),
+    supabase
+      .from('client_stakeholders')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('is_primary', { ascending: false })
+      .order('role', { ascending: true }),
+    supabase
+      .from('documents')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('created_at', { ascending: false }),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -173,6 +190,8 @@ export default async function ClientDetailPage({
   const currentUserId = userRes.data.user?.id ?? null;
   const allDeliverables = (deliverablesRes.data ?? []) as ClientDeliverable[];
   const engagements = (engagementsRes.data ?? []) as Engagement[];
+  const stakeholders = (stakeholdersRes.data ?? []) as ClientStakeholder[];
+  const documents = (documentsRes.data ?? []) as Document[];
   const activeEngagement =
     engagements.find((e) => e.status === 'active') ?? null;
   // Scope the visible commitments to the active engagement so the on-track
@@ -295,12 +314,6 @@ export default async function ClientDetailPage({
           <Field label="Market segment">
             {client.market_segment ? MARKET_SEGMENT_LABEL[client.market_segment] : <span className="text-aegis-gray-300">—</span>}
           </Field>
-          <Field label="CEO">
-            {client.ceo_name ?? <span className="text-aegis-gray-300">—</span>}
-          </Field>
-          <Field label="CFO">
-            {client.cfo_name ?? <span className="text-aegis-gray-300">—</span>}
-          </Field>
           <Field label="Financial year end">
             {client.financial_year_end ?? <span className="text-aegis-gray-300">—</span>}
           </Field>
@@ -320,22 +333,9 @@ export default async function ClientDetailPage({
         </FieldGrid>
       </Section>
 
-      {client.advisory_syndicate != null &&
-        Array.isArray(client.advisory_syndicate) &&
-        (client.advisory_syndicate as unknown[]).length > 0 && (
-          <Section title="Advisory syndicate">
-            <ul className="flex flex-wrap gap-2">
-              {(client.advisory_syndicate as string[]).map((adv, i) => (
-                <li
-                  key={i}
-                  className="inline-flex rounded-md border border-aegis-gray-100 bg-aegis-gray-50/60 px-3 py-1 text-xs text-aegis-gray"
-                >
-                  {String(adv)}
-                </li>
-              ))}
-            </ul>
-          </Section>
-        )}
+      <Section title={`Stakeholders (${stakeholders.length})`}>
+        <StakeholdersSection clientId={client.client_id} rows={stakeholders} />
+      </Section>
 
       <Section title={`Engagements (${engagements.length})`}>
         <EngagementsSection
@@ -429,6 +429,10 @@ export default async function ClientDetailPage({
             })}
           </ul>
         )}
+      </Section>
+
+      <Section title={`Documents (${documents.length})`}>
+        <DocumentsSection clientId={client.client_id} documents={documents} />
       </Section>
 
       <Section
