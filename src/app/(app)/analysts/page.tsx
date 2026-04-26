@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/pagination';
 import type { Analyst } from '@/lib/types';
 import NewAnalyst from './new-analyst';
 import AnalystRowActions from './row-actions';
+import ExportAnalystEmails from './export-emails';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['full_name', 'institution_name', 'analyst_type', 'email', 'created_at']);
@@ -42,7 +43,12 @@ export default async function AnalystsPage({
       <PageHeader
         title="Analyst & Fund Manager Database"
         description="Buy-side and sell-side coverage contacts."
-        action={<NewAnalyst />}
+        action={
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <ExportAnalystEmails />
+            <NewAnalyst />
+          </div>
+        }
       />
 
       <div className="mb-4">

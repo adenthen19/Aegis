@@ -85,6 +85,38 @@ export async function updateAnalystAction(
   return { ok: true, error: null };
 }
 
+export async function exportAnalystEmailsAction(
+  q: string,
+): Promise<{ emails: string[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { emails: [], error: 'You must be signed in.' };
+
+  let query = supabase
+    .from('analysts')
+    .select('email')
+    .not('email', 'is', null);
+
+  const term = q.trim();
+  if (term) {
+    query = query.or(
+      `full_name.ilike.%${term}%,institution_name.ilike.%${term}%,email.ilike.%${term}%`,
+    );
+  }
+
+  const { data, error } = await query.order('email', { ascending: true });
+  if (error) return { emails: [], error: error.message };
+
+  const emails = Array.from(
+    new Set(
+      (data ?? [])
+        .map((r) => (r.email ?? '').trim())
+        .filter((e) => e.length > 0),
+    ),
+  );
+  return { emails, error: null };
+}
+
 export async function deleteAnalystAction(investor_id: string): Promise<ActionState> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

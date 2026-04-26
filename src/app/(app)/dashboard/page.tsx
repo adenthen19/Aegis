@@ -14,7 +14,10 @@ type ProjectRow = {
 type MeetingRow = {
   meeting_id: string;
   meeting_format: 'physical' | 'online';
+  meeting_type: 'internal' | 'briefing';
   meeting_date: string;
+  summary: string | null;
+  other_remarks: string | null;
   key_takeaways: string | null;
   clients: { corporate_name: string } | null;
   analysts: { institution_name: string } | null;
@@ -95,7 +98,9 @@ export default async function DashboardPage() {
       .limit(100),
     supabase
       .from('meetings')
-      .select('meeting_id, meeting_format, meeting_date, key_takeaways, clients ( corporate_name ), analysts ( institution_name )')
+      .select(
+        'meeting_id, meeting_format, meeting_type, meeting_date, summary, other_remarks, key_takeaways, clients ( corporate_name ), analysts ( institution_name )',
+      )
       .order('meeting_date', { ascending: false })
       .limit(4),
     supabase.from('analysts').select('sentiment_score'),
@@ -343,34 +348,36 @@ export default async function DashboardPage() {
             <EmptyState>No meetings logged.</EmptyState>
           ) : (
             <ul className="mt-2 divide-y divide-aegis-gray-100">
-              {meetings.map((m) => (
-                <li key={m.meeting_id} className="py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium tabular-nums text-aegis-gray-500">
-                      {formatMeetingDate(m.meeting_date)}
-                    </span>
-                    <span className="text-aegis-gray-200">·</span>
-                    <span
-                      className={[
-                        'inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset',
-                        m.meeting_format === 'physical'
-                          ? 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20'
-                          : 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
-                      ].join(' ')}
-                    >
-                      {m.meeting_format}
-                    </span>
-                  </div>
-                  <p className="mt-1 truncate text-sm font-medium text-aegis-navy">
-                    {[m.clients?.corporate_name, m.analysts?.institution_name].filter(Boolean).join(' × ') || '—'}
-                  </p>
-                  {m.key_takeaways && (
-                    <p className="mt-0.5 line-clamp-1 text-xs text-aegis-gray-500">
-                      {m.key_takeaways}
-                    </p>
-                  )}
-                </li>
-              ))}
+              {meetings.map((m) => {
+                const preview = m.summary || m.other_remarks || m.key_takeaways;
+                const title =
+                  [m.clients?.corporate_name, m.analysts?.institution_name].filter(Boolean).join(' × ') ||
+                  (m.meeting_type === 'internal' ? 'Internal meeting' : '—');
+                return (
+                  <li key={m.meeting_id} className="py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium tabular-nums text-aegis-gray-500">
+                        {formatMeetingDate(m.meeting_date)}
+                      </span>
+                      <span className="text-aegis-gray-200">·</span>
+                      <span
+                        className={[
+                          'inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset',
+                          m.meeting_type === 'internal'
+                            ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
+                            : 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20',
+                        ].join(' ')}
+                      >
+                        {m.meeting_type}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm font-medium text-aegis-navy">{title}</p>
+                    {preview && (
+                      <p className="mt-0.5 line-clamp-1 text-xs text-aegis-gray-500">{preview}</p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>

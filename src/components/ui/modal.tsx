@@ -2,6 +2,8 @@
 
 import { useEffect } from 'react';
 
+type Size = 'lg' | '2xl';
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -9,10 +11,16 @@ type Props = {
   description?: string;
   children: React.ReactNode;
   dismissible?: boolean;
+  size?: Size;
+};
+
+const SIZE_CLASS: Record<Size, string> = {
+  lg: 'sm:max-w-lg',
+  '2xl': 'sm:max-w-2xl',
 };
 
 export default function Modal({
-  open, onClose, title, description, children, dismissible = true,
+  open, onClose, title, description, children, dismissible = true, size = 'lg',
 }: Props) {
   // Body scroll lock + (optional) ESC-to-close
   useEffect(() => {
@@ -43,7 +51,7 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="relative z-10 flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:max-w-lg sm:rounded-xl"
+        className={`relative z-10 flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:rounded-xl ${SIZE_CLASS[size]}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-aegis-gray-100 px-5 py-4 sm:px-6">
           <div>

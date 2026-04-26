@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/pagination';
 import type { MediaContact } from '@/lib/types';
 import NewMediaContact from './new-media-contact';
 import MediaRowActions from './row-actions';
+import ExportMediaEmails from './export-emails';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['full_name', 'company_name', 'state', 'email', 'created_at']);
@@ -42,7 +43,12 @@ export default async function MediaPage({
       <PageHeader
         title="Media Contacts"
         description="Journalists and media stakeholders."
-        action={<NewMediaContact />}
+        action={
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <ExportMediaEmails />
+            <NewMediaContact />
+          </div>
+        }
       />
 
       <div className="mb-4">

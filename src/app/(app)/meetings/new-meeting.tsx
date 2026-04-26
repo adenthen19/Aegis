@@ -5,14 +5,18 @@ import Modal from '@/components/ui/modal';
 import { AddButton, FormActions, FormError } from '@/components/ui/form';
 import MeetingFormFields from './meeting-form-fields';
 import { createMeetingAction, type ActionState } from './actions';
+import type { Profile } from '@/lib/types';
 
 const initial: ActionState = { ok: false, error: null };
 
 export default function NewMeeting({
-  clients, analysts,
+  clients,
+  analysts,
+  profiles,
 }: {
   clients: { client_id: string; corporate_name: string }[];
   analysts: { investor_id: string; institution_name: string }[];
+  profiles: Profile[];
 }) {
   const [open, setOpen] = useState(false);
   const [state, action] = useActionState(createMeetingAction, initial);
@@ -28,10 +32,11 @@ export default function NewMeeting({
         open={open}
         onClose={() => setOpen(false)}
         title="Log a meeting"
-        description="Record an engagement with a client, an investor, or both."
+        description="Internal team meeting or a client / investor briefing."
+        size="2xl"
       >
         <form action={action} className="space-y-4">
-          <MeetingFormFields clients={clients} analysts={analysts} />
+          <MeetingFormFields clients={clients} analysts={analysts} profiles={profiles} />
           <FormError message={state.error} />
           <FormActions onCancel={() => setOpen(false)} />
         </form>

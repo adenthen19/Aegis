@@ -73,6 +73,38 @@ export async function updateMediaContactAction(
   return { ok: true, error: null };
 }
 
+export async function exportMediaEmailsAction(
+  q: string,
+): Promise<{ emails: string[]; error: string | null }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { emails: [], error: 'You must be signed in.' };
+
+  let query = supabase
+    .from('media_contacts')
+    .select('email')
+    .not('email', 'is', null);
+
+  const term = q.trim();
+  if (term) {
+    query = query.or(
+      `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%,state.ilike.%${term}%`,
+    );
+  }
+
+  const { data, error } = await query.order('email', { ascending: true });
+  if (error) return { emails: [], error: error.message };
+
+  const emails = Array.from(
+    new Set(
+      (data ?? [])
+        .map((r) => (r.email ?? '').trim())
+        .filter((e) => e.length > 0),
+    ),
+  );
+  return { emails, error: null };
+}
+
 export async function deleteMediaContactAction(media_id: string): Promise<ActionState> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

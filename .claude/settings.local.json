@@ -24,7 +24,11 @@
       "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\")",
       "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"clients=%{http_code} analysts=%{http_code} media=%{http_code} projects=%{http_code} meetings=%{http_code}\\\\n\" \"http://localhost:3000/clients\" \"http://localhost:3000/analysts\" \"http://localhost:3000/media\" \"http://localhost:3000/projects\" \"http://localhost:3000/meetings\")",
       "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} clients=%{http_code} analysts=%{http_code} media=%{http_code} projects=%{http_code} meetings=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/clients\" \"http://localhost:3000/analysts\" \"http://localhost:3000/media\" \"http://localhost:3000/projects\" \"http://localhost:3000/meetings\")",
-      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} clients=%{http_code} clients-search=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/clients?q=test&sort=ticker_code&dir=desc&page=2\" \"http://localhost:3000/clients/00000000-0000-0000-0000-000000000000\")"
+      "Bash(MSYS_NO_PATHCONV=1 curl -s -o /dev/null -w \"dashboard=%{http_code} clients=%{http_code} clients-search=%{http_code}\\\\n\" \"http://localhost:3000/dashboard\" \"http://localhost:3000/clients?q=test&sort=ticker_code&dir=desc&page=2\" \"http://localhost:3000/clients/00000000-0000-0000-0000-000000000000\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(echo \"tsc=$?\")",
+      "Bash(npx next *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

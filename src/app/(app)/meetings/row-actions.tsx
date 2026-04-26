@@ -4,14 +4,22 @@ import { useState } from 'react';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import EditMeeting from './edit-meeting';
 import { deleteMeetingAction } from './actions';
-import type { Meeting } from '@/lib/types';
+import type { ActionItem, Meeting, Profile } from '@/lib/types';
 
 export default function MeetingRowActions({
-  row, clients, analysts,
+  row,
+  attendeeUserIds,
+  actionItems,
+  clients,
+  analysts,
+  profiles,
 }: {
   row: Meeting;
+  attendeeUserIds: string[];
+  actionItems: ActionItem[];
   clients: { client_id: string; corporate_name: string }[];
   analysts: { investor_id: string; institution_name: string }[];
+  profiles: Profile[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -37,8 +45,11 @@ export default function MeetingRowActions({
 
       <EditMeeting
         row={row}
+        attendeeUserIds={attendeeUserIds}
+        actionItems={actionItems}
         clients={clients}
         analysts={analysts}
+        profiles={profiles}
         open={editOpen}
         onClose={() => setEditOpen(false)}
       />

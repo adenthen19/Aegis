@@ -32,6 +32,16 @@ const SECTIONS: Section[] = [
           </svg>
         ),
       },
+      {
+        href: '/todos',
+        label: 'My To-Do',
+        icon: (
+          <svg {...ICON}>
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        ),
+      },
     ],
   },
   {

@@ -13,6 +13,7 @@ import {
 } from '@/lib/types';
 import NewClient from './new-client';
 import ClientRowActions from './row-actions';
+import ImportClients from './import-clients';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual',
@@ -51,7 +52,12 @@ export default async function ClientsPage({
       <PageHeader
         title="Client Database"
         description="All client engagements with company profile, service tiers, and IPO status."
-        action={<NewClient />}
+        action={
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <ImportClients />
+            <NewClient />
+          </div>
+        }
       />
 
       <div className="mb-4">

@@ -5,6 +5,8 @@ export type IpoStatus = 'readiness' | 'roadshow' | 'pricing';
 export type AnalystType = 'buy_side' | 'sell_side';
 export type PreferredContactMethod = 'email' | 'phone' | 'slack' | 'in_person';
 export type MeetingFormat = 'physical' | 'online';
+export type MeetingType = 'internal' | 'briefing';
+export type ActionItemStatus = 'open' | 'done';
 export type ProjectStatus = 'pending' | 'upcoming' | 'completed';
 
 export type Industry =
@@ -118,12 +120,36 @@ export type Project = {
 
 export type Meeting = {
   meeting_id: string;
+  meeting_type: MeetingType;
   client_id: string | null;
   investor_id: string | null;
   meeting_format: MeetingFormat;
   meeting_date: string;
-  attendees: string | null;
-  key_takeaways: string | null;
+  location: string | null;
+  attendees: string | null; // legacy free-text, kept for backward-compat
+  agenda_items: string[];
+  summary: string | null;
+  other_remarks: string | null;
+  key_takeaways: string | null; // legacy
+  created_at: string;
+  updated_at: string;
+};
+
+export type Profile = {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+};
+
+export type ActionItem = {
+  action_item_id: string;
+  meeting_id: string;
+  item: string;
+  pic_user_id: string | null;
+  due_date: string | null;
+  status: ActionItemStatus;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
 };

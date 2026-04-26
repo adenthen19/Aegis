@@ -3,21 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { ServiceTier, IpoStatus, Industry, MarketSegment } from '@/lib/types';
+import {
+  SERVICE_TIER_CODES as SERVICE_TIERS,
+  IPO_STATUS_CODES as IPO_STATUSES,
+  INDUSTRY_CODES as INDUSTRIES,
+  MARKET_SEGMENT_CODES as MARKET_SEGMENTS,
+  CLIENT_IMPORT_HEADERS,
+} from '@/lib/client-import';
 
 export type ActionState = { ok: boolean; error: string | null };
-
-const SERVICE_TIERS: ServiceTier[] = [
-  'ir', 'pr', 'esg', 'virtual_meeting',
-  'ipo', 'agm_egm', 'social_media', 'event_management',
-];
-const IPO_STATUSES: IpoStatus[] = ['readiness', 'roadshow', 'pricing'];
-const INDUSTRIES: Industry[] = [
-  'industrial_products_services', 'consumer_products_services', 'construction',
-  'energy', 'financial_services', 'health_care', 'plantation', 'property',
-  'reit', 'technology', 'telecommunications_media', 'transportation_logistics',
-  'utilities', 'spac', 'closed_end_fund', 'private_company', 'other',
-];
-const MARKET_SEGMENTS: MarketSegment[] = ['main', 'ace', 'leap'];
 
 type ClientPayload = {
   corporate_name: string;
@@ -170,4 +164,200 @@ export async function deleteClientAction(client_id: string): Promise<ActionState
   revalidatePath('/meetings');
   revalidatePath('/dashboard');
   return { ok: true, error: null };
+}
+
+// ---- Bulk import from CSV ----
+
+export type ImportRowError = { row: number; message: string };
+export type ImportState = {
+  ok: boolean;
+  error: string | null;
+  imported: number;
+  skipped: number;
+  errors: ImportRowError[];
+};
+
+const IMPORT_INITIAL: ImportState = {
+  ok: false,
+  error: null,
+  imported: 0,
+  skipped: 0,
+  errors: [],
+};
+
+function parseCsv(text: string): string[][] {
+  // Strip UTF-8 BOM if present.
+  const cleaned = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rows: string[][] = [];
+  let current: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (cleaned[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { current.push(field); field = ''; }
+      else if (ch === '\n') { current.push(field); rows.push(current); current = []; field = ''; }
+      else field += ch;
+    }
+  }
+  if (field !== '' || current.length) {
+    current.push(field);
+    rows.push(current);
+  }
+  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+}
+
+function parseBoolean(raw: string | undefined): boolean {
+  if (!raw) return false;
+  const v = raw.trim().toLowerCase();
+  return v === 'true' || v === 'yes' || v === 'y' || v === '1';
+}
+
+function buildImportPayload(
+  record: Record<string, string>,
+): { ok: true; value: ClientPayload } | { ok: false; error: string } {
+  const corporate_name = record.corporate_name?.trim();
+  if (!corporate_name) return { ok: false, error: 'corporate_name is required.' };
+
+  const serviceRaw = (record.service_tier ?? '').trim();
+  if (!serviceRaw) return { ok: false, error: 'service_tier is required (semicolon-separated codes).' };
+  const tierTokens = serviceRaw.split(/[;,|]/).map((t) => t.trim()).filter(Boolean);
+  const validTiers = tierTokens.filter((t): t is ServiceTier =>
+    SERVICE_TIERS.includes(t as ServiceTier),
+  );
+  if (validTiers.length === 0) {
+    return { ok: false, error: `service_tier has no valid codes (got "${serviceRaw}").` };
+  }
+  const invalidTiers = tierTokens.filter((t) => !SERVICE_TIERS.includes(t as ServiceTier));
+  if (invalidTiers.length > 0) {
+    return { ok: false, error: `Unknown service_tier code(s): ${invalidTiers.join(', ')}.` };
+  }
+
+  const industry_raw = record.industry?.trim();
+  if (industry_raw && !INDUSTRIES.includes(industry_raw as Industry)) {
+    return { ok: false, error: `Unknown industry "${industry_raw}".` };
+  }
+  const market_raw = record.market_segment?.trim();
+  if (market_raw && !MARKET_SEGMENTS.includes(market_raw as MarketSegment)) {
+    return { ok: false, error: `Unknown market_segment "${market_raw}".` };
+  }
+  const ipo_raw = record.ipo_status?.trim();
+  if (ipo_raw && !IPO_STATUSES.includes(ipo_raw as IpoStatus)) {
+    return { ok: false, error: `Unknown ipo_status "${ipo_raw}".` };
+  }
+
+  const fye_raw = record.financial_year_end?.trim() || null;
+  const fye = validateFinancialYearEnd(fye_raw);
+  if (!fye.ok) return { ok: false, error: fye.error };
+
+  return {
+    ok: true,
+    value: {
+      corporate_name,
+      ticker_code: record.ticker_code?.trim().toUpperCase() || null,
+      industry: (industry_raw as Industry) || null,
+      market_segment: (market_raw as MarketSegment) || null,
+      financial_year_end: fye.value,
+      ceo_name: record.ceo_name?.trim() || null,
+      cfo_name: record.cfo_name?.trim() || null,
+      logo_url: null,
+      service_tier: validTiers,
+      ipo_status: (ipo_raw as IpoStatus) || null,
+      financial_quarter: record.financial_quarter?.trim() || null,
+      internal_controls_audit: parseBoolean(record.internal_controls_audit),
+      advisory_syndicate: [],
+    },
+  };
+}
+
+export async function importClientsAction(
+  _prev: ImportState,
+  formData: FormData,
+): Promise<ImportState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ...IMPORT_INITIAL, error: 'You must be signed in.' };
+
+  const file = formData.get('file');
+  if (!(file instanceof File) || file.size === 0) {
+    return { ...IMPORT_INITIAL, error: 'Please choose a CSV file to import.' };
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    return { ...IMPORT_INITIAL, error: 'File is too large. Limit is 2 MB.' };
+  }
+
+  const text = await file.text();
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    return { ...IMPORT_INITIAL, error: 'The file is empty.' };
+  }
+
+  const headers = rows[0].map((h) => h.trim().toLowerCase());
+  const required = CLIENT_IMPORT_HEADERS;
+  const missing = required.filter((h) => !headers.includes(h));
+  if (missing.length > 0) {
+    return {
+      ...IMPORT_INITIAL,
+      error: `Missing required column(s): ${missing.join(', ')}. Download a fresh template and re-paste your data.`,
+    };
+  }
+
+  const dataRows = rows.slice(1);
+  if (dataRows.length === 0) {
+    return { ...IMPORT_INITIAL, error: 'No data rows found beneath the header row.' };
+  }
+
+  const payloads: ClientPayload[] = [];
+  const errors: ImportRowError[] = [];
+
+  dataRows.forEach((row, idx) => {
+    const record: Record<string, string> = {};
+    headers.forEach((h, i) => {
+      record[h] = row[i] ?? '';
+    });
+    const built = buildImportPayload(record);
+    if (built.ok) payloads.push(built.value);
+    // CSV row number = idx + 2 (1-based, plus header row)
+    else errors.push({ row: idx + 2, message: built.error });
+  });
+
+  if (payloads.length === 0) {
+    return {
+      ok: false,
+      error: 'No valid rows to import. Fix the errors below and try again.',
+      imported: 0,
+      skipped: errors.length,
+      errors,
+    };
+  }
+
+  const { error } = await supabase.from('clients').insert(payloads);
+  if (error) {
+    return {
+      ok: false,
+      error: `Database error: ${error.message}`,
+      imported: 0,
+      skipped: errors.length + payloads.length,
+      errors,
+    };
+  }
+
+  revalidatePath('/clients');
+  revalidatePath('/dashboard');
+  return {
+    ok: true,
+    error: null,
+    imported: payloads.length,
+    skipped: errors.length,
+    errors,
+  };
 }
