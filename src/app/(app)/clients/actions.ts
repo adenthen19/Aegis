@@ -22,7 +22,10 @@ import {
   type ImportState,
 } from '@/lib/csv';
 import { seedDeliverablesForEngagement } from './seeding-helpers';
-import { seedRegulatoryDeliverables } from './regulatory-helpers';
+import {
+  seedQuarterlyPreworkTodos,
+  seedRegulatoryDeliverables,
+} from './regulatory-helpers';
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -37,6 +40,8 @@ async function createDefaultEngagement(
   client_id: string,
   service_tiers: ServiceTier[],
   fye: string | null,
+  pic_user_id: string | null,
+  corporate_name: string | null,
 ): Promise<string | null> {
   if (service_tiers.length === 0) return null;
 
@@ -78,6 +83,13 @@ async function createDefaultEngagement(
     start_date: start,
     end_date: end,
     service_tiers,
+  });
+
+  await seedQuarterlyPreworkTodos(supabase, {
+    engagement_id: data.engagement_id as string,
+    client_id,
+    pic_user_id,
+    client_corporate_name: corporate_name,
   });
 
   return data.engagement_id as string;
@@ -203,10 +215,13 @@ export async function createClientAction(
     created.client_id as string,
     payload.value.service_tier,
     payload.value.financial_year_end,
+    user.id,
+    payload.value.corporate_name,
   );
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');
+  revalidatePath('/todos');
   return { ok: true, error: null };
 }
 
@@ -397,13 +412,13 @@ export async function importClientsAction(
     };
   }
 
-  // Re-fetch the imported clients with FYE so we can seed regulatory events
-  // alongside the default engagement.
+  // Re-fetch the imported clients with FYE + name so we can seed regulatory
+  // events and pre-work todos alongside the default engagement.
   const insertedIds = (insertedClients ?? []).map((c) => c.client_id as string);
   if (insertedIds.length > 0) {
     const { data: clientsWithFye } = await supabase
       .from('clients')
-      .select('client_id, service_tier, financial_year_end')
+      .select('client_id, corporate_name, service_tier, financial_year_end')
       .in('client_id', insertedIds);
     for (const c of clientsWithFye ?? []) {
       await createDefaultEngagement(
@@ -411,6 +426,8 @@ export async function importClientsAction(
         c.client_id as string,
         (c.service_tier ?? []) as ServiceTier[],
         (c.financial_year_end as string | null) ?? null,
+        user.id,
+        (c.corporate_name as string | null) ?? null,
       );
     }
   }

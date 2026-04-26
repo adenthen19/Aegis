@@ -215,3 +215,87 @@ export async function seedRegulatoryDeliverables(
   if (toInsert.length === 0) return;
   await supabase.from('client_deliverables').insert(toInsert);
 }
+
+/**
+ * For every quarterly results commitment under the engagement, ensure there
+ * is an internal pre-work todo dated to the 1st of the deadline month. The
+ * todo prompts the IR PIC to email + WhatsApp the client to confirm the
+ * release date and request a draft of the results.
+ *
+ * Idempotent: keyed off `regulatory:prework:results_q{N}:{fyEndYear}` so
+ * re-runs don't create duplicates. PIC defaults to the engagement creator;
+ * if that's not available the row is left unassigned (visible to admins).
+ */
+export async function seedQuarterlyPreworkTodos(
+  supabase: SupabaseClient,
+  args: {
+    engagement_id: string;
+    client_id: string;
+    pic_user_id: string | null;
+    client_corporate_name: string | null;
+  },
+): Promise<void> {
+  // Pull every quarterly results commitment we've seeded for this engagement.
+  const { data: commitments } = await supabase
+    .from('client_deliverables')
+    .select('client_deliverable_id, auto_generated_key, due_date, label')
+    .eq('engagement_id', args.engagement_id)
+    .like('auto_generated_key', 'bursa:results_q%');
+
+  if (!commitments || commitments.length === 0) return;
+
+  // Find which commitments already have a pre-work todo so we don't duplicate.
+  const ids = commitments.map((c) => c.client_deliverable_id as string);
+  const { data: existingTodos } = await supabase
+    .from('action_items')
+    .select('client_deliverable_id, auto_generated_key')
+    .in('client_deliverable_id', ids)
+    .not('auto_generated_key', 'is', null);
+
+  const existingPairs = new Set(
+    (existingTodos ?? []).map(
+      (r) =>
+        `${r.client_deliverable_id as string}::${r.auto_generated_key as string}`,
+    ),
+  );
+
+  const toInsert: Array<{
+    client_id: string;
+    client_deliverable_id: string;
+    pic_user_id: string | null;
+    item: string;
+    due_date: string;
+    auto_generated_key: string;
+    meeting_id: null;
+  }> = [];
+
+  for (const c of commitments) {
+    const key = c.auto_generated_key as string; // e.g. 'bursa:results_q1:2026'
+    const m = /^bursa:results_q([1-4]):(\d{4})$/.exec(key);
+    if (!m) continue;
+    const quarter = m[1];
+    const fyYear = m[2];
+    const dueDate = c.due_date as string | null;
+    if (!dueDate) continue;
+
+    // First day of the deadline month — slice keeps YYYY-MM and we append -01.
+    const preworkDue = `${dueDate.slice(0, 7)}-01`;
+    const preworkKey = `regulatory:prework:results_q${quarter}:${fyYear}`;
+    const pairId = `${c.client_deliverable_id as string}::${preworkKey}`;
+    if (existingPairs.has(pairId)) continue;
+
+    const clientLabel = args.client_corporate_name ?? 'this client';
+    toInsert.push({
+      client_id: args.client_id,
+      client_deliverable_id: c.client_deliverable_id as string,
+      pic_user_id: args.pic_user_id,
+      item: `${clientLabel} — FY${fyYear} Q${quarter} results pre-work: email + WhatsApp the IR primary contact to (1) confirm target release date, (2) request a draft of the results so we can prepare the press release. Statutory deadline: ${dueDate}.`,
+      due_date: preworkDue,
+      auto_generated_key: preworkKey,
+      meeting_id: null,
+    });
+  }
+
+  if (toInsert.length === 0) return;
+  await supabase.from('action_items').insert(toInsert);
+}

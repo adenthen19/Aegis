@@ -488,11 +488,13 @@ export type ActionItem = {
   action_item_id: string;
   meeting_id: string | null;
   client_id: string | null;
+  client_deliverable_id: string | null;
   item: string;
   pic_user_id: string | null;
   due_date: string | null;
   status: ActionItemStatus;
   completed_at: string | null;
+  auto_generated_key: string | null;
   created_at: string;
   updated_at: string;
 };

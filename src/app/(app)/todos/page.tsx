@@ -6,6 +6,10 @@ import ActionItemToggle from '../meetings/action-item-toggle';
 import type { ActionItem, Profile } from '@/lib/types';
 import NewTodo from './new-todo';
 import TodoRowActions from './row-actions';
+import RegulatoryPreworkButtons, {
+  isRegulatoryPreworkKey,
+  type PreworkContact,
+} from './regulatory-prework-buttons';
 
 type TodoRow = ActionItem & {
   clients: { client_id: string; corporate_name: string } | null;
@@ -62,6 +66,35 @@ export default async function TodosPage({
   const rows = (todosRes.data ?? []) as unknown as TodoRow[];
   const clientsList = clientsRes.data ?? [];
   const profilesList = (profilesRes.data ?? []) as Profile[];
+
+  // For regulatory pre-work todos we render mailto + WhatsApp quick-buttons.
+  // Look up the primary stakeholder per client referenced by such a todo.
+  const preworkClientIds = Array.from(
+    new Set(
+      rows
+        .filter(
+          (r) =>
+            isRegulatoryPreworkKey(r.auto_generated_key) &&
+            (r.client_id || r.clients?.client_id),
+        )
+        .map((r) => (r.client_id ?? r.clients?.client_id) as string),
+    ),
+  );
+  const primaryByClient = new Map<string, PreworkContact>();
+  if (preworkClientIds.length > 0) {
+    const { data: primaryStakeholders } = await supabase
+      .from('client_stakeholders')
+      .select('client_id, full_name, email, phone')
+      .eq('is_primary', true)
+      .in('client_id', preworkClientIds);
+    for (const p of primaryStakeholders ?? []) {
+      primaryByClient.set(p.client_id as string, {
+        full_name: p.full_name as string,
+        email: (p.email as string | null) ?? null,
+        phone: (p.phone as string | null) ?? null,
+      });
+    }
+  }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -163,6 +196,15 @@ export default async function TodosPage({
                       <span className="text-aegis-gray-300">Personal</span>
                     )}
                   </div>
+                  {isRegulatoryPreworkKey(a.auto_generated_key) &&
+                    linkedClient && (
+                      <RegulatoryPreworkButtons
+                        autoKey={a.auto_generated_key as string}
+                        clientName={linkedClient.corporate_name}
+                        deadline={a.due_date}
+                        contact={primaryByClient.get(linkedClient.client_id) ?? null}
+                      />
+                    )}
                 </div>
                 {isManual && <TodoRowActions actionItemId={a.action_item_id} />}
               </li>

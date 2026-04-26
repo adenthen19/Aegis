@@ -9,7 +9,10 @@ import type {
 } from '@/lib/types';
 import { SERVICE_TIER_CODES as SERVICE_TIERS } from '@/lib/client-import';
 import { seedDeliverablesForEngagement } from './seeding-helpers';
-import { seedRegulatoryDeliverables } from './regulatory-helpers';
+import {
+  seedQuarterlyPreworkTodos,
+  seedRegulatoryDeliverables,
+} from './regulatory-helpers';
 
 export type ActionState = { ok: boolean; error: string | null };
 
@@ -151,10 +154,11 @@ export async function createEngagementAction(
     parsed.value.service_tier,
   );
 
-  // Pull the client's FYE so we can also seed Bursa regulatory deliverables.
+  // Pull the client's FYE + corporate name so we can seed Bursa regulatory
+  // deliverables and the matching pre-work todos.
   const { data: clientRow } = await supabase
     .from('clients')
-    .select('financial_year_end')
+    .select('financial_year_end, corporate_name')
     .eq('client_id', parsed.value.client_id)
     .maybeSingle();
   await seedRegulatoryDeliverables(supabase, {
@@ -165,10 +169,18 @@ export async function createEngagementAction(
     end_date: parsed.value.end_date,
     service_tiers: parsed.value.service_tier,
   });
+  await seedQuarterlyPreworkTodos(supabase, {
+    engagement_id: created.engagement_id as string,
+    client_id: parsed.value.client_id,
+    pic_user_id: user.id,
+    client_corporate_name:
+      (clientRow?.corporate_name as string | null) ?? null,
+  });
 
   revalidatePath(`/clients/${parsed.value.client_id}`);
   revalidatePath('/clients');
   revalidatePath('/dashboard');
+  revalidatePath('/todos');
   return { ok: true, error: null };
 }
 
@@ -206,7 +218,7 @@ export async function updateEngagementAction(
   // skipped so we don't duplicate or overwrite user edits.
   const { data: clientRow } = await supabase
     .from('clients')
-    .select('financial_year_end')
+    .select('financial_year_end, corporate_name')
     .eq('client_id', parsed.value.client_id)
     .maybeSingle();
   await seedRegulatoryDeliverables(supabase, {
@@ -217,10 +229,18 @@ export async function updateEngagementAction(
     end_date: parsed.value.end_date,
     service_tiers: parsed.value.service_tier,
   });
+  await seedQuarterlyPreworkTodos(supabase, {
+    engagement_id,
+    client_id: parsed.value.client_id,
+    pic_user_id: user.id,
+    client_corporate_name:
+      (clientRow?.corporate_name as string | null) ?? null,
+  });
 
   revalidatePath(`/clients/${parsed.value.client_id}`);
   revalidatePath('/clients');
   revalidatePath('/dashboard');
+  revalidatePath('/todos');
   return { ok: true, error: null };
 }
 

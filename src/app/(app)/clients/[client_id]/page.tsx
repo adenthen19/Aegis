@@ -29,6 +29,10 @@ import {
 import ClientRowActions from '../row-actions';
 import ActionItemToggle from '../../meetings/action-item-toggle';
 import NewTodo from '../../todos/new-todo';
+import RegulatoryPreworkButtons, {
+  isRegulatoryPreworkKey,
+  type PreworkContact,
+} from '../../todos/regulatory-prework-buttons';
 import DeliverablesSection from './deliverables-section';
 import NewCustomCommitment from './new-custom-commitment';
 import EngagementsSection from './engagements-section';
@@ -242,8 +246,15 @@ export default async function ClientDetailPage({
     }
   }
 
-  const primaryStakeholderEmail =
-    stakeholders.find((s) => s.is_primary)?.email ?? null;
+  const primaryStakeholder = stakeholders.find((s) => s.is_primary) ?? null;
+  const primaryStakeholderEmail = primaryStakeholder?.email ?? null;
+  const primaryPreworkContact: PreworkContact | null = primaryStakeholder
+    ? {
+        full_name: primaryStakeholder.full_name,
+        email: primaryStakeholder.email,
+        phone: primaryStakeholder.phone,
+      }
+    : null;
   const activeEngagement =
     engagements.find((e) => e.status === 'active') ?? null;
   // Scope the visible commitments to the active engagement so the on-track
@@ -489,6 +500,14 @@ export default async function ClientDetailPage({
                         </Link>
                       )}
                     </div>
+                    {isRegulatoryPreworkKey(t.auto_generated_key) && (
+                      <RegulatoryPreworkButtons
+                        autoKey={t.auto_generated_key as string}
+                        clientName={client.corporate_name}
+                        deadline={t.due_date}
+                        contact={primaryPreworkContact}
+                      />
+                    )}
                   </div>
                 </li>
               );
