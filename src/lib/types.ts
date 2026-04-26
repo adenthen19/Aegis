@@ -182,6 +182,7 @@ export type DocumentCategory =
   | 'clipping'
   | 'report'
   | 'contract'
+  | 'pr_value_report'
   | 'other';
 
 export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
@@ -193,6 +194,7 @@ export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
   clipping: 'Clipping',
   report: 'Report',
   contract: 'Contract',
+  pr_value_report: 'PR value report',
   other: 'Other',
 };
 
@@ -203,6 +205,9 @@ export type Document = {
   client_deliverable_id: string | null;
   schedule_id: string | null;
   meeting_id: string | null;
+  press_release_id: string | null;
+  coverage_id: string | null;
+  pr_value_report_id: string | null;
   name: string;
   file_path: string;
   mime_type: string | null;
@@ -211,6 +216,125 @@ export type Document = {
   description: string | null;
   version: number;
   replaces_document_id: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PressReleaseType =
+  | 'results'
+  | 'corporate_action'
+  | 'ipo'
+  | 'agm_egm'
+  | 'esg'
+  | 'product'
+  | 'crisis'
+  | 'ad_hoc'
+  | 'other';
+
+export const PRESS_RELEASE_TYPE_LABEL: Record<PressReleaseType, string> = {
+  results: 'Results',
+  corporate_action: 'Corporate action',
+  ipo: 'IPO',
+  agm_egm: 'AGM/EGM',
+  esg: 'ESG',
+  product: 'Product / contract',
+  crisis: 'Crisis',
+  ad_hoc: 'Ad-hoc',
+  other: 'Other',
+};
+
+export type PressReleaseStatus =
+  | 'draft'
+  | 'approved'
+  | 'distributed'
+  | 'archived';
+
+export const PRESS_RELEASE_STATUS_LABEL: Record<PressReleaseStatus, string> = {
+  draft: 'Draft',
+  approved: 'Approved',
+  distributed: 'Distributed',
+  archived: 'Archived',
+};
+
+export type PressRelease = {
+  press_release_id: string;
+  client_id: string;
+  engagement_id: string | null;
+  client_deliverable_id: string | null;
+  title: string;
+  release_type: PressReleaseType;
+  status: PressReleaseStatus;
+  release_date: string | null;
+  distributed_at: string | null;
+  body: string | null;
+  distribution_media_ids: string[];
+  distribution_notes: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CoverageType = 'online' | 'print' | 'broadcast' | 'social';
+
+export const COVERAGE_TYPE_LABEL: Record<CoverageType, string> = {
+  online: 'Online',
+  print: 'Print',
+  broadcast: 'Broadcast',
+  social: 'Social',
+};
+
+export type CoverageSentiment = 'positive' | 'neutral' | 'negative';
+
+export const COVERAGE_SENTIMENT_LABEL: Record<CoverageSentiment, string> = {
+  positive: 'Positive',
+  neutral: 'Neutral',
+  negative: 'Negative',
+};
+
+export type MediaCoverage = {
+  coverage_id: string;
+  client_id: string;
+  press_release_id: string | null;
+  media_id: string | null;
+  publication_name: string;
+  reporter_name: string | null;
+  coverage_type: CoverageType;
+  publication_date: string;
+  headline: string;
+  url: string | null;
+  reach_estimate: number | null;
+  sentiment: CoverageSentiment | null;
+  tone_tags: string[];
+  ave_value: number | null;
+  prv_value: number | null;
+  currency: string;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrValueReport = {
+  report_id: string;
+  client_id: string;
+  engagement_id: string | null;
+  title: string;
+  period_start: string;
+  period_end: string;
+  total_coverage_count: number;
+  total_reach: number;
+  total_ave: number;
+  total_prv: number;
+  currency: string;
+  notes: string | null;
+  generated_pdf_document_id: string | null;
+  sent_to_client_at: string | null;
+  sent_to_email: string | null;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;

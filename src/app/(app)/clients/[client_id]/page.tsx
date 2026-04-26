@@ -19,6 +19,9 @@ import {
   type ClientStakeholder,
   type Document,
   type Engagement,
+  type MediaCoverage,
+  type PressRelease,
+  type PrValueReport,
   type Profile,
   type ProjectStatus,
   type ServiceTier,
@@ -31,6 +34,8 @@ import NewCustomCommitment from './new-custom-commitment';
 import EngagementsSection from './engagements-section';
 import StakeholdersSection from './stakeholders-section';
 import DocumentsSection from './documents-section';
+import PressReleasesSection from './press-releases-section';
+import PrValueReportsSection from './pr-value-reports-section';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
@@ -95,6 +100,10 @@ export default async function ClientDetailPage({
     engagementsRes,
     stakeholdersRes,
     documentsRes,
+    pressReleasesRes,
+    coverageRes,
+    reportsRes,
+    mediaContactsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
@@ -163,6 +172,26 @@ export default async function ClientDetailPage({
       .select('*')
       .eq('client_id', client_id)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('press_releases')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('release_date', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('media_coverage')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('publication_date', { ascending: false }),
+    supabase
+      .from('pr_value_reports')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('period_end', { ascending: false }),
+    supabase
+      .from('media_contacts')
+      .select('media_id, full_name, company_name')
+      .order('full_name'),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -192,6 +221,29 @@ export default async function ClientDetailPage({
   const engagements = (engagementsRes.data ?? []) as Engagement[];
   const stakeholders = (stakeholdersRes.data ?? []) as ClientStakeholder[];
   const documents = (documentsRes.data ?? []) as Document[];
+  const pressReleases = (pressReleasesRes.data ?? []) as PressRelease[];
+  const coverage = (coverageRes.data ?? []) as MediaCoverage[];
+  const prValueReports = (reportsRes.data ?? []) as PrValueReport[];
+  const mediaContacts = (mediaContactsRes.data ?? []) as {
+    media_id: string;
+    full_name: string;
+    company_name: string | null;
+  }[];
+
+  const coverageByPress: Record<string, MediaCoverage[]> = {};
+  const unlinkedCoverage: MediaCoverage[] = [];
+  for (const c of coverage) {
+    if (c.press_release_id) {
+      const list = coverageByPress[c.press_release_id] ?? [];
+      list.push(c);
+      coverageByPress[c.press_release_id] = list;
+    } else {
+      unlinkedCoverage.push(c);
+    }
+  }
+
+  const primaryStakeholderEmail =
+    stakeholders.find((s) => s.is_primary)?.email ?? null;
   const activeEngagement =
     engagements.find((e) => e.status === 'active') ?? null;
   // Scope the visible commitments to the active engagement so the on-track
@@ -203,6 +255,20 @@ export default async function ClientDetailPage({
   const openDeliverableCount = deliverables.filter(
     (d) => d.status !== 'completed' && d.status !== 'not_applicable',
   ).length;
+
+  // Press-release commitments under the active engagement that the user can
+  // link a new release to. Filter to recurring rows whose label looks like a
+  // press-release deliverable.
+  const pressReleaseCommitments = (
+    activeEngagement
+      ? allDeliverables.filter(
+          (d) =>
+            d.engagement_id === activeEngagement.engagement_id &&
+            d.kind === 'recurring' &&
+            /press release/i.test(d.label),
+        )
+      : []
+  ).map((d) => ({ client_deliverable_id: d.client_deliverable_id, label: d.label }));
 
   type ScheduleAttendeeJoin = {
     attendee_id: string;
@@ -429,6 +495,25 @@ export default async function ClientDetailPage({
             })}
           </ul>
         )}
+      </Section>
+
+      <Section title={`Press releases (${pressReleases.length})`}>
+        <PressReleasesSection
+          clientId={client.client_id}
+          pressReleases={pressReleases}
+          coverageByPress={coverageByPress}
+          unlinkedCoverage={unlinkedCoverage}
+          pressReleaseCommitments={pressReleaseCommitments}
+          mediaContacts={mediaContacts}
+        />
+      </Section>
+
+      <Section title={`PR value reports (${prValueReports.length})`}>
+        <PrValueReportsSection
+          clientId={client.client_id}
+          reports={prValueReports}
+          primaryEmail={primaryStakeholderEmail}
+        />
       </Section>
 
       <Section title={`Documents (${documents.length})`}>
