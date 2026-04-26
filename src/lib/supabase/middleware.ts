@@ -7,6 +7,10 @@ export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  if (!url || !anonKey) {
+    console.error('Missing Supabase environment variables in Proxy');
+  }
+
   const supabase = createServerClient(
     url ?? 'https://placeholder.supabase.co',
     anonKey ?? 'placeholder-key',
@@ -26,15 +30,17 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl;
-  const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/auth');
+    const { pathname } = request.nextUrl;
+    const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/auth');
 
-  if (!user && !isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+    if (!user && !isAuthRoute) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  } catch (err) {
+    console.error('Supabase auth error in Proxy:', err);
   }
 
   return supabaseResponse;
