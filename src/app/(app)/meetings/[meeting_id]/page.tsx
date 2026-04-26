@@ -35,14 +35,17 @@ export default async function MeetingDetailPage({
         '*, ' +
           'clients ( client_id, corporate_name ), ' +
           'analysts ( investor_id, institution_name ), ' +
-          'meeting_attendees ( user_id, profiles ( user_id, email, display_name, avatar_url ) ), ' +
-          'action_items ( *, profiles ( user_id, email, display_name, avatar_url ) )',
+          'meeting_attendees ( user_id, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role ) ), ' +
+          'action_items ( *, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role ) )',
       )
       .eq('meeting_id', meeting_id)
       .maybeSingle(),
     supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
     supabase.from('analysts').select('investor_id, institution_name').order('institution_name'),
-    supabase.from('profiles').select('user_id, email, display_name, avatar_url').order('display_name'),
+    supabase
+      .from('profiles')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .order('display_name'),
   ]);
 
   const meeting = meetingRes.data as unknown as MeetingWithRefs | null;

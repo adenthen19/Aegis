@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { UserRole } from '@/lib/types';
 
 type Item = { href: string; label: string; icon: React.ReactNode };
 type Section = { caption: string; items: Item[] };
@@ -110,12 +111,36 @@ const SECTIONS: Section[] = [
   },
 ];
 
-export default function SidebarNav({ collapsed = false }: { collapsed?: boolean }) {
+const ADMIN_SECTION: Section = {
+  caption: 'Administration',
+  items: [
+    {
+      href: '/admin/users',
+      label: 'User Management',
+      icon: (
+        <svg {...ICON}>
+          <circle cx="9" cy="8" r="3.5" />
+          <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+          <path d="M16 11h6M19 8v6" />
+        </svg>
+      ),
+    },
+  ],
+};
+
+export default function SidebarNav({
+  collapsed = false,
+  role,
+}: {
+  collapsed?: boolean;
+  role: UserRole;
+}) {
   const pathname = usePathname();
+  const sections = role === 'super_admin' ? [...SECTIONS, ADMIN_SECTION] : SECTIONS;
 
   return (
     <nav className={collapsed ? 'space-y-3' : 'space-y-7'}>
-      {SECTIONS.map((section) => (
+      {sections.map((section) => (
         <div key={section.caption}>
           {!collapsed && (
             <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-aegis-blue-100/40">

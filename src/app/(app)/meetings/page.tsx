@@ -50,7 +50,10 @@ export default async function MeetingsPage({
     })(),
     supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
     supabase.from('analysts').select('investor_id, institution_name').order('institution_name'),
-    supabase.from('profiles').select('user_id, email, display_name, avatar_url').order('display_name'),
+    supabase
+      .from('profiles')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .order('display_name'),
   ]);
 
   const rows = (meetingsRes.data ?? []) as MeetingRow[];

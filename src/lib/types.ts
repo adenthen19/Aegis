@@ -135,11 +135,17 @@ export type Meeting = {
   updated_at: string;
 };
 
+export type UserRole = 'member' | 'super_admin';
+
 export type Profile = {
   user_id: string;
   email: string;
   display_name: string | null;
   avatar_url: string | null;
+  username: string | null;
+  gmail_address: string | null;
+  contact_number: string | null;
+  role: UserRole;
 };
 
 export type ActionItem = {

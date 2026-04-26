@@ -8,15 +8,33 @@ import { createClient } from '@/lib/supabase/client';
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function resolveEmail(input: string): Promise<string | null> {
+    const trimmed = input.trim();
+    if (trimmed.includes('@')) return trimmed;
+    const { data, error: rpcErr } = await supabase.rpc('get_email_by_username', {
+      p_username: trimmed,
+    });
+    if (rpcErr) return null;
+    return typeof data === 'string' ? data : null;
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    const email = await resolveEmail(identifier);
+    if (!email) {
+      setLoading(false);
+      setError('No account found for that username.');
+      return;
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
@@ -144,20 +162,21 @@ export default function LoginPage() {
             Welcome back.
           </h1>
           <p className="mt-2 mb-10 text-sm text-aegis-gray-500">
-            Sign in with your Aegis email to continue.
+            Sign in with your username or Aegis email to continue.
           </p>
 
           <form onSubmit={onSubmit} className="space-y-5">
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-aegis-gray-500">
-                Email
+                Username or email
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                placeholder="user@aegiscomm.com.my"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                placeholder="sarah.chen or sarah@aegiscomm.com.my"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full rounded-md border border-aegis-gray-200 bg-white px-3.5 py-2.5 text-sm text-aegis-gray-900 placeholder:text-aegis-gray-300 outline-none transition-colors focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
               />
             </div>
@@ -166,12 +185,15 @@ export default function LoginPage() {
                 <label className="block text-xs font-medium uppercase tracking-[0.08em] text-aegis-gray-500">
                   Password
                 </label>
-                <a
-                  href="#"
+                <button
+                  type="button"
+                  onClick={() =>
+                    setError('Password reset is handled by IT support — please contact them to set a new password.')
+                  }
                   className="text-xs text-aegis-navy hover:text-aegis-orange"
                 >
                   Forgot?
-                </a>
+                </button>
               </div>
               <input
                 type="password"

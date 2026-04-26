@@ -10,17 +10,21 @@ import ProfileDialog from './profile-dialog';
 
 const STORAGE_KEY = 'aegis-sidebar-collapsed';
 
+import type { UserRole } from '@/lib/types';
+
 export default function Shell({
   userId,
   userEmail,
   displayName,
   avatarUrl,
+  role,
   children,
 }: {
   userId: string;
   userEmail: string;
   displayName: string;
   avatarUrl: string | null;
+  role: UserRole;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -185,7 +189,7 @@ export default function Shell({
 
         {/* ── Nav ── */}
         <div className="aegis-scroll relative z-10 flex-1 overflow-y-auto px-3 pb-4">
-          <SidebarNav collapsed={collapsed} />
+          <SidebarNav collapsed={collapsed} role={role} />
         </div>
 
         {/* ── Desktop collapse toggle ── */}
