@@ -2,9 +2,21 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { structureMeetingTranscript } from '@/lib/gemini';
 import type { ActionItemStatus, MeetingFormat, MeetingType } from '@/lib/types';
 
 export type ActionState = { ok: boolean; error: string | null };
+
+export type StructureMeetingState = {
+  ok: boolean;
+  error: string | null;
+  data: {
+    summary: string;
+    agenda_items: string[];
+    action_items: { item: string; pic_user_id: string | null; due_date: string | null }[];
+    sentiment: 'positive' | 'neutral' | 'negative' | null;
+  } | null;
+};
 
 const FORMATS: MeetingFormat[] = ['physical', 'online'];
 const TYPES: MeetingType[] = ['internal', 'briefing'];
@@ -299,4 +311,97 @@ export async function toggleActionItemAction(
   const linkedClientId = row?.client_id ?? row?.meetings?.client_id ?? null;
   if (linkedClientId) revalidatePath(`/clients/${linkedClientId}`);
   return { ok: true, error: null };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// AI: structure a raw transcript into the meeting form's structured fields.
+
+export async function structureMeetingTranscriptAction(
+  _prev: StructureMeetingState,
+  formData: FormData,
+): Promise<StructureMeetingState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.', data: null };
+
+  const transcript = formData.get('transcript')?.toString().trim() ?? '';
+  if (transcript.length < 30) {
+    return { ok: false, error: 'Paste a longer transcript before structuring.', data: null };
+  }
+
+  const meeting_type_raw = formData.get('meeting_type')?.toString();
+  const meeting_type: MeetingType =
+    meeting_type_raw === 'briefing' ? 'briefing' : 'internal';
+
+  const meeting_date = formData.get('meeting_date')?.toString().trim() || null;
+  const client_id = formData.get('client_id')?.toString().trim() || null;
+  const investor_id = formData.get('investor_id')?.toString().trim() || null;
+  const attendee_user_ids = formData
+    .getAll('attendee_user_id')
+    .map((v) => v.toString())
+    .filter((v) => v.length > 0);
+
+  // Resolve names for context — Gemini is told to match against these.
+  const [clientRow, investorRow, attendeeRows] = await Promise.all([
+    client_id
+      ? supabase.from('clients').select('corporate_name').eq('client_id', client_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    investor_id
+      ? supabase.from('investors').select('institution_name').eq('investor_id', investor_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    attendee_user_ids.length > 0
+      ? supabase.from('profiles').select('user_id, display_name, email').in('user_id', attendee_user_ids)
+      : Promise.resolve({ data: [] as { user_id: string; display_name: string | null; email: string }[] }),
+  ]);
+
+  const attendees = (attendeeRows.data ?? []) as { user_id: string; display_name: string | null; email: string }[];
+  const attendee_names = attendees.map((p) => p.display_name || p.email);
+
+  let structured;
+  try {
+    structured = await structureMeetingTranscript({
+      transcript,
+      meeting_type,
+      meeting_date,
+      client_name: (clientRow.data as { corporate_name?: string } | null)?.corporate_name ?? null,
+      investor_name: (investorRow.data as { institution_name?: string } | null)?.institution_name ?? null,
+      attendee_names,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Gemini call failed.';
+    return { ok: false, error: message, data: null };
+  }
+
+  // Map AI-returned pic_name → user_id by matching against attendees + display names.
+  const nameToId = new Map<string, string>();
+  for (const p of attendees) {
+    if (p.display_name) nameToId.set(p.display_name.trim().toLowerCase(), p.user_id);
+    nameToId.set(p.email.trim().toLowerCase(), p.user_id);
+  }
+  function resolvePic(name: string | null): string | null {
+    if (!name) return null;
+    const key = name.trim().toLowerCase();
+    if (nameToId.has(key)) return nameToId.get(key)!;
+    // Loose first-name / last-name match against display names.
+    for (const p of attendees) {
+      const dn = (p.display_name ?? '').toLowerCase();
+      if (dn && (dn.includes(key) || key.includes(dn))) return p.user_id;
+    }
+    return null;
+  }
+
+  return {
+    ok: true,
+    error: null,
+    data: {
+      summary: structured.summary,
+      agenda_items: structured.agenda_items,
+      action_items: structured.action_items.map((a) => ({
+        item: a.item,
+        pic_user_id: resolvePic(a.pic_name),
+        due_date: a.due_date,
+      })),
+      sentiment: structured.sentiment,
+    },
+  };
 }

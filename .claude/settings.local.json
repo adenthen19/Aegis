@@ -28,7 +28,13 @@
       "Bash(echo \"exit=$?\")",
       "Bash(echo \"tsc=$?\")",
       "Bash(npx next *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(grep -nA 15 \"^export declare enum Type\" node_modules/@google/genai/dist/genai.d.ts)",
+      "Bash(grep -nA 30 \"^export declare interface Schema \" node_modules/@google/genai/dist/genai.d.ts)",
+      "Bash(xargs grep *)",
+      "Bash(grep -nB 2 -A 10 \"only async\\\\|only contain\\\\|must be async\\\\|export.*async\" node_modules/next/dist/docs/01-app/03-api-reference/05-directives/use-server.md)"
     ]
   }
 }

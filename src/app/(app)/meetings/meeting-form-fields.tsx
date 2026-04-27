@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import {
   DateTimeField,
   SelectField,
@@ -8,6 +8,7 @@ import {
   TextField,
 } from '@/components/ui/form';
 import type { ActionItem, Meeting, MeetingType, Profile } from '@/lib/types';
+import { structureMeetingTranscriptAction } from './actions';
 
 const inputClass =
   'w-full rounded-md border border-aegis-gray-200 bg-white px-3 py-2 text-sm text-aegis-gray-900 placeholder:text-aegis-gray-300 outline-none transition-colors focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10';
@@ -53,6 +54,8 @@ export default function MeetingFormFields({
   const [agendaItems, setAgendaItems] = useState<string[]>(
     initial?.agenda_items?.length ? initial.agenda_items : [''],
   );
+  const [summary, setSummary] = useState<string>(initial?.summary ?? '');
+  const [summaryKey, setSummaryKey] = useState(0);
   const [actionItems, setActionItems] = useState<ActionItemRow[]>(
     initialActionItems.length > 0
       ? initialActionItems.map((a) => ({
@@ -63,6 +66,7 @@ export default function MeetingFormFields({
         }))
       : [{ action_item_id: null, item: '', pic_user_id: '', due_date: '' }],
   );
+  const [aiOpen, setAiOpen] = useState(false);
 
   const profileLabel = (p: Profile) => p.display_name || p.email;
   const sortedProfiles = [...profiles].sort((a, b) =>
@@ -184,34 +188,49 @@ export default function MeetingFormFields({
         )}
       </div>
 
-      {meetingType === 'internal' && (
-        <Repeater
-          label="Agenda items"
-          rows={agendaItems}
-          onChange={setAgendaItems}
-          renderRow={(value, onUpdate) => (
-            <input
-              type="text"
-              name="agenda_item"
-              value={value}
-              onChange={(e) => onUpdate(e.target.value)}
-              placeholder="Topic to discuss"
-              className={inputClass}
-            />
-          )}
-          newRow={() => ''}
-          addLabel="Add agenda item"
-        />
-      )}
+      <Repeater
+        label={meetingType === 'briefing' ? 'Topics covered' : 'Agenda items'}
+        rows={agendaItems}
+        onChange={setAgendaItems}
+        renderRow={(value, onUpdate) => (
+          <input
+            type="text"
+            name="agenda_item"
+            value={value}
+            onChange={(e) => onUpdate(e.target.value)}
+            placeholder={meetingType === 'briefing' ? 'Topic discussed' : 'Topic to discuss'}
+            className={inputClass}
+          />
+        )}
+        newRow={() => ''}
+        addLabel={meetingType === 'briefing' ? 'Add topic' : 'Add agenda item'}
+      />
 
       {meetingType === 'briefing' && (
-        <TextAreaField
-          name="summary"
-          label="Summary (paste from Notta)"
-          placeholder="Paste the meeting summary here…"
-          rows={8}
-          defaultValue={initial?.summary ?? undefined}
-        />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <label className={labelClass}>Summary (paste from Notta)</label>
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-aegis-navy bg-white px-2.5 py-1 text-[11px] font-medium text-aegis-navy hover:bg-aegis-navy hover:text-white"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path d="M10 2.5l1.7 4.3 4.3 1.7-4.3 1.7L10 14.5l-1.7-4.3-4.3-1.7 4.3-1.7L10 2.5zm6 9l.85 2.15L19 14.5l-2.15.85L16 17.5l-.85-2.15L13 14.5l2.15-.85L16 11.5z" />
+              </svg>
+              Structure with AI
+            </button>
+          </div>
+          <textarea
+            key={summaryKey}
+            name="summary"
+            defaultValue={summary}
+            placeholder="Paste the meeting summary here, or use 'Structure with AI' to auto-fill from a transcript…"
+            rows={8}
+            className={`${inputClass} resize-y`}
+            onChange={(e) => setSummary(e.target.value)}
+          />
+        </div>
       )}
 
       {/* Action items repeater (both types) */}
@@ -289,7 +308,161 @@ export default function MeetingFormFields({
         rows={3}
         defaultValue={initial?.other_remarks ?? undefined}
       />
+
+      {aiOpen && (
+        <AiStructureModal
+          meetingType={meetingType}
+          attendeeIds={Array.from(attendeeIds)}
+          onClose={() => setAiOpen(false)}
+          onResult={({ summary: s, agenda_items: ai, action_items: items }) => {
+            if (s) {
+              setSummary(s);
+              setSummaryKey((k) => k + 1);
+            }
+            if (ai.length > 0) setAgendaItems(ai);
+            if (items.length > 0) {
+              setActionItems(
+                items.map((row) => ({
+                  action_item_id: null,
+                  item: row.item,
+                  pic_user_id: row.pic_user_id ?? '',
+                  due_date: row.due_date ?? '',
+                })),
+              );
+            }
+            setAiOpen(false);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AI structuring modal (briefing only). Fires the Gemini-backed server
+// action and pipes the result back into the parent's state setters.
+
+function AiStructureModal({
+  meetingType,
+  attendeeIds,
+  onClose,
+  onResult,
+}: {
+  meetingType: MeetingType;
+  attendeeIds: string[];
+  onClose: () => void;
+  onResult: (data: {
+    summary: string;
+    agenda_items: string[];
+    action_items: { item: string; pic_user_id: string | null; due_date: string | null }[];
+  }) => void;
+}) {
+  const [transcript, setTranscript] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function handleStructure() {
+    setError(null);
+    if (transcript.trim().length < 30) {
+      setError('Paste a longer transcript before structuring.');
+      return;
+    }
+    // Read sibling form fields directly from the DOM — they live in the same
+    // <form> as the trigger button, just outside this modal.
+    const form = document.querySelector('form');
+    const meetingDate =
+      form?.querySelector<HTMLInputElement>('input[name="meeting_date"]')?.value ?? '';
+    const clientId =
+      form?.querySelector<HTMLSelectElement>('select[name="client_id"]')?.value ?? '';
+    const investorId =
+      form?.querySelector<HTMLSelectElement>('select[name="investor_id"]')?.value ?? '';
+
+    const fd = new FormData();
+    fd.append('transcript', transcript);
+    fd.append('meeting_type', meetingType);
+    if (meetingDate) fd.append('meeting_date', meetingDate);
+    if (clientId) fd.append('client_id', clientId);
+    if (investorId) fd.append('investor_id', investorId);
+    for (const id of attendeeIds) fd.append('attendee_user_id', id);
+
+    startTransition(async () => {
+      try {
+        const result = await structureMeetingTranscriptAction(
+          { ok: false, error: null, data: null },
+          fd,
+        );
+        if (!result.ok || !result.data) {
+          setError(result.error ?? 'AI structuring failed.');
+          return;
+        }
+        onResult(result.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'AI structuring failed.');
+      }
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-aegis-gray-100 px-5 py-3">
+          <h3 className="text-sm font-semibold text-aegis-navy">Structure transcript with AI</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="text-aegis-gray-300 hover:text-aegis-gray-500 disabled:opacity-40"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="space-y-3 px-5 py-4">
+          <p className="text-xs text-aegis-gray-500">
+            Paste the raw transcript or notes (Notta export, scribbled minutes, etc.). Gemini
+            will extract a summary, agenda topics, and action items, then fill the form.
+            Existing form values will be replaced.
+          </p>
+          <textarea
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+            placeholder="Paste transcript here…"
+            rows={12}
+            className={`${inputClass} resize-y font-mono text-xs`}
+            disabled={pending}
+          />
+          {error && (
+            <div className="rounded-md border border-aegis-orange/30 bg-aegis-orange-50 px-3 py-2 text-xs text-aegis-orange-600">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="flex flex-col-reverse gap-2 border-t border-aegis-gray-100 px-5 py-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="inline-flex items-center justify-center rounded-md border border-aegis-gray-200 bg-white px-4 py-2 text-sm font-medium text-aegis-gray hover:bg-aegis-gray-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleStructure}
+            disabled={pending || transcript.trim().length === 0}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-aegis-navy px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-aegis-navy-600 disabled:opacity-60"
+          >
+            {pending && (
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            )}
+            {pending ? 'Structuring…' : 'Structure with AI'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
