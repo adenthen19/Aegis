@@ -250,8 +250,9 @@ export async function deleteClientAction(client_id: string): Promise<ActionState
 // ---- Bulk import from CSV ----
 
 // ImportRowError, ImportState, IMPORT_INITIAL, parseCsv now live in lib/csv.ts
-// for reuse across analyst and media imports.
-export type { ImportRowError, ImportState };
+// for reuse across analyst and media imports. Consumers should import the
+// types from @/lib/csv directly — re-exporting them here breaks Turbopack
+// since 'use server' files are only allowed to export async functions.
 
 function parseBoolean(raw: string | undefined): boolean {
   if (!raw) return false;

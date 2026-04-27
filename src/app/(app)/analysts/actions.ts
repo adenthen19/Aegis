@@ -163,7 +163,8 @@ export async function bulkDeleteAnalystsAction(
 
 // ---- Bulk import from CSV ----
 
-export type { ImportRowError, ImportState };
+// (ImportRowError / ImportState should be imported from @/lib/csv directly —
+// re-exporting them from a 'use server' module breaks Turbopack at runtime.)
 
 type ImportPayload = {
   institution_name: string;
