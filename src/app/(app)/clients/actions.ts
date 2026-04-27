@@ -426,21 +426,40 @@ export async function importClientsAction(
 
   // Re-fetch the imported clients with FYE + name so we can seed regulatory
   // events and pre-work todos alongside the default engagement.
+  //
+  // Critically, seeding is BEST-EFFORT here — the client rows are already in
+  // the database by this point. If a seeder throws (e.g. a missing migration
+  // or a transient DB blip) we log the affected client and continue rather
+  // than leaving the user with a generic "server error" page and no idea
+  // whether their import succeeded. They can re-run any failed seeding
+  // manually from the engagement edit dialog later.
+  const seedingErrors: ImportRowError[] = [];
   const insertedIds = (insertedClients ?? []).map((c) => c.client_id as string);
   if (insertedIds.length > 0) {
     const { data: clientsWithFye } = await supabase
       .from('clients')
       .select('client_id, corporate_name, service_tier, financial_year_end')
       .in('client_id', insertedIds);
+    let i = 0;
     for (const c of clientsWithFye ?? []) {
-      await createDefaultEngagement(
-        supabase,
-        c.client_id as string,
-        (c.service_tier ?? []) as ServiceTier[],
-        (c.financial_year_end as string | null) ?? null,
-        user.id,
-        (c.corporate_name as string | null) ?? null,
-      );
+      i += 1;
+      try {
+        await createDefaultEngagement(
+          supabase,
+          c.client_id as string,
+          (c.service_tier ?? []) as ServiceTier[],
+          (c.financial_year_end as string | null) ?? null,
+          user.id,
+          (c.corporate_name as string | null) ?? null,
+        );
+      } catch (e) {
+        seedingErrors.push({
+          row: i,
+          message: `Imported "${c.corporate_name}" but failed to seed engagement / commitments: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        });
+      }
     }
   }
 
@@ -450,8 +469,8 @@ export async function importClientsAction(
     ok: true,
     error: null,
     imported: payloads.length,
-    skipped: errors.length,
+    skipped: errors.length + seedingErrors.length,
     duplicates,
-    errors,
+    errors: [...errors, ...seedingErrors],
   };
 }
