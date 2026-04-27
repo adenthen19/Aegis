@@ -266,13 +266,22 @@ function buildImportPayload(
   const corporate_name = record.corporate_name?.trim();
   if (!corporate_name) return { ok: false, error: 'corporate_name is required.' };
 
+  // Enum-like fields (industry, market_segment, ipo_status, service_tier
+  // codes) are matched case-insensitively, so "TECHNOLOGY" / "Technology" /
+  // "technology" all resolve to the canonical enum value 'technology'. The
+  // display layer (INDUSTRY_LABEL etc) renders proper capitalization on its
+  // own — no need to title-case anything in storage.
+
   // service_tier is optional. If blank, we import the client with no tiers
   // and skip auto-engagement creation; the user can set tiers later from the
   // client profile. If non-blank, we still validate every code.
   const serviceRaw = (record.service_tier ?? '').trim();
   let validTiers: ServiceTier[] = [];
   if (serviceRaw) {
-    const tierTokens = serviceRaw.split(/[;,|]/).map((t) => t.trim()).filter(Boolean);
+    const tierTokens = serviceRaw
+      .split(/[;,|]/)
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
     const invalidTiers = tierTokens.filter((t) => !SERVICE_TIERS.includes(t as ServiceTier));
     if (invalidTiers.length > 0) {
       return { ok: false, error: `Unknown service_tier code(s): ${invalidTiers.join(', ')}.` };
@@ -282,15 +291,15 @@ function buildImportPayload(
     );
   }
 
-  const industry_raw = record.industry?.trim();
+  const industry_raw = record.industry?.trim().toLowerCase();
   if (industry_raw && !INDUSTRIES.includes(industry_raw as Industry)) {
     return { ok: false, error: `Unknown industry "${industry_raw}".` };
   }
-  const market_raw = record.market_segment?.trim();
+  const market_raw = record.market_segment?.trim().toLowerCase();
   if (market_raw && !MARKET_SEGMENTS.includes(market_raw as MarketSegment)) {
     return { ok: false, error: `Unknown market_segment "${market_raw}".` };
   }
-  const ipo_raw = record.ipo_status?.trim();
+  const ipo_raw = record.ipo_status?.trim().toLowerCase();
   if (ipo_raw && !IPO_STATUSES.includes(ipo_raw as IpoStatus)) {
     return { ok: false, error: `Unknown ipo_status "${ipo_raw}".` };
   }
