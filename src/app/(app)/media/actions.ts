@@ -128,6 +128,22 @@ export async function deleteMediaContactAction(media_id: string): Promise<Action
   return { ok: true, error: null };
 }
 
+export async function bulkDeleteMediaContactsAction(
+  media_ids: string[],
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (media_ids.length === 0) return { ok: false, error: 'No contacts selected.' };
+
+  const { error } = await supabase.from('media_contacts').delete().in('media_id', media_ids);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/media');
+  revalidatePath('/dashboard');
+  return { ok: true, error: null };
+}
+
 // ---- Bulk import from CSV ----
 
 export type { ImportRowError, ImportState };

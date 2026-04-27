@@ -144,6 +144,23 @@ export async function deleteAnalystAction(investor_id: string): Promise<ActionSt
   return { ok: true, error: null };
 }
 
+export async function bulkDeleteAnalystsAction(
+  investor_ids: string[],
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (investor_ids.length === 0) return { ok: false, error: 'No analysts selected.' };
+
+  const { error } = await supabase.from('analysts').delete().in('investor_id', investor_ids);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/analysts');
+  revalidatePath('/meetings');
+  revalidatePath('/dashboard');
+  return { ok: true, error: null };
+}
+
 // ---- Bulk import from CSV ----
 
 export type { ImportRowError, ImportState };

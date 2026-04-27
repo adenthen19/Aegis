@@ -44,6 +44,15 @@ const SECTIONS: Section[] = [
           </svg>
         ),
       },
+      {
+        href: '/activity',
+        label: 'Activity',
+        icon: (
+          <svg {...ICON}>
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -143,6 +152,17 @@ const ADMIN_SECTION: Section = {
           <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
           <rect x="9" y="3" width="6" height="4" rx="1" />
           <path d="M9 12h6M9 16h4" />
+        </svg>
+      ),
+    },
+    {
+      href: '/admin/backup',
+      label: 'Backup & Export',
+      icon: (
+        <svg {...ICON}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <path d="M7 10l5 5 5-5" />
+          <path d="M12 15V3" />
         </svg>
       ),
     },

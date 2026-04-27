@@ -1,14 +1,13 @@
-import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
-import DataTable, { type SortState } from '@/components/data-table';
+import { type SortState } from '@/components/data-table';
 import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import type { MediaContact } from '@/lib/types';
 import NewMediaContact from './new-media-contact';
-import MediaRowActions from './row-actions';
 import ExportMediaEmails from './export-emails';
 import ImportMedia from './import-media';
+import MediaList from './media-list';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['full_name', 'company_name', 'state', 'email', 'created_at']);
@@ -59,71 +58,10 @@ export default async function MediaPage({
 
       {error && <p className="mb-4 text-sm text-aegis-orange-600">{error.message}</p>}
 
-      <DataTable<MediaContact>
+      <MediaList
         rows={rows}
         sortState={sortState}
         emptyMessage={q ? `No contacts matching "${q}".` : 'No media contacts yet.'}
-        columns={[
-          {
-            header: 'Name',
-            sortKey: 'full_name',
-            cell: (r) => (
-              <Link
-                href={`/media/${r.media_id}`}
-                className="font-medium text-aegis-navy hover:text-aegis-orange"
-              >
-                {r.full_name}
-              </Link>
-            ),
-          },
-          {
-            header: 'Company',
-            sortKey: 'company_name',
-            cell: (r) => r.company_name ?? <span className="text-aegis-gray-300">—</span>,
-          },
-          {
-            header: 'State',
-            sortKey: 'state',
-            cell: (r) =>
-              r.state ? (
-                <span className="inline-flex rounded-full bg-aegis-blue-50 px-2.5 py-0.5 text-xs font-medium text-aegis-navy">
-                  {r.state}
-                </span>
-              ) : (
-                <span className="text-aegis-gray-300">—</span>
-              ),
-          },
-          {
-            header: 'Contact',
-            cell: (r) =>
-              r.contact_number ? (
-                <a
-                  href={`tel:${r.contact_number.replace(/\s+/g, '')}`}
-                  className="tabular-nums text-aegis-gray hover:text-aegis-navy"
-                >
-                  {r.contact_number}
-                </a>
-              ) : (
-                <span className="text-aegis-gray-300">—</span>
-              ),
-          },
-          {
-            header: 'Email',
-            sortKey: 'email',
-            cell: (r) =>
-              r.email ? (
-                <a
-                  href={`mailto:${r.email}`}
-                  className="text-aegis-navy hover:text-aegis-orange"
-                >
-                  {r.email}
-                </a>
-              ) : (
-                <span className="text-aegis-gray-300">—</span>
-              ),
-          },
-          { header: '', cell: (r) => <MediaRowActions row={r} /> },
-        ]}
       />
 
       <Pagination total={total} page={page} pageSize={PAGE_SIZE} />
