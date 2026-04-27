@@ -9,9 +9,11 @@ import {
 } from '@/components/ui/form';
 import {
   INDUSTRY_LABEL,
+  IPO_STATUS_LABEL,
   MARKET_SEGMENT_LABEL,
   type Client,
   type Industry,
+  type IpoStatus,
   type MarketSegment,
 } from '@/lib/types';
 import ClientLogoUpload from './client-logo-upload';
@@ -27,11 +29,8 @@ export const TIER_OPTIONS = [
   { value: 'event_management', label: 'Event Management' },
 ] as const;
 
-export const IPO_OPTIONS = [
-  { value: 'readiness', label: 'Readiness' },
-  { value: 'roadshow', label: 'Roadshow' },
-  { value: 'pricing', label: 'Pricing' },
-] as const;
+export const IPO_OPTIONS = (Object.entries(IPO_STATUS_LABEL) as [IpoStatus, string][])
+  .map(([value, label]) => ({ value, label }));
 
 export const INDUSTRY_OPTIONS = (Object.entries(INDUSTRY_LABEL) as [Industry, string][])
   .map(([value, label]) => ({ value, label }));

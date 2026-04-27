@@ -4,7 +4,14 @@ export const SERVICE_TIER_CODES: ServiceTier[] = [
   'ir', 'pr', 'esg', 'virtual_meeting',
   'ipo', 'agm_egm', 'social_media', 'event_management',
 ];
-export const IPO_STATUS_CODES: IpoStatus[] = ['readiness', 'roadshow', 'pricing'];
+export const IPO_STATUS_CODES: IpoStatus[] = [
+  'stage_1_pre_ipo',
+  'stage_2_approval',
+  'stage_3_underwriting',
+  'stage_4_prospectus',
+  'stage_5_balloting',
+  'stage_6_listing',
+];
 export const INDUSTRY_CODES: Industry[] = [
   'industrial_products_services', 'consumer_products_services', 'construction',
   'energy', 'financial_services', 'health_care', 'plantation', 'property',
@@ -32,7 +39,7 @@ export const CLIENT_IMPORT_EXAMPLE_ROW: string[] = [
   'main',
   '12-31',
   'ir;pr;esg',
-  'readiness',
+  'stage_1_pre_ipo',
   'Q4 2025',
   'true',
 ];
@@ -42,22 +49,21 @@ export const CLIENT_IMPORT_FIELD_HELP: { name: string; required?: boolean; help:
   { name: 'ticker_code', help: 'Stock ticker (uppercased automatically). Leave blank for private.' },
   {
     name: 'industry',
-    help: `One of: ${INDUSTRY_CODES.join(', ')}.`,
+    help: `Optional. One of: ${INDUSTRY_CODES.join(', ')}.`,
   },
   {
     name: 'market_segment',
-    help: `One of: ${MARKET_SEGMENT_CODES.join(', ')}.`,
+    help: `Optional. One of: ${MARKET_SEGMENT_CODES.join(', ')}.`,
   },
-  { name: 'financial_year_end', help: 'MM-DD format, e.g. 12-31.' },
+  { name: 'financial_year_end', help: 'Optional. MM-DD format, e.g. 12-31.' },
   {
     name: 'service_tier',
-    required: true,
-    help: `Semicolon-separated. One or more of: ${SERVICE_TIER_CODES.join(', ')}.`,
+    help: `Optional. Semicolon-separated. One or more of: ${SERVICE_TIER_CODES.join(', ')}. Leave blank to set tiers later — the auto-engagement won't be created until at least one tier is set.`,
   },
   {
     name: 'ipo_status',
-    help: `Only for IPO clients. One of: ${IPO_STATUS_CODES.join(', ')}.`,
+    help: `Optional. Only for IPO clients. One of: ${IPO_STATUS_CODES.join(', ')}.`,
   },
-  { name: 'financial_quarter', help: 'Free text e.g. "Q4 2025".' },
-  { name: 'internal_controls_audit', help: 'true or false. Defaults to false.' },
+  { name: 'financial_quarter', help: 'Optional. Free text e.g. "Q4 2025".' },
+  { name: 'internal_controls_audit', help: 'Optional. true or false. Defaults to false.' },
 ];

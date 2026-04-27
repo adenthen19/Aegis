@@ -1,7 +1,22 @@
 export type ServiceTier =
   | 'ir' | 'pr' | 'esg' | 'virtual_meeting'
   | 'ipo' | 'agm_egm' | 'social_media' | 'event_management';
-export type IpoStatus = 'readiness' | 'roadshow' | 'pricing';
+export type IpoStatus =
+  | 'stage_1_pre_ipo'
+  | 'stage_2_approval'
+  | 'stage_3_underwriting'
+  | 'stage_4_prospectus'
+  | 'stage_5_balloting'
+  | 'stage_6_listing';
+
+export const IPO_STATUS_LABEL: Record<IpoStatus, string> = {
+  stage_1_pre_ipo: 'Stage 1 — Pre-IPO preparations',
+  stage_2_approval: 'Stage 2 — Approval from authority',
+  stage_3_underwriting: 'Stage 3 — Signing of underwriting agreement',
+  stage_4_prospectus: 'Stage 4 — Prospectus launch',
+  stage_5_balloting: 'Stage 5 — Balloting',
+  stage_6_listing: 'Stage 6 — Listing',
+};
 export type AnalystType = 'buy_side' | 'sell_side';
 export type MeetingFormat = 'physical' | 'online';
 export type MeetingType = 'internal' | 'briefing';

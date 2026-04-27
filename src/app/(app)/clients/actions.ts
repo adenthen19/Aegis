@@ -266,18 +266,20 @@ function buildImportPayload(
   const corporate_name = record.corporate_name?.trim();
   if (!corporate_name) return { ok: false, error: 'corporate_name is required.' };
 
+  // service_tier is optional. If blank, we import the client with no tiers
+  // and skip auto-engagement creation; the user can set tiers later from the
+  // client profile. If non-blank, we still validate every code.
   const serviceRaw = (record.service_tier ?? '').trim();
-  if (!serviceRaw) return { ok: false, error: 'service_tier is required (semicolon-separated codes).' };
-  const tierTokens = serviceRaw.split(/[;,|]/).map((t) => t.trim()).filter(Boolean);
-  const validTiers = tierTokens.filter((t): t is ServiceTier =>
-    SERVICE_TIERS.includes(t as ServiceTier),
-  );
-  if (validTiers.length === 0) {
-    return { ok: false, error: `service_tier has no valid codes (got "${serviceRaw}").` };
-  }
-  const invalidTiers = tierTokens.filter((t) => !SERVICE_TIERS.includes(t as ServiceTier));
-  if (invalidTiers.length > 0) {
-    return { ok: false, error: `Unknown service_tier code(s): ${invalidTiers.join(', ')}.` };
+  let validTiers: ServiceTier[] = [];
+  if (serviceRaw) {
+    const tierTokens = serviceRaw.split(/[;,|]/).map((t) => t.trim()).filter(Boolean);
+    const invalidTiers = tierTokens.filter((t) => !SERVICE_TIERS.includes(t as ServiceTier));
+    if (invalidTiers.length > 0) {
+      return { ok: false, error: `Unknown service_tier code(s): ${invalidTiers.join(', ')}.` };
+    }
+    validTiers = tierTokens.filter((t): t is ServiceTier =>
+      SERVICE_TIERS.includes(t as ServiceTier),
+    );
   }
 
   const industry_raw = record.industry?.trim();

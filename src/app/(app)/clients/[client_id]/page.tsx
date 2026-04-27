@@ -12,6 +12,7 @@ import {
 } from '@/components/detail-shell';
 import {
   INDUSTRY_LABEL,
+  IPO_STATUS_LABEL,
   MARKET_SEGMENT_LABEL,
   type ActionItem,
   type Client,
@@ -474,7 +475,7 @@ export default async function ClientDetailPage({
                   </Field>
                   <Field label="IPO status">
                     {client.ipo_status
-                      ? <span className="capitalize">{client.ipo_status}</span>
+                      ? IPO_STATUS_LABEL[client.ipo_status]
                       : <span className="text-aegis-gray-300">—</span>}
                   </Field>
                   <Field label="Internal controls audit">
