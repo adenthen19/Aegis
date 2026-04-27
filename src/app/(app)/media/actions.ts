@@ -200,8 +200,28 @@ export async function importMediaContactsAction(
     return { ...IMPORT_INITIAL, error: 'No data rows found beneath the header row.' };
   }
 
+  // De-dup against existing media contacts. Email is the most reliable key
+  // when present; otherwise fall back to (full_name + company_name).
+  const { data: existingMedia } = await supabase
+    .from('media_contacts')
+    .select('full_name, company_name, email');
+  const existingEmails = new Set(
+    (existingMedia ?? [])
+      .map((m) => (m.email as string | null)?.trim().toLowerCase())
+      .filter((s): s is string => !!s),
+  );
+  const existingNameKeys = new Set(
+    (existingMedia ?? []).map(
+      (m) =>
+        `${(m.full_name as string | null)?.trim().toLowerCase() ?? ''}|${
+          (m.company_name as string | null)?.trim().toLowerCase() ?? ''
+        }`,
+    ),
+  );
+
   const payloads: ImportPayload[] = [];
   const errors: ImportRowError[] = [];
+  let duplicates = 0;
 
   dataRows.forEach((row, idx) => {
     const record: Record<string, string> = {};
@@ -209,16 +229,35 @@ export async function importMediaContactsAction(
       record[h] = row[i] ?? '';
     });
     const built = buildImportPayload(record);
-    if (built.ok) payloads.push(built.value);
-    else errors.push({ row: idx + 2, message: built.error });
+    if (!built.ok) {
+      errors.push({ row: idx + 2, message: built.error });
+      return;
+    }
+    const v = built.value;
+    const emailKey = v.email?.trim().toLowerCase();
+    const nameKey = `${v.full_name.trim().toLowerCase()}|${(v.company_name ?? '').trim().toLowerCase()}`;
+    if (
+      (emailKey && existingEmails.has(emailKey)) ||
+      existingNameKeys.has(nameKey)
+    ) {
+      duplicates += 1;
+      return;
+    }
+    if (emailKey) existingEmails.add(emailKey);
+    existingNameKeys.add(nameKey);
+    payloads.push(v);
   });
 
   if (payloads.length === 0) {
     return {
-      ok: false,
-      error: 'No valid rows to import. Fix the errors below and try again.',
+      ok: errors.length === 0,
+      error:
+        errors.length === 0 && duplicates > 0
+          ? null
+          : 'No valid rows to import. Fix the errors below and try again.',
       imported: 0,
       skipped: errors.length,
+      duplicates,
       errors,
     };
   }
@@ -230,6 +269,7 @@ export async function importMediaContactsAction(
       error: `Database error: ${error.message}`,
       imported: 0,
       skipped: errors.length + payloads.length,
+      duplicates,
       errors,
     };
   }
@@ -241,6 +281,7 @@ export async function importMediaContactsAction(
     error: null,
     imported: payloads.length,
     skipped: errors.length,
+    duplicates,
     errors,
   };
 }

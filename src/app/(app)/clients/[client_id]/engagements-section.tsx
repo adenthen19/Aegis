@@ -67,14 +67,18 @@ function daysRemaining(end: string | null): string | null {
   return `${days} days left`;
 }
 
+export type EngagementStat = { total: number; completed: number; overdue: number };
+
 export default function EngagementsSection({
   clientId,
   clientTiers,
   engagements,
+  engagementStats,
 }: {
   clientId: string;
   clientTiers: ServiceTier[];
   engagements: Engagement[];
+  engagementStats: Record<string, EngagementStat>;
 }) {
   const [newOpen, setNewOpen] = useState(false);
 
@@ -107,6 +111,7 @@ export default function EngagementsSection({
             <EngagementRow
               key={e.engagement_id}
               row={e}
+              stat={engagementStats[e.engagement_id] ?? { total: 0, completed: 0, overdue: 0 }}
               clientId={clientId}
               clientTiers={clientTiers}
             />
@@ -126,10 +131,12 @@ export default function EngagementsSection({
 
 function EngagementRow({
   row,
+  stat,
   clientId,
   clientTiers,
 }: {
   row: Engagement;
+  stat: EngagementStat;
   clientId: string;
   clientTiers: ServiceTier[];
 }) {
@@ -198,6 +205,35 @@ function EngagementRow({
             <p className="mt-1.5 whitespace-pre-wrap text-[11px] text-aegis-gray-500">
               {row.scope_summary}
             </p>
+          )}
+          {stat.total > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-32 overflow-hidden rounded-full bg-aegis-gray-100">
+                  <div
+                    className={[
+                      'h-full',
+                      stat.overdue > 0 ? 'bg-amber-500' : 'bg-aegis-navy',
+                    ].join(' ')}
+                    style={{
+                      width: `${Math.round((stat.completed / stat.total) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-[11px] tabular-nums text-aegis-gray-500">
+                  {stat.completed} / {stat.total}
+                  <span className="text-aegis-gray-300">
+                    {' '}
+                    · {Math.round((stat.completed / stat.total) * 100)}%
+                  </span>
+                </span>
+              </div>
+              {stat.overdue > 0 && (
+                <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-600 ring-1 ring-inset ring-red-200">
+                  {stat.overdue} overdue
+                </span>
+              )}
+            </div>
           )}
         </div>
 

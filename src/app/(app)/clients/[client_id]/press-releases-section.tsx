@@ -27,6 +27,7 @@ import {
   updateCoverageAction,
 } from '../coverage-actions';
 import { getDocumentDownloadUrlAction } from '../documents-actions';
+import DocumentViewer from '@/components/document-viewer';
 import PressReleaseFormFields from './press-release-form-fields';
 import CoverageFormFields from './coverage-form-fields';
 
@@ -379,25 +380,10 @@ function CoverageRowItem({
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [clippingPending, startClipping] = useTransition();
-  const [clippingError, setClippingError] = useState<string | null>(null);
+  const [viewerDoc, setViewerDoc] = useState<Document | null>(null);
 
   function openClipping(doc: Document) {
-    startClipping(async () => {
-      setClippingError(null);
-      // External-link docs have a stable URL we can open directly. Uploaded
-      // files need a fresh signed URL (60s TTL) since the bucket is private.
-      if (doc.external_url) {
-        window.open(doc.external_url, '_blank', 'noopener,noreferrer');
-        return;
-      }
-      const r = await getDocumentDownloadUrlAction(doc.document_id);
-      if (!r.ok || !r.url) {
-        setClippingError(r.error ?? 'Could not open clipping.');
-        return;
-      }
-      window.open(r.url, '_blank', 'noopener,noreferrer');
-    });
+    setViewerDoc(doc);
   }
 
   return (
@@ -462,8 +448,7 @@ function CoverageRowItem({
                   key={doc.document_id}
                   type="button"
                   onClick={() => openClipping(doc)}
-                  disabled={clippingPending}
-                  className="inline-flex items-center gap-1 rounded border border-aegis-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-aegis-navy hover:bg-aegis-navy-50 disabled:opacity-60"
+                  className="inline-flex items-center gap-1 rounded border border-aegis-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-aegis-navy hover:bg-aegis-navy-50"
                 >
                   <svg
                     className="h-2.5 w-2.5"
@@ -475,16 +460,13 @@ function CoverageRowItem({
                     strokeLinejoin="round"
                     aria-hidden
                   >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <path d="M14 2v6h6" />
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+                    <circle cx="12" cy="12" r="3" />
                   </svg>
-                  {doc.external_url ? 'Link' : 'Clipping'}
+                  View {doc.external_url ? 'link' : 'clipping'}
                 </button>
               ))}
             </div>
-          )}
-          {clippingError && (
-            <p className="mt-1 text-[11px] text-red-600">{clippingError}</p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -530,6 +512,12 @@ function CoverageRowItem({
         description={`This permanently removes "${row.headline}" from the coverage log.`}
         confirmLabel="Delete"
         destructive
+      />
+      <DocumentViewer
+        open={!!viewerDoc}
+        onClose={() => setViewerDoc(null)}
+        document={viewerDoc}
+        fetchUrl={getDocumentDownloadUrlAction}
       />
     </li>
   );

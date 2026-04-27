@@ -291,6 +291,40 @@ export default async function ClientDetailPage({
       : []
   ).map((d) => ({ client_deliverable_id: d.client_deliverable_id, label: d.label }));
 
+  // KPI snapshot per engagement: total / completed / overdue / progress %.
+  // Recurring commitments contribute their target as units (so e.g. 4
+  // analyst briefings count as 4) and completed_count contributes that many.
+  // Non-recurring commitments count as 1 unit each, completed when status
+  // is 'completed' or 'not_applicable'.
+  const todayMid = new Date();
+  todayMid.setHours(0, 0, 0, 0);
+  const engagementStats: Record<
+    string,
+    { total: number; completed: number; overdue: number }
+  > = {};
+  for (const d of allDeliverables) {
+    const stat =
+      engagementStats[d.engagement_id] ?? { total: 0, completed: 0, overdue: 0 };
+    if (d.kind === 'recurring' && d.target_count != null && d.target_count > 0) {
+      stat.total += d.target_count;
+      stat.completed += Math.min(d.completed_count, d.target_count);
+    } else {
+      stat.total += 1;
+      if (d.status === 'completed' || d.status === 'not_applicable') {
+        stat.completed += 1;
+      }
+    }
+    if (
+      d.due_date &&
+      d.status !== 'completed' &&
+      d.status !== 'not_applicable' &&
+      new Date(d.due_date) < todayMid
+    ) {
+      stat.overdue += 1;
+    }
+    engagementStats[d.engagement_id] = stat;
+  }
+
   type ScheduleAttendeeJoin = {
     attendee_id: string;
     schedule_id: string;
@@ -444,6 +478,7 @@ export default async function ClientDetailPage({
                   clientId={client.client_id}
                   clientTiers={client.service_tier}
                   engagements={engagements}
+                  engagementStats={engagementStats}
                 />
               </Section>
 

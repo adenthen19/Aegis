@@ -46,7 +46,11 @@ export type ImportState = {
   ok: boolean;
   error: string | null;
   imported: number;
+  // Rows skipped because of validation errors. Each has a row in `errors`.
   skipped: number;
+  // Rows skipped because they match an existing record (different from
+  // validation errors — duplicates aren't user mistakes, they're re-imports).
+  duplicates: number;
   errors: ImportRowError[];
 };
 
@@ -55,6 +59,7 @@ export const IMPORT_INITIAL: ImportState = {
   error: null,
   imported: 0,
   skipped: 0,
+  duplicates: 0,
   errors: [],
 };
 

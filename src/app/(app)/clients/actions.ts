@@ -350,8 +350,26 @@ export async function importClientsAction(
     return { ...IMPORT_INITIAL, error: 'No data rows found beneath the header row.' };
   }
 
+  // Pull existing client identifiers up front so the import can skip rows
+  // that already exist instead of duplicating them. Match by lowercased
+  // corporate_name OR uppercased ticker_code (whichever the new row has).
+  const { data: existingClients } = await supabase
+    .from('clients')
+    .select('corporate_name, ticker_code');
+  const existingNames = new Set(
+    (existingClients ?? [])
+      .map((c) => (c.corporate_name as string | null)?.trim().toLowerCase())
+      .filter((s): s is string => !!s),
+  );
+  const existingTickers = new Set(
+    (existingClients ?? [])
+      .map((c) => (c.ticker_code as string | null)?.trim().toUpperCase())
+      .filter((s): s is string => !!s),
+  );
+
   const payloads: ClientPayload[] = [];
   const errors: ImportRowError[] = [];
+  let duplicates = 0;
 
   dataRows.forEach((row, idx) => {
     const record: Record<string, string> = {};
@@ -359,17 +377,34 @@ export async function importClientsAction(
       record[h] = row[i] ?? '';
     });
     const built = buildImportPayload(record);
-    if (built.ok) payloads.push(built.value);
-    // CSV row number = idx + 2 (1-based, plus header row)
-    else errors.push({ row: idx + 2, message: built.error });
+    if (!built.ok) {
+      // CSV row number = idx + 2 (1-based, plus header row)
+      errors.push({ row: idx + 2, message: built.error });
+      return;
+    }
+    const v = built.value;
+    const nameKey = v.corporate_name.trim().toLowerCase();
+    const tickerKey = v.ticker_code?.trim().toUpperCase();
+    if (existingNames.has(nameKey) || (tickerKey && existingTickers.has(tickerKey))) {
+      duplicates += 1;
+      return;
+    }
+    // Reserve the keys so duplicates within the same upload are caught too.
+    existingNames.add(nameKey);
+    if (tickerKey) existingTickers.add(tickerKey);
+    payloads.push(v);
   });
 
   if (payloads.length === 0) {
     return {
-      ok: false,
-      error: 'No valid rows to import. Fix the errors below and try again.',
+      ok: errors.length === 0,
+      error:
+        errors.length === 0 && duplicates > 0
+          ? null
+          : 'No valid rows to import. Fix the errors below and try again.',
       imported: 0,
       skipped: errors.length,
+      duplicates,
       errors,
     };
   }
@@ -384,6 +419,7 @@ export async function importClientsAction(
       error: `Database error: ${error.message}`,
       imported: 0,
       skipped: errors.length + payloads.length,
+      duplicates,
       errors,
     };
   }
@@ -415,6 +451,7 @@ export async function importClientsAction(
     error: null,
     imported: payloads.length,
     skipped: errors.length,
+    duplicates,
     errors,
   };
 }

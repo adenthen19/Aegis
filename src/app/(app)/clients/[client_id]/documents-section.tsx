@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
 import Modal from '@/components/ui/modal';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
+import DocumentViewer from '@/components/document-viewer';
 import {
   AddButton,
   FormActions,
@@ -58,6 +59,7 @@ export default function DocumentsSection({
   };
 }) {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [viewerDoc, setViewerDoc] = useState<Document | null>(null);
 
   return (
     <>
@@ -72,10 +74,21 @@ export default function DocumentsSection({
       ) : (
         <ul className="divide-y divide-aegis-gray-100 rounded-md border border-aegis-gray-100">
           {documents.map((d) => (
-            <DocumentRow key={d.document_id} row={d} />
+            <DocumentRow
+              key={d.document_id}
+              row={d}
+              onView={(doc) => setViewerDoc(doc)}
+            />
           ))}
         </ul>
       )}
+
+      <DocumentViewer
+        open={!!viewerDoc}
+        onClose={() => setViewerDoc(null)}
+        document={viewerDoc}
+        fetchUrl={getDocumentDownloadUrlAction}
+      />
 
       <UploadModal
         open={uploadOpen}
@@ -87,12 +100,25 @@ export default function DocumentsSection({
   );
 }
 
-function DocumentRow({ row }: { row: Document }) {
+function DocumentRow({
+  row,
+  onView,
+}: {
+  row: Document;
+  onView: (doc: Document) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  function onDownload() {
+  function onView_() {
+    onView(row);
+  }
+
+  function onOpenExternal() {
+    // The download icon now opens the file in a fresh tab — useful when the
+    // user wants the browser's native download flow rather than an in-app
+    // preview. Same signed URL fetch underneath.
     startTransition(async () => {
       setError(null);
       const r = await getDocumentDownloadUrlAction(row.document_id);
@@ -120,9 +146,8 @@ function DocumentRow({ row }: { row: Document }) {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={onDownload}
-            disabled={pending}
-            className="text-left text-sm font-medium text-aegis-navy hover:text-aegis-orange disabled:opacity-60"
+            onClick={onView_}
+            className="text-left text-sm font-medium text-aegis-navy hover:text-aegis-orange"
           >
             {row.name}
           </button>
@@ -173,14 +198,28 @@ function DocumentRow({ row }: { row: Document }) {
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
-          onClick={onDownload}
+          onClick={onView_}
+          title="View"
+          aria-label="View"
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy"
+        >
+          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={onOpenExternal}
           disabled={pending}
-          title="Download"
-          aria-label="Download"
+          title="Open in new tab"
+          aria-label="Open in new tab"
           className="inline-flex h-7 w-7 items-center justify-center rounded text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy disabled:opacity-50"
         >
           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M12 4v12M6 12l6 6 6-6M4 20h16" />
+            <path d="M14 4h6v6" />
+            <path d="M20 4l-8 8" />
+            <path d="M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" />
           </svg>
         </button>
         <button

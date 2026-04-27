@@ -4,19 +4,12 @@ import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import Modal from '@/components/ui/modal';
 import { CLIENT_IMPORT_FIELD_HELP } from '@/lib/client-import';
-import { importClientsAction, type ImportState } from './actions';
-
-const initial: ImportState = {
-  ok: false,
-  error: null,
-  imported: 0,
-  skipped: 0,
-  errors: [],
-};
+import { IMPORT_INITIAL } from '@/lib/csv';
+import { importClientsAction } from './actions';
 
 export default function ImportClients() {
   const [open, setOpen] = useState(false);
-  const [state, action] = useActionState(importClientsAction, initial);
+  const [state, action] = useActionState(importClientsAction, IMPORT_INITIAL);
 
   // Auto-close after a fully successful import (no row errors).
   useEffect(() => {
@@ -110,8 +103,18 @@ export default function ImportClients() {
 
           {state.ok && state.imported > 0 && (
             <div className="rounded-md border border-green-300 bg-green-50 px-3 py-2 text-xs text-green-800">
-              Imported {state.imported} client{state.imported === 1 ? '' : 's'} successfully
-              {state.errors.length > 0 ? `; ${state.errors.length} row(s) skipped — see below.` : '.'}
+              Imported {state.imported} client{state.imported === 1 ? '' : 's'} successfully.
+              {state.duplicates > 0 && (
+                <> {state.duplicates} duplicate{state.duplicates === 1 ? '' : 's'} skipped.</>
+              )}
+              {state.errors.length > 0 && (
+                <> {state.errors.length} row(s) had errors — see below.</>
+              )}
+            </div>
+          )}
+          {state.ok && state.imported === 0 && state.duplicates > 0 && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              All {state.duplicates} row{state.duplicates === 1 ? '' : 's'} matched existing client{state.duplicates === 1 ? '' : 's'} and were skipped.
             </div>
           )}
 
