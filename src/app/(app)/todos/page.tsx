@@ -59,7 +59,7 @@ export default async function TodosPage({
     supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
     supabase
       .from('profiles')
-      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday')
       .order('display_name'),
   ]);
 

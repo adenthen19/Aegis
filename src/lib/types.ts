@@ -121,7 +121,13 @@ export type Meeting = {
   updated_at: string;
 };
 
-export type UserRole = 'member' | 'super_admin';
+export type UserRole = 'member' | 'director' | 'super_admin';
+
+export const USER_ROLE_LABEL: Record<UserRole, string> = {
+  member: 'Member',
+  director: 'Director',
+  super_admin: 'Super Admin',
+};
 
 export type Profile = {
   user_id: string;
@@ -132,6 +138,7 @@ export type Profile = {
   gmail_address: string | null;
   contact_number: string | null;
   role: UserRole;
+  birthday: string | null; // ISO date, year may be 1900 if user opted not to share it
 };
 
 export type StakeholderCategory = 'executive' | 'board' | 'advisor' | 'other';

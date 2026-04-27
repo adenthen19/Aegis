@@ -100,8 +100,39 @@ export default function CoverageFormFields({
         label="URL (online coverage)"
         placeholder="https://…"
         defaultValue={initial?.url ?? undefined}
-        hint="For print or broadcast: leave blank and attach the clipping as a document afterwards."
+        hint="For print or broadcast: leave URL blank and attach the clipping below."
       />
+
+      <div className="rounded-md border border-aegis-gray-100 bg-aegis-gray-50/40 p-3">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-aegis-gray-500">
+          Clipping (optional)
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label
+              htmlFor="clipping_file"
+              className="mb-1 block text-[11px] font-medium uppercase tracking-[0.06em] text-aegis-gray-500"
+            >
+              Upload PDF / image
+            </label>
+            <input
+              id="clipping_file"
+              name="clipping_file"
+              type="file"
+              accept="application/pdf,image/*"
+              className="block w-full text-xs text-aegis-gray file:mr-3 file:rounded-md file:border-0 file:bg-aegis-navy file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white hover:file:bg-aegis-navy-700"
+            />
+          </div>
+          <p className="text-center text-[10px] uppercase tracking-wide text-aegis-gray-300">or</p>
+          <TextField
+            name="clipping_url"
+            type="url"
+            label="External link (Google Drive, etc.)"
+            placeholder="https://drive.google.com/…"
+            hint="Either upload a file above or paste a link here. Skip if there's no clipping yet."
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <NumberField

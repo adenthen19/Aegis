@@ -12,7 +12,7 @@ export default async function AdminUsersPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+    .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday')
     .order('display_name', { ascending: true, nullsFirst: false });
 
   const rows = (data ?? []) as Profile[];
@@ -86,18 +86,30 @@ export default async function AdminUsersPage() {
           },
           {
             header: 'Role',
-            cell: (r) => (
-              <span
-                className={[
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
-                  r.role === 'super_admin'
-                    ? 'bg-aegis-orange-50 text-aegis-orange-600 ring-aegis-orange/30'
-                    : 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200',
-                ].join(' ')}
-              >
-                {r.role === 'super_admin' ? 'Super Admin' : 'Member'}
-              </span>
-            ),
+            cell: (r) => {
+              const cls =
+                r.role === 'super_admin'
+                  ? 'bg-aegis-orange-50 text-aegis-orange-600 ring-aegis-orange/30'
+                  : r.role === 'director'
+                    ? 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20'
+                    : 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200';
+              const label =
+                r.role === 'super_admin'
+                  ? 'Super Admin'
+                  : r.role === 'director'
+                    ? 'Director'
+                    : 'Member';
+              return (
+                <span
+                  className={[
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
+                    cls,
+                  ].join(' ')}
+                >
+                  {label}
+                </span>
+              );
+            },
           },
           {
             header: '',

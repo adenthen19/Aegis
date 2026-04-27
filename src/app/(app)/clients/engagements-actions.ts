@@ -244,6 +244,119 @@ export async function updateEngagementAction(
   return { ok: true, error: null };
 }
 
+/**
+ * Renew an engagement: close the current one (status → completed) and open
+ * a new active engagement covering the next 12 months. The new engagement
+ * inherits the original's name (with " — renewed" suffix), engagement_type,
+ * service_tier, contract_value, currency, billing_terms, and scope_summary
+ * so the user only edits what's actually different on the new contract.
+ *
+ * The new period starts the day after the source's end_date (or today if
+ * the source had no end_date), running 12 months forward. After insertion
+ * we run the standard seeders so commitments + regulatory deadlines + the
+ * quarterly pre-work todos all materialise on the new engagement.
+ */
+export async function renewEngagementAction(
+  engagement_id: string,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!engagement_id) return { ok: false, error: 'Missing engagement id.' };
+
+  const { data: source, error: srcErr } = await supabase
+    .from('engagements')
+    .select(
+      'engagement_id, client_id, name, engagement_type, service_tier, contract_value, currency, billing_terms, scope_summary, end_date',
+    )
+    .eq('engagement_id', engagement_id)
+    .maybeSingle();
+  if (srcErr) return { ok: false, error: srcErr.message };
+  if (!source) return { ok: false, error: 'Engagement not found.' };
+
+  // Compute the new period. Day-after-end if end_date is set; otherwise today.
+  const sourceEnd = source.end_date as string | null;
+  const newStart = (() => {
+    if (sourceEnd) {
+      const d = new Date(`${sourceEnd}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+    return new Date().toISOString().slice(0, 10);
+  })();
+  const newEnd = (() => {
+    const d = new Date(`${newStart}T00:00:00Z`);
+    d.setUTCFullYear(d.getUTCFullYear() + 1);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
+  // Close the prior engagement.
+  await supabase
+    .from('engagements')
+    .update({ status: 'completed' })
+    .eq('engagement_id', engagement_id);
+
+  const tiers = (source.service_tier ?? []) as ServiceTier[];
+
+  const { data: created, error: insErr } = await supabase
+    .from('engagements')
+    .insert({
+      client_id: source.client_id as string,
+      name: `${source.name as string} — renewed`,
+      engagement_type: source.engagement_type as EngagementType,
+      status: 'active' as EngagementStatus,
+      start_date: newStart,
+      end_date: newEnd,
+      service_tier: tiers,
+      contract_value: source.contract_value,
+      currency: source.currency as string,
+      billing_terms: source.billing_terms as string | null,
+      scope_summary: source.scope_summary as string | null,
+    })
+    .select('engagement_id')
+    .single();
+  if (insErr || !created) {
+    return { ok: false, error: insErr?.message ?? 'Failed to create renewed engagement.' };
+  }
+
+  // Pull FYE + corporate name once so the regulatory + pre-work seeders work.
+  const { data: clientRow } = await supabase
+    .from('clients')
+    .select('financial_year_end, corporate_name')
+    .eq('client_id', source.client_id as string)
+    .maybeSingle();
+
+  await seedDeliverablesForEngagement(
+    supabase,
+    created.engagement_id as string,
+    source.client_id as string,
+    tiers,
+  );
+  await seedRegulatoryDeliverables(supabase, {
+    engagement_id: created.engagement_id as string,
+    client_id: source.client_id as string,
+    fye: (clientRow?.financial_year_end as string | null) ?? null,
+    start_date: newStart,
+    end_date: newEnd,
+    service_tiers: tiers,
+  });
+  await seedQuarterlyPreworkTodos(supabase, {
+    engagement_id: created.engagement_id as string,
+    client_id: source.client_id as string,
+    pic_user_id: user.id,
+    client_corporate_name:
+      (clientRow?.corporate_name as string | null) ?? null,
+  });
+
+  revalidatePath(`/clients/${source.client_id as string}`);
+  revalidatePath('/clients');
+  revalidatePath('/dashboard');
+  revalidatePath('/director');
+  revalidatePath('/todos');
+  return { ok: true, error: null };
+}
+
 export async function deleteEngagementAction(
   engagement_id: string,
 ): Promise<ActionState> {

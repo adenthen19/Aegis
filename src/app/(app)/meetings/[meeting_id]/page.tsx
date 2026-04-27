@@ -35,8 +35,8 @@ export default async function MeetingDetailPage({
         '*, ' +
           'clients ( client_id, corporate_name ), ' +
           'analysts ( investor_id, institution_name ), ' +
-          'meeting_attendees ( user_id, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role ) ), ' +
-          'action_items ( *, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role ) )',
+          'meeting_attendees ( user_id, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday ) ), ' +
+          'action_items ( *, profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday ) )',
       )
       .eq('meeting_id', meeting_id)
       .maybeSingle(),
@@ -44,7 +44,7 @@ export default async function MeetingDetailPage({
     supabase.from('analysts').select('investor_id, institution_name').order('institution_name'),
     supabase
       .from('profiles')
-      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday')
       .order('display_name'),
   ]);
 

@@ -52,7 +52,7 @@ export default async function MeetingsPage({
     supabase.from('analysts').select('investor_id, institution_name').order('institution_name'),
     supabase
       .from('profiles')
-      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday')
       .order('display_name'),
   ]);
 

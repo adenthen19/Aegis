@@ -87,7 +87,7 @@ export default async function ClientDetailPage({
   const supabase = await createClient();
 
   const profileSelect =
-    'profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role )';
+    'profiles ( user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday )';
 
   const [
     clientRes,
@@ -138,7 +138,7 @@ export default async function ClientDetailPage({
     supabase.from('clients').select('client_id, corporate_name').order('corporate_name'),
     supabase
       .from('profiles')
-      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role')
+      .select('user_id, email, display_name, avatar_url, username, gmail_address, contact_number, role, birthday')
       .order('display_name'),
     supabase.auth.getUser(),
     supabase
@@ -244,6 +244,16 @@ export default async function ClientDetailPage({
     } else {
       unlinkedCoverage.push(c);
     }
+  }
+
+  // Clipping documents linked back to a coverage row, indexed for the press
+  // releases section to render "View clipping" alongside each coverage entry.
+  const clippingsByCoverage: Record<string, Document[]> = {};
+  for (const d of documents) {
+    if (!d.coverage_id) continue;
+    const list = clippingsByCoverage[d.coverage_id] ?? [];
+    list.push(d);
+    clippingsByCoverage[d.coverage_id] = list;
   }
 
   const primaryStakeholder = stakeholders.find((s) => s.is_primary) ?? null;
@@ -475,6 +485,7 @@ export default async function ClientDetailPage({
                   pressReleases={pressReleases}
                   coverageByPress={coverageByPress}
                   unlinkedCoverage={unlinkedCoverage}
+                  clippingsByCoverage={clippingsByCoverage}
                   pressReleaseCommitments={pressReleaseCommitments}
                   mediaContacts={mediaContacts}
                 />

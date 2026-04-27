@@ -1,6 +1,6 @@
 'use client';
 
-import { SelectField, TextField } from '@/components/ui/form';
+import { DateTimeField, SelectField, TextField } from '@/components/ui/form';
 import type { Profile } from '@/lib/types';
 
 const inputClass =
@@ -63,6 +63,14 @@ export default function UserFormFields({
         placeholder="+60 12-345 6789"
       />
 
+      <DateTimeField
+        name="birthday"
+        label="Birthday"
+        type="date"
+        defaultValue={initial?.birthday ?? undefined}
+        hint="Optional. Year is private; only month and day surface in the team birthday banner."
+      />
+
       <div>
         <label htmlFor="avatar_url" className={labelClass}>
           Profile picture URL
@@ -87,12 +95,13 @@ export default function UserFormFields({
         defaultValue={initial?.role ?? 'member'}
         options={[
           { value: 'member', label: 'Member' },
+          { value: 'director', label: 'Director' },
           { value: 'super_admin', label: 'Super Admin' },
         ]}
         hint={
           isSelf
             ? 'You cannot demote your own account.'
-            : 'Super Admins can manage all users.'
+            : 'Directors get the firm-wide overview. Super Admins also manage users and templates.'
         }
       />
 

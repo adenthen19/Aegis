@@ -7,6 +7,7 @@ import SidebarNav from './sidebar-nav';
 import SignOutButton from './sign-out-button';
 import OnboardingDialog from './onboarding-dialog';
 import ProfileDialog from './profile-dialog';
+import BirthdayGreeter, { type BirthdayProfile } from './birthday-greeter';
 
 const STORAGE_KEY = 'aegis-sidebar-collapsed';
 
@@ -17,6 +18,8 @@ export default function Shell({
   userEmail,
   displayName,
   avatarUrl,
+  birthday,
+  birthdayProfiles,
   role,
   children,
 }: {
@@ -24,6 +27,8 @@ export default function Shell({
   userEmail: string;
   displayName: string;
   avatarUrl: string | null;
+  birthday: string | null;
+  birthdayProfiles: BirthdayProfile[];
   role: UserRole;
   children: React.ReactNode;
 }) {
@@ -285,6 +290,7 @@ export default function Shell({
         email={userEmail}
         displayName={displayName}
         avatarUrl={avatarUrl}
+        birthday={birthday}
       />
       {needsOnboarding && <OnboardingDialog email={userEmail} />}
 
@@ -296,6 +302,11 @@ export default function Shell({
         ].join(' ')}
       >
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+          <BirthdayGreeter
+            selfUserId={userId}
+            selfBirthday={birthday}
+            birthdayProfiles={birthdayProfiles}
+          />
           {children}
         </div>
       </main>

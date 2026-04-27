@@ -8,6 +8,8 @@ export type CurrentUser = {
   role: UserRole;
 };
 
+const VALID_ROLES: UserRole[] = ['member', 'director', 'super_admin'];
+
 export async function getCurrentUserWithRole(): Promise<CurrentUser | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -19,13 +21,15 @@ export async function getCurrentUserWithRole(): Promise<CurrentUser | null> {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const role: UserRole =
-    profile?.role === 'super_admin' ? 'super_admin' : 'member';
+  const raw = profile?.role as string | undefined;
+  const role: UserRole = VALID_ROLES.includes(raw as UserRole)
+    ? (raw as UserRole)
+    : 'member';
 
   return { id: user.id, email: user.email ?? '', role };
 }
 
-// Page guard — call from a Server Component before rendering admin UI.
+// Page guard — super-admin only (user mgmt, deliverable templates).
 export async function requireSuperAdmin(): Promise<CurrentUser> {
   const user = await getCurrentUserWithRole();
   if (!user) redirect('/login');
@@ -33,7 +37,17 @@ export async function requireSuperAdmin(): Promise<CurrentUser> {
   return user;
 }
 
-// Action guard — return rather than redirect so the action can surface an error.
+// Page guard — director or super-admin (firm-wide dashboard).
+export async function requireDirectorOrAdmin(): Promise<CurrentUser> {
+  const user = await getCurrentUserWithRole();
+  if (!user) redirect('/login');
+  if (user.role !== 'director' && user.role !== 'super_admin') {
+    redirect('/dashboard');
+  }
+  return user;
+}
+
+// Action guard — super-admin only.
 export async function assertSuperAdmin(): Promise<{ ok: true; user: CurrentUser } | { ok: false; error: string }> {
   const user = await getCurrentUserWithRole();
   if (!user) return { ok: false, error: 'You must be signed in.' };

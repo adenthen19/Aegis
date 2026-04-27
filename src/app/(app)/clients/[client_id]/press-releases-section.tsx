@@ -9,6 +9,7 @@ import {
   COVERAGE_TYPE_LABEL,
   PRESS_RELEASE_STATUS_LABEL,
   PRESS_RELEASE_TYPE_LABEL,
+  type Document,
   type MediaCoverage,
   type PressRelease,
   type PressReleaseStatus,
@@ -25,6 +26,7 @@ import {
   deleteCoverageAction,
   updateCoverageAction,
 } from '../coverage-actions';
+import { getDocumentDownloadUrlAction } from '../documents-actions';
 import PressReleaseFormFields from './press-release-form-fields';
 import CoverageFormFields from './coverage-form-fields';
 
@@ -73,6 +75,7 @@ export default function PressReleasesSection({
   pressReleases,
   coverageByPress,
   unlinkedCoverage,
+  clippingsByCoverage,
   pressReleaseCommitments,
   mediaContacts,
 }: {
@@ -80,6 +83,7 @@ export default function PressReleasesSection({
   pressReleases: PressRelease[];
   coverageByPress: Record<string, CoverageRow[]>;
   unlinkedCoverage: CoverageRow[];
+  clippingsByCoverage: Record<string, Document[]>;
   pressReleaseCommitments: { client_deliverable_id: string; label: string }[];
   mediaContacts: MediaContactRef[];
 }) {
@@ -108,6 +112,7 @@ export default function PressReleasesSection({
               key={p.press_release_id}
               row={p}
               coverage={coverageByPress[p.press_release_id] ?? []}
+              clippingsByCoverage={clippingsByCoverage}
               clientId={clientId}
               pressReleaseCommitments={pressReleaseCommitments}
               mediaContacts={mediaContacts}
@@ -126,6 +131,7 @@ export default function PressReleasesSection({
               <CoverageRowItem
                 key={c.coverage_id}
                 row={c}
+                clippings={clippingsByCoverage[c.coverage_id] ?? []}
                 clientId={clientId}
                 mediaContacts={mediaContacts}
               />
@@ -152,12 +158,14 @@ export default function PressReleasesSection({
 function PressReleaseRow({
   row,
   coverage,
+  clippingsByCoverage,
   clientId,
   pressReleaseCommitments,
   mediaContacts,
 }: {
   row: PressRelease;
   coverage: CoverageRow[];
+  clippingsByCoverage: Record<string, Document[]>;
   clientId: string;
   pressReleaseCommitments: { client_deliverable_id: string; label: string }[];
   mediaContacts: MediaContactRef[];
@@ -269,6 +277,7 @@ function PressReleaseRow({
           clientId={clientId}
           pressReleaseId={row.press_release_id}
           coverage={coverage}
+          clippingsByCoverage={clippingsByCoverage}
           mediaContacts={mediaContacts}
         />
       )}
@@ -302,11 +311,13 @@ function CoverageList({
   clientId,
   pressReleaseId,
   coverage,
+  clippingsByCoverage,
   mediaContacts,
 }: {
   clientId: string;
   pressReleaseId: string | null;
   coverage: CoverageRow[];
+  clippingsByCoverage: Record<string, Document[]>;
   mediaContacts: MediaContactRef[];
 }) {
   const [addOpen, setAddOpen] = useState(false);
@@ -336,6 +347,7 @@ function CoverageList({
             <CoverageRowItem
               key={c.coverage_id}
               row={c}
+              clippings={clippingsByCoverage[c.coverage_id] ?? []}
               clientId={clientId}
               mediaContacts={mediaContacts}
             />
@@ -356,15 +368,37 @@ function CoverageList({
 
 function CoverageRowItem({
   row,
+  clippings,
   clientId,
   mediaContacts,
 }: {
   row: CoverageRow;
+  clippings: Document[];
   clientId: string;
   mediaContacts: MediaContactRef[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [clippingPending, startClipping] = useTransition();
+  const [clippingError, setClippingError] = useState<string | null>(null);
+
+  function openClipping(doc: Document) {
+    startClipping(async () => {
+      setClippingError(null);
+      // External-link docs have a stable URL we can open directly. Uploaded
+      // files need a fresh signed URL (60s TTL) since the bucket is private.
+      if (doc.external_url) {
+        window.open(doc.external_url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const r = await getDocumentDownloadUrlAction(doc.document_id);
+      if (!r.ok || !r.url) {
+        setClippingError(r.error ?? 'Could not open clipping.');
+        return;
+      }
+      window.open(r.url, '_blank', 'noopener,noreferrer');
+    });
+  }
 
   return (
     <li className="rounded border border-aegis-gray-100 bg-white px-2.5 py-2">
@@ -421,6 +455,37 @@ function CoverageRowItem({
               </span>
             )}
           </div>
+          {clippings.length > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {clippings.map((doc) => (
+                <button
+                  key={doc.document_id}
+                  type="button"
+                  onClick={() => openClipping(doc)}
+                  disabled={clippingPending}
+                  className="inline-flex items-center gap-1 rounded border border-aegis-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-aegis-navy hover:bg-aegis-navy-50 disabled:opacity-60"
+                >
+                  <svg
+                    className="h-2.5 w-2.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6" />
+                  </svg>
+                  {doc.external_url ? 'Link' : 'Clipping'}
+                </button>
+              ))}
+            </div>
+          )}
+          {clippingError && (
+            <p className="mt-1 text-[11px] text-red-600">{clippingError}</p>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button

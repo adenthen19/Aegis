@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import AvatarUpload from './avatar-upload';
 
 export default function ProfileDialog({
-  open, onClose, userId, email, displayName, avatarUrl,
+  open, onClose, userId, email, displayName, avatarUrl, birthday,
 }: {
   open: boolean;
   onClose: () => void;
@@ -15,11 +15,13 @@ export default function ProfileDialog({
   email: string;
   displayName: string;
   avatarUrl: string | null;
+  birthday: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
   const [name, setName] = useState(displayName);
   const [avatar, setAvatar] = useState<string | null>(avatarUrl);
+  const [bday, setBday] = useState<string>(birthday ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [, startTransition] = useTransition();
@@ -33,14 +35,30 @@ export default function ProfileDialog({
     }
     setError(null);
     setSaving(true);
-    const { error: updateErr } = await supabase.auth.updateUser({
+
+    // 1. Sync display_name + avatar through Supabase Auth so the user_metadata
+    //    + on-update trigger keeps profiles in sync everywhere else in the app.
+    const { error: authErr } = await supabase.auth.updateUser({
       data: { display_name: trimmed, avatar_url: avatar },
     });
-    setSaving(false);
-    if (updateErr) {
-      setError(updateErr.message);
+    if (authErr) {
+      setSaving(false);
+      setError(authErr.message);
       return;
     }
+
+    // 2. Birthday lives only on profiles. RLS lets a user update their own row.
+    const nextBday = bday.length > 0 ? bday : null;
+    const { error: profileErr } = await supabase
+      .from('profiles')
+      .update({ birthday: nextBday })
+      .eq('user_id', userId);
+    setSaving(false);
+    if (profileErr) {
+      setError(profileErr.message);
+      return;
+    }
+
     onClose();
     startTransition(() => router.refresh());
   }
@@ -72,6 +90,25 @@ export default function ProfileDialog({
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-md border border-aegis-gray-200 bg-white px-3 py-2 text-sm text-aegis-gray-900 outline-none focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
           />
+        </div>
+
+        <div>
+          <label
+            htmlFor="profile-birthday"
+            className="mb-1.5 block text-xs font-medium uppercase tracking-[0.06em] text-aegis-gray-500"
+          >
+            Birthday
+          </label>
+          <input
+            id="profile-birthday"
+            type="date"
+            value={bday}
+            onChange={(e) => setBday(e.target.value)}
+            className="w-full rounded-md border border-aegis-gray-200 bg-white px-3 py-2 text-sm text-aegis-gray-900 outline-none focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
+          />
+          <p className="mt-1 text-[11px] text-aegis-gray-300">
+            Optional. We only show the month and day to your colleagues — the year stays private.
+          </p>
         </div>
 
         <div>

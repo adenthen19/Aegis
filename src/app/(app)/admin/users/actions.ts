@@ -8,7 +8,7 @@ import type { UserRole } from '@/lib/types';
 
 export type ActionState = { ok: boolean; error: string | null };
 
-const ROLES: UserRole[] = ['member', 'super_admin'];
+const ROLES: UserRole[] = ['member', 'director', 'super_admin'];
 const USERNAME_RE = /^[a-zA-Z0-9_.-]+$/;
 
 type UserPayload = {
@@ -19,6 +19,7 @@ type UserPayload = {
   contact_number: string | null;
   avatar_url: string | null;
   role: UserRole;
+  birthday: string | null;
 };
 
 function readPayload(formData: FormData): { ok: true; value: UserPayload } | { ok: false; error: string } {
@@ -29,6 +30,7 @@ function readPayload(formData: FormData): { ok: true; value: UserPayload } | { o
   const contact_number = formData.get('contact_number')?.toString().trim() || null;
   const avatar_url = formData.get('avatar_url')?.toString().trim() || null;
   const role_raw = formData.get('role')?.toString() ?? 'member';
+  const birthday_raw = formData.get('birthday')?.toString().trim() ?? '';
 
   if (!display_name) return { ok: false, error: 'Name is required.' };
   if (!username) return { ok: false, error: 'Username is required.' };
@@ -37,6 +39,15 @@ function readPayload(formData: FormData): { ok: true; value: UserPayload } | { o
   }
   if (!email) return { ok: false, error: 'Company email is required.' };
   if (!ROLES.includes(role_raw as UserRole)) return { ok: false, error: 'Invalid role.' };
+
+  // birthday: empty = NULL; otherwise must be parseable as YYYY-MM-DD.
+  let birthday: string | null = null;
+  if (birthday_raw.length > 0) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(birthday_raw)) {
+      return { ok: false, error: 'Birthday must be a valid date.' };
+    }
+    birthday = birthday_raw;
+  }
 
   return {
     ok: true,
@@ -48,6 +59,7 @@ function readPayload(formData: FormData): { ok: true; value: UserPayload } | { o
       contact_number,
       avatar_url,
       role: role_raw as UserRole,
+      birthday,
     },
   };
 }
@@ -118,6 +130,7 @@ export async function createUserAction(
       role: parsed.value.role,
       avatar_url: parsed.value.avatar_url,
       display_name: parsed.value.display_name,
+      birthday: parsed.value.birthday,
     })
     .eq('user_id', created.user.id);
   if (profileErr) {
@@ -190,6 +203,7 @@ export async function updateUserAction(
       role: parsed.value.role,
       avatar_url: parsed.value.avatar_url,
       display_name: parsed.value.display_name,
+      birthday: parsed.value.birthday,
     })
     .eq('user_id', user_id);
   if (profileErr) return { ok: false, error: profileErr.message };

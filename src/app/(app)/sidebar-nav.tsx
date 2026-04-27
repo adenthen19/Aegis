@@ -111,6 +111,23 @@ const SECTIONS: Section[] = [
   },
 ];
 
+const DIRECTOR_SECTION: Section = {
+  caption: 'Leadership',
+  items: [
+    {
+      href: '/director',
+      label: 'Director Overview',
+      icon: (
+        <svg {...ICON}>
+          <path d="M3 12l2-7h14l2 7" />
+          <path d="M3 12v7h18v-7" />
+          <path d="M9 19v-4M15 19v-4" />
+        </svg>
+      ),
+    },
+  ],
+};
+
 const ADMIN_SECTION: Section = {
   caption: 'Administration',
   items: [
@@ -147,7 +164,9 @@ export default function SidebarNav({
   role: UserRole;
 }) {
   const pathname = usePathname();
-  const sections = role === 'super_admin' ? [...SECTIONS, ADMIN_SECTION] : SECTIONS;
+  const sections: Section[] = [...SECTIONS];
+  if (role === 'director' || role === 'super_admin') sections.push(DIRECTOR_SECTION);
+  if (role === 'super_admin') sections.push(ADMIN_SECTION);
 
   return (
     <nav className={collapsed ? 'space-y-3' : 'space-y-7'}>
