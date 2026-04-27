@@ -17,7 +17,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .select('role, birthday')
     .eq('user_id', user.id)
     .maybeSingle();
-  const role: UserRole = profile?.role === 'super_admin' ? 'super_admin' : 'member';
+  const rawRole = profile?.role as string | undefined;
+  const role: UserRole =
+    rawRole === 'super_admin' || rawRole === 'director'
+      ? (rawRole as UserRole)
+      : 'member';
   const birthday = (profile?.birthday as string | null) ?? null;
 
   // Pull every team member with a birthday set so we can decide client-side
