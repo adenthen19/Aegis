@@ -37,7 +37,7 @@ export const CLIENT_IMPORT_EXAMPLE_ROW: string[] = [
   'ACME',
   'technology',
   'main',
-  '12-31',
+  'Dec-31',
   'ir;pr;esg',
   'stage_1_pre_ipo',
   'Q4 2025',
@@ -55,7 +55,10 @@ export const CLIENT_IMPORT_FIELD_HELP: { name: string; required?: boolean; help:
     name: 'market_segment',
     help: `Optional. One of: ${MARKET_SEGMENT_CODES.join(', ')}.`,
   },
-  { name: 'financial_year_end', help: 'Optional. MM-DD format, e.g. 12-31.' },
+  {
+    name: 'financial_year_end',
+    help: 'Optional. Examples: Dec-31, 31-Dec, 12-31, 31/12, 2025-12-31. Year is ignored — only month and day matter.',
+  },
   {
     name: 'service_tier',
     help: `Optional. Semicolon-separated. One or more of: ${SERVICE_TIER_CODES.join(', ')}. Leave blank to set tiers later — the auto-engagement won't be created until at least one tier is set.`,

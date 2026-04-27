@@ -2,11 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type {
-  ServiceTier,
-  IpoStatus,
-  Industry,
-  MarketSegment,
+import {
+  INDUSTRY_LABEL,
+  IPO_STATUS_LABEL,
+  MARKET_SEGMENT_LABEL,
+  type ServiceTier,
+  type IpoStatus,
+  type Industry,
+  type MarketSegment,
 } from '@/lib/types';
 import {
   SERVICE_TIER_CODES as SERVICE_TIERS,
@@ -110,17 +113,8 @@ type ClientPayload = {
   internal_controls_audit: boolean;
 };
 
-function validateFinancialYearEnd(raw: string | null): { ok: true; value: string | null } | { ok: false; error: string } {
-  if (!raw) return { ok: true, value: null };
-  if (!/^\d{2}-\d{2}$/.test(raw)) {
-    return { ok: false, error: 'Financial year end must be in MM-DD format (e.g. 12-31).' };
-  }
-  const [m, d] = raw.split('-').map(Number);
-  if (m < 1 || m > 12 || d < 1 || d > 31) {
-    return { ok: false, error: 'Financial year end has an invalid month or day.' };
-  }
-  return { ok: true, value: raw };
-}
+// Manual form + CSV import both go through parseFinancialYearEnd (defined
+// below) so they share the same flexible date handling.
 
 function readPayload(formData: FormData): { ok: true; value: ClientPayload } | { ok: false; error: string } {
   const corporate_name = formData.get('corporate_name')?.toString().trim();
@@ -151,7 +145,7 @@ function readPayload(formData: FormData): { ok: true; value: ClientPayload } | {
       ? (ipo_status_raw as IpoStatus)
       : null;
 
-  const fye = validateFinancialYearEnd(fye_raw);
+  const fye = parseFinancialYearEnd(fye_raw);
   if (!fye.ok) return { ok: false, error: fye.error };
 
   return {
@@ -260,52 +254,187 @@ function parseBoolean(raw: string | undefined): boolean {
   return v === 'true' || v === 'yes' || v === 'y' || v === '1';
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Fuzzy enum matching for CSV imports.
+//
+// Users paste data from Excel that uses the human label form ("Industrial
+// Products & Services", "Main Market") while our enum codes use snake_case
+// ("industrial_products_services", "main"). normalizeKey collapses both
+// shapes to the same canonical string so a single lookup table catches
+// either form, in any case.
+
+function normalizeKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_') // & / spaces / slashes / hyphens → _
+    .replace(/^_+|_+$/g, '');
+}
+
+function buildEnumLookup<T extends string>(
+  codes: readonly T[],
+  labels?: Record<T, string>,
+): Map<string, T> {
+  const m = new Map<string, T>();
+  for (const c of codes) {
+    m.set(normalizeKey(c), c);
+    if (labels) m.set(normalizeKey(labels[c]), c);
+  }
+  return m;
+}
+
+const INDUSTRY_LOOKUP = buildEnumLookup<Industry>(INDUSTRIES, INDUSTRY_LABEL);
+const MARKET_LOOKUP = buildEnumLookup<MarketSegment>(MARKET_SEGMENTS, MARKET_SEGMENT_LABEL);
+const IPO_LOOKUP = buildEnumLookup<IpoStatus>(IPO_STATUSES, IPO_STATUS_LABEL);
+const TIER_LOOKUP = buildEnumLookup<ServiceTier>(SERVICE_TIERS);
+
+// ────────────────────────────────────────────────────────────────────────
+// Flexible financial-year-end parser.
+//
+// Accepts the common shapes IR firms paste from Excel:
+//   • Numeric:        12-31, 31/12, 2025-12-31, 31/12/2025
+//   • Named month:    Dec-31, 31-Dec, December 31, 31 Dec 2025
+// Output is always canonical MM-DD ("12-31"). Disambiguation: a part > 12
+// is the day; named months pin the month directly. Year-like numbers
+// (>31) are dropped.
+
+const MONTH_BY_NAME: Record<string, number> = {
+  jan: 1, january: 1,
+  feb: 2, february: 2,
+  mar: 3, march: 3,
+  apr: 4, april: 4,
+  may: 5,
+  jun: 6, june: 6,
+  jul: 7, july: 7,
+  aug: 8, august: 8,
+  sep: 9, sept: 9, september: 9,
+  oct: 10, october: 10,
+  nov: 11, november: 11,
+  dec: 12, december: 12,
+};
+
+function formatMmDd(month: number, day: number): string {
+  return `${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseFinancialYearEnd(
+  raw: string | null,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (!raw) return { ok: true, value: null };
+
+  const tokens = raw.trim().split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  if (tokens.length < 2) {
+    return {
+      ok: false,
+      error: 'Financial year end must be a date like Dec-31, 12-31, or 2025-12-31.',
+    };
+  }
+
+  // Walk tokens once: numbers go in `numbers`, a month name pins `monthFromName`.
+  let monthFromName: number | null = null;
+  const numbers: number[] = [];
+  for (const t of tokens) {
+    if (/^\d+$/.test(t)) {
+      const n = Number.parseInt(t, 10);
+      if (Number.isFinite(n)) numbers.push(n);
+      continue;
+    }
+    const m = MONTH_BY_NAME[t.toLowerCase()];
+    if (m) monthFromName = m;
+  }
+
+  if (monthFromName !== null) {
+    // Month is known via name. Day is whichever numeric part is in 1..31.
+    const day = numbers.find((n) => n >= 1 && n <= 31);
+    if (day == null) {
+      return {
+        ok: false,
+        error: `Financial year end is missing a day (got "${raw}").`,
+      };
+    }
+    return { ok: true, value: formatMmDd(monthFromName, day) };
+  }
+
+  // All-numeric fallback.
+  if (numbers.length < 2) {
+    return {
+      ok: false,
+      error: 'Financial year end must be a date like Dec-31, 12-31, or 2025-12-31.',
+    };
+  }
+  let candidates = numbers;
+  if (numbers.length >= 3) {
+    const yearIdx = numbers.findIndex((p) => p > 31);
+    candidates = yearIdx !== -1 ? numbers.filter((_, i) => i !== yearIdx) : numbers.slice(0, 2);
+  }
+  let [month, day] = candidates;
+  if (month > 12 && day <= 12) [month, day] = [day, month];
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return {
+      ok: false,
+      error: `Financial year end has an invalid month or day (got "${raw}").`,
+    };
+  }
+  return { ok: true, value: formatMmDd(month, day) };
+}
+
 function buildImportPayload(
   record: Record<string, string>,
 ): { ok: true; value: ClientPayload } | { ok: false; error: string } {
   const corporate_name = record.corporate_name?.trim();
   if (!corporate_name) return { ok: false, error: 'corporate_name is required.' };
 
-  // Enum-like fields (industry, market_segment, ipo_status, service_tier
-  // codes) are matched case-insensitively, so "TECHNOLOGY" / "Technology" /
-  // "technology" all resolve to the canonical enum value 'technology'. The
-  // display layer (INDUSTRY_LABEL etc) renders proper capitalization on its
-  // own — no need to title-case anything in storage.
+  // Enum-like fields are matched against both their code form
+  // ("technology") and their display label form ("Technology" or even
+  // "Industrial Products & Services"), case- and punctuation-insensitive.
+  // service_tier is optional — leave blank to import without tiers; the
+  // auto-engagement step is skipped so the user can set tiers later.
 
-  // service_tier is optional. If blank, we import the client with no tiers
-  // and skip auto-engagement creation; the user can set tiers later from the
-  // client profile. If non-blank, we still validate every code.
   const serviceRaw = (record.service_tier ?? '').trim();
   let validTiers: ServiceTier[] = [];
   if (serviceRaw) {
     const tierTokens = serviceRaw
       .split(/[;,|]/)
-      .map((t) => t.trim().toLowerCase())
+      .map((t) => t.trim())
       .filter(Boolean);
-    const invalidTiers = tierTokens.filter((t) => !SERVICE_TIERS.includes(t as ServiceTier));
-    if (invalidTiers.length > 0) {
-      return { ok: false, error: `Unknown service_tier code(s): ${invalidTiers.join(', ')}.` };
+    const resolved: ServiceTier[] = [];
+    const unknown: string[] = [];
+    for (const t of tierTokens) {
+      const code = TIER_LOOKUP.get(normalizeKey(t));
+      if (code) resolved.push(code);
+      else unknown.push(t);
     }
-    validTiers = tierTokens.filter((t): t is ServiceTier =>
-      SERVICE_TIERS.includes(t as ServiceTier),
-    );
+    if (unknown.length > 0) {
+      return { ok: false, error: `Unknown service_tier code(s): ${unknown.join(', ')}.` };
+    }
+    validTiers = resolved;
   }
 
-  const industry_raw = record.industry?.trim().toLowerCase();
-  if (industry_raw && !INDUSTRIES.includes(industry_raw as Industry)) {
+  const industry_raw = record.industry?.trim();
+  const industry: Industry | null = industry_raw
+    ? (INDUSTRY_LOOKUP.get(normalizeKey(industry_raw)) ?? null)
+    : null;
+  if (industry_raw && !industry) {
     return { ok: false, error: `Unknown industry "${industry_raw}".` };
   }
-  const market_raw = record.market_segment?.trim().toLowerCase();
-  if (market_raw && !MARKET_SEGMENTS.includes(market_raw as MarketSegment)) {
+
+  const market_raw = record.market_segment?.trim();
+  const market_segment: MarketSegment | null = market_raw
+    ? (MARKET_LOOKUP.get(normalizeKey(market_raw)) ?? null)
+    : null;
+  if (market_raw && !market_segment) {
     return { ok: false, error: `Unknown market_segment "${market_raw}".` };
   }
-  const ipo_raw = record.ipo_status?.trim().toLowerCase();
-  if (ipo_raw && !IPO_STATUSES.includes(ipo_raw as IpoStatus)) {
+
+  const ipo_raw = record.ipo_status?.trim();
+  const ipo_status: IpoStatus | null = ipo_raw
+    ? (IPO_LOOKUP.get(normalizeKey(ipo_raw)) ?? null)
+    : null;
+  if (ipo_raw && !ipo_status) {
     return { ok: false, error: `Unknown ipo_status "${ipo_raw}".` };
   }
 
   const fye_raw = record.financial_year_end?.trim() || null;
-  const fye = validateFinancialYearEnd(fye_raw);
+  const fye = parseFinancialYearEnd(fye_raw);
   if (!fye.ok) return { ok: false, error: fye.error };
 
   return {
@@ -313,12 +442,12 @@ function buildImportPayload(
     value: {
       corporate_name,
       ticker_code: record.ticker_code?.trim().toUpperCase() || null,
-      industry: (industry_raw as Industry) || null,
-      market_segment: (market_raw as MarketSegment) || null,
+      industry,
+      market_segment,
       financial_year_end: fye.value,
       logo_url: null,
       service_tier: validTiers,
-      ipo_status: (ipo_raw as IpoStatus) || null,
+      ipo_status,
       financial_quarter: record.financial_quarter?.trim() || null,
       internal_controls_audit: parseBoolean(record.internal_controls_audit),
     },
