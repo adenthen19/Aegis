@@ -23,7 +23,6 @@ import {
   type PressRelease,
   type PrValueReport,
   type Profile,
-  type ProjectStatus,
   type ServiceTier,
 } from '@/lib/types';
 import ClientRowActions from '../row-actions';
@@ -33,11 +32,13 @@ import RegulatoryPreworkButtons, {
   isRegulatoryPreworkKey,
   type PreworkContact,
 } from '../../todos/regulatory-prework-buttons';
+import ReassignTodo from '../../todos/reassign-todo';
 import DeliverablesSection from './deliverables-section';
 import NewCustomCommitment from './new-custom-commitment';
 import EngagementsSection from './engagements-section';
 import StakeholdersSection from './stakeholders-section';
 import DocumentsSection from './documents-section';
+import { currentBlackout } from '../blackout-helpers';
 import PressReleasesSection from './press-releases-section';
 import PrValueReportsSection from './pr-value-reports-section';
 import ClientTabs from './client-tabs';
@@ -45,19 +46,6 @@ import ClientTabs from './client-tabs';
 const TIER_LABEL: Record<ServiceTier, string> = {
   ir: 'IR', pr: 'PR', esg: 'ESG', virtual_meeting: 'Virtual Meeting',
   ipo: 'IPO', agm_egm: 'AGM/EGM', social_media: 'Social Media', event_management: 'Event Management',
-};
-
-const STATUS_DOT: Record<ProjectStatus, string> = {
-  pending: 'bg-aegis-gold',
-  upcoming: 'bg-aegis-blue',
-  completed: 'bg-aegis-gray-300',
-};
-
-type Project = {
-  project_id: string;
-  deliverable_name: string;
-  status: ProjectStatus;
-  deadline: string | null;
 };
 
 type Meeting = {
@@ -91,7 +79,6 @@ export default async function ClientDetailPage({
 
   const [
     clientRes,
-    projectsRes,
     meetingsRes,
     directTodosRes,
     meetingTodosRes,
@@ -110,11 +97,6 @@ export default async function ClientDetailPage({
     mediaContactsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
-    supabase
-      .from('projects')
-      .select('project_id, deliverable_name, status, deadline')
-      .eq('client_id', client_id)
-      .order('deadline', { ascending: true, nullsFirst: false }),
     supabase
       .from('meetings')
       .select('meeting_id, meeting_format, meeting_date, summary, analysts ( institution_name )')
@@ -201,7 +183,6 @@ export default async function ClientDetailPage({
   const client = clientRes.data as Client | null;
   if (!client) notFound();
 
-  const projects = (projectsRes.data ?? []) as Project[];
   const meetings = (meetingsRes.data ?? []) as unknown as Meeting[];
 
   const todoMap = new Map<string, Todo>();
@@ -290,6 +271,18 @@ export default async function ClientDetailPage({
         )
       : []
   ).map((d) => ({ client_deliverable_id: d.client_deliverable_id, label: d.label }));
+
+  // Bursa closed period — if any quarterly-results commitment has its due
+  // date within the next 30 days (and we're past the start of the window),
+  // surface a banner reminding the team not to circulate non-public
+  // financials. We scope to commitments under the active engagement only
+  // since past engagements aren't actionable.
+  const activeEngagementDeliverables = activeEngagement
+    ? allDeliverables.filter(
+        (d) => d.engagement_id === activeEngagement.engagement_id,
+      )
+    : [];
+  const blackout = currentBlackout(activeEngagementDeliverables);
 
   // KPI snapshot per engagement: total / completed / overdue / progress %.
   // Recurring commitments contribute their target as units (so e.g. 4
@@ -422,6 +415,31 @@ export default async function ClientDetailPage({
         }
         actions={<ClientRowActions row={client} />}
       />
+
+      {blackout && (
+        <div
+          role="alert"
+          className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+        >
+          <span className="mt-0.5 text-xl" aria-hidden>
+            ⚠️
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-amber-800">
+              Bursa closed period — {blackout.label} results announcement
+            </p>
+            <p className="mt-0.5 text-[12px] text-amber-700">
+              {blackout.days_to_end <= 0
+                ? 'Results announcement is today.'
+                : `${blackout.days_to_end} day${blackout.days_to_end === 1 ? '' : 's'} until announcement.`}
+              {' '}
+              Avoid circulating non-public financial info, draft results, or
+              hosting analyst briefings on unannounced numbers until results
+              are filed.
+            </p>
+          </div>
+        </div>
+      )}
 
       <ClientTabs
         counts={{
@@ -597,6 +615,11 @@ export default async function ClientDetailPage({
                               />
                             )}
                           </div>
+                          <ReassignTodo
+                            actionItemId={t.action_item_id}
+                            currentPicUserId={t.pic_user_id ?? null}
+                            profiles={allProfiles}
+                          />
                         </li>
                       );
                     })}
@@ -647,36 +670,6 @@ export default async function ClientDetailPage({
                 )}
               </Section>
 
-              <Section
-                title={`Projects (${projects.length})`}
-                action={
-                  <Link href="/projects" className="text-xs font-medium text-aegis-navy hover:text-aegis-orange">
-                    View all →
-                  </Link>
-                }
-              >
-                {projects.length === 0 ? (
-                  <EmptyMini>No projects logged for this client yet.</EmptyMini>
-                ) : (
-                  <ul className="divide-y divide-aegis-gray-100">
-                    {projects.map((p) => (
-                      <li key={p.project_id} className="flex items-center gap-3 py-2.5">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[p.status]}`} />
-                        <Link
-                          href={`/projects/${p.project_id}`}
-                          className="flex-1 truncate text-sm font-medium text-aegis-navy hover:text-aegis-orange"
-                        >
-                          {p.deliverable_name}
-                        </Link>
-                        <span className="shrink-0 text-xs capitalize text-aegis-gray-500">{p.status}</span>
-                        <span className="shrink-0 text-xs tabular-nums text-aegis-gray-500">
-                          {p.deadline ? new Date(p.deadline).toLocaleDateString() : '—'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Section>
             </>
           ),
 

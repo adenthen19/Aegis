@@ -36,6 +36,36 @@ export async function createTodoAction(
   return { ok: true, error: null };
 }
 
+export async function reassignTodoAction(
+  action_item_id: string,
+  next_pic_user_id: string | null,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!action_item_id) return { ok: false, error: 'Missing to-do id.' };
+
+  const { data: row } = await supabase
+    .from('action_items')
+    .select('client_id')
+    .eq('action_item_id', action_item_id)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from('action_items')
+    .update({
+      pic_user_id: next_pic_user_id,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('action_item_id', action_item_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath('/todos');
+  revalidatePath('/dashboard');
+  if (row?.client_id) revalidatePath(`/clients/${row.client_id}`);
+  return { ok: true, error: null };
+}
+
 export async function deleteTodoAction(action_item_id: string): Promise<ActionState> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

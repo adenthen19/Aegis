@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { UserRole } from '@/lib/types';
+import GlobalSearch from './global-search';
 
 type Item = { href: string; label: string; icon: React.ReactNode };
 type Section = { caption: string; items: Item[] };
@@ -84,18 +85,10 @@ const SECTIONS: Section[] = [
   {
     caption: 'Operations',
     items: [
-      {
-        href: '/projects',
-        label: 'Projects',
-        icon: (
-          <svg {...ICON}>
-            <rect x="5" y="4" width="14" height="17" rx="2" />
-            <path d="M9 4v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V4" />
-            <path d="M9 12l1.5 1.5L13 11" />
-            <path d="M9 17l1.5 1.5L13 16" />
-          </svg>
-        ),
-      },
+      // The legacy /projects page is superseded by client_deliverables
+      // (commitments) under engagements. Hidden from the nav; the route still
+      // exists for any deep links until a future cleanup migration drops the
+      // table and the page entirely.
       {
         href: '/meetings',
         label: 'Meeting Minutes',
@@ -159,9 +152,13 @@ const ADMIN_SECTION: Section = {
 export default function SidebarNav({
   collapsed = false,
   role,
+  onNavigate,
 }: {
   collapsed?: boolean;
   role: UserRole;
+  // Fired after any nav action (including search submit) so the parent can
+  // close a mobile drawer. No-op on desktop.
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const sections: Section[] = [...SECTIONS];
@@ -170,6 +167,12 @@ export default function SidebarNav({
 
   return (
     <nav className={collapsed ? 'space-y-3' : 'space-y-7'}>
+      {!collapsed && (
+        <div className="-mt-1">
+          <GlobalSearch onSubmit={onNavigate} />
+        </div>
+      )}
+
       {sections.map((section) => (
         <div key={section.caption}>
           {!collapsed && (

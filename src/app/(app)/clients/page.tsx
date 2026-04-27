@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import DataTable, { type SortState } from '@/components/data-table';
+import FilterTabs from '@/components/ui/filter-tabs';
 import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import {
@@ -26,18 +27,57 @@ const SORTABLE = new Set(['corporate_name', 'ticker_code', 'industry', 'market_s
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sort?: string; dir?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; sort?: string; dir?: string; page?: string; scope?: string }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? '';
+  const scope = params.scope === 'mine' ? 'mine' : 'all';
   const sort = SORTABLE.has(params.sort ?? '') ? params.sort! : 'corporate_name';
   const dir: 'asc' | 'desc' = params.dir === 'desc' ? 'desc' : 'asc';
   const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
 
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // "Mine only" definition: clients I have any connection to — either I own
+  // a to-do tied to them, or I created an engagement for them. Two short
+  // queries up front collect the eligible client_ids; the main query then
+  // filters with .in(). Cheap because action_items + engagements are small.
+  let mineClientIds: string[] | null = null;
+  if (scope === 'mine' && user) {
+    const [actionsRes, engagementsRes] = await Promise.all([
+      supabase
+        .from('action_items')
+        .select('client_id')
+        .eq('pic_user_id', user.id)
+        .not('client_id', 'is', null),
+      supabase
+        .from('engagements')
+        .select('client_id')
+        .eq('created_by_user_id', user.id),
+    ]);
+    const ids = new Set<string>();
+    for (const r of actionsRes.data ?? []) {
+      const id = r.client_id as string | null;
+      if (id) ids.add(id);
+    }
+    for (const r of engagementsRes.data ?? []) {
+      ids.add(r.client_id as string);
+    }
+    mineClientIds = Array.from(ids);
+  }
+
   let query = supabase.from('clients').select('*', { count: 'exact' });
   if (q) {
     query = query.or(`corporate_name.ilike.%${q}%,ticker_code.ilike.%${q}%`);
+  }
+  if (mineClientIds !== null) {
+    if (mineClientIds.length === 0) {
+      // No matches; force an empty result without a malformed `.in('()')`.
+      query = query.eq('client_id', '00000000-0000-0000-0000-000000000000');
+    } else {
+      query = query.in('client_id', mineClientIds);
+    }
   }
   query = query.order(sort, { ascending: dir === 'asc' });
   query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -60,8 +100,15 @@ export default async function ClientsPage({
         }
       />
 
-      <div className="mb-4">
-        <SearchInput placeholder="Search by company, ticker, CEO, or CFO…" />
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <SearchInput placeholder="Search by company or ticker…" />
+        <FilterTabs
+          paramName="scope"
+          options={[
+            { value: '', label: 'All clients' },
+            { value: 'mine', label: 'Mine only' },
+          ]}
+        />
       </div>
 
       {error && <p className="mb-4 text-sm text-aegis-orange-600">{error.message}</p>}
@@ -69,7 +116,13 @@ export default async function ClientsPage({
       <DataTable<Client>
         rows={rows}
         sortState={sortState}
-        emptyMessage={q ? `No clients matching "${q}".` : 'No clients yet.'}
+        emptyMessage={
+          scope === 'mine'
+            ? 'No clients you’re tied to via to-dos or engagements yet.'
+            : q
+              ? `No clients matching "${q}".`
+              : 'No clients yet.'
+        }
         columns={[
           {
             header: 'Logo',

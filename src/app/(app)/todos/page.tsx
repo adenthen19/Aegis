@@ -10,6 +10,7 @@ import RegulatoryPreworkButtons, {
   isRegulatoryPreworkKey,
   type PreworkContact,
 } from './regulatory-prework-buttons';
+import ReassignTodo from './reassign-todo';
 
 type TodoRow = ActionItem & {
   clients: { client_id: string; corporate_name: string } | null;
@@ -206,7 +207,14 @@ export default async function TodosPage({
                       />
                     )}
                 </div>
-                {isManual && <TodoRowActions actionItemId={a.action_item_id} />}
+                <div className="flex shrink-0 items-center gap-1">
+                  <ReassignTodo
+                    actionItemId={a.action_item_id}
+                    currentPicUserId={a.pic_user_id ?? null}
+                    profiles={profilesList}
+                  />
+                  {isManual && <TodoRowActions actionItemId={a.action_item_id} />}
+                </div>
               </li>
             );
           })}

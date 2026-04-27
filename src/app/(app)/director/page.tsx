@@ -6,9 +6,11 @@ import { Section, EmptyMini } from '@/components/detail-shell';
 import {
   PRESS_RELEASE_STATUS_LABEL,
   SCHEDULE_STATUS_LABEL,
+  type ClientDeliverable,
   type PressReleaseStatus,
   type ScheduleStatus,
 } from '@/lib/types';
+import { currentBlackout } from '../clients/blackout-helpers';
 
 const PRESS_BADGE: Record<PressReleaseStatus, string> = {
   draft: 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200',
@@ -58,6 +60,9 @@ export default async function DirectorDashboardPage() {
   const in7 = new Date(today);
   in7.setDate(today.getDate() + 7);
 
+  const in30 = new Date(today);
+  in30.setDate(today.getDate() + 30);
+
   const [
     activeEngagementsRes,
     activeClientsRes,
@@ -68,6 +73,7 @@ export default async function DirectorDashboardPage() {
     endingSoonRes,
     recentDistributionsRes,
     recentCoverageRes,
+    blackoutCommitmentsRes,
   ] = await Promise.all([
     // Active engagements (count + total contract value)
     supabase
@@ -142,6 +148,16 @@ export default async function DirectorDashboardPage() {
       )
       .order('publication_date', { ascending: false })
       .limit(8),
+    // Quarterly-results commitments whose due date is within the next 30
+    // days — feeds the blackout-period card. We fetch the full row so the
+    // shared helper can pick the right one per client.
+    supabase
+      .from('client_deliverables')
+      .select('*, clients ( client_id, corporate_name )')
+      .like('auto_generated_key', 'bursa:results_q%')
+      .gte('due_date', todayIso)
+      .lte('due_date', in30.toISOString().slice(0, 10))
+      .order('due_date', { ascending: true }),
   ]);
 
   const activeEngagementCount = activeEngagementsRes.count ?? 0;
@@ -209,6 +225,44 @@ export default async function DirectorDashboardPage() {
   };
   const recentCoverage = (recentCoverageRes.data ?? []) as unknown as CoverageRow[];
 
+  // Group quarterly-results commitments by client, then ask the blackout
+  // helper for the active window (if any) per client. Keeps the rule in
+  // one place — the helper also drives the per-client banner.
+  type BlackoutCommit = ClientDeliverable & {
+    clients: { client_id: string; corporate_name: string } | null;
+  };
+  const blackoutCommits = (blackoutCommitmentsRes.data ?? []) as unknown as BlackoutCommit[];
+  const byClient = new Map<
+    string,
+    { name: string; deliverables: ClientDeliverable[] }
+  >();
+  for (const c of blackoutCommits) {
+    if (!c.clients) continue;
+    const cur = byClient.get(c.clients.client_id) ?? {
+      name: c.clients.corporate_name,
+      deliverables: [],
+    };
+    cur.deliverables.push(c);
+    byClient.set(c.clients.client_id, cur);
+  }
+  const clientsInBlackout: Array<{
+    client_id: string;
+    name: string;
+    label: string;
+    days_to_end: number;
+  }> = [];
+  for (const [clientId, info] of byClient.entries()) {
+    const w = currentBlackout(info.deliverables);
+    if (!w) continue;
+    clientsInBlackout.push({
+      client_id: clientId,
+      name: info.name,
+      label: w.label,
+      days_to_end: w.days_to_end,
+    });
+  }
+  clientsInBlackout.sort((a, b) => a.days_to_end - b.days_to_end);
+
   return (
     <div>
       <PageHeader
@@ -231,6 +285,50 @@ export default async function DirectorDashboardPage() {
           value={`MYR ${totalContractValue.toLocaleString()}`}
         />
       </div>
+
+      {clientsInBlackout.length > 0 && (
+        <div
+          role="alert"
+          className="mb-8 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"
+        >
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 text-xl" aria-hidden>
+              ⚠️
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-amber-800">
+                Bursa closed period — {clientsInBlackout.length} client
+                {clientsInBlackout.length === 1 ? '' : 's'} in blackout
+              </p>
+              <p className="mt-0.5 text-[12px] text-amber-700">
+                Avoid distributing non-public financials, hosting briefings on
+                unannounced numbers, or sharing draft results until the
+                announcement is filed.
+              </p>
+              <ul className="mt-2 flex flex-wrap gap-2">
+                {clientsInBlackout.map((c) => (
+                  <li key={c.client_id}>
+                    <Link
+                      href={`/clients/${c.client_id}`}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100"
+                    >
+                      {c.name}
+                      <span className="text-[10px] uppercase tracking-wide text-amber-600">
+                        · {c.label}
+                      </span>
+                      <span className="text-[10px] tabular-nums text-amber-700">
+                        {c.days_to_end <= 0
+                          ? 'today'
+                          : `${c.days_to_end}d`}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Upcoming deadlines */}
