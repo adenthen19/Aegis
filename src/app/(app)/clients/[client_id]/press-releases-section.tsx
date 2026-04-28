@@ -22,8 +22,10 @@ import {
   updatePressReleaseAction,
 } from '../press-releases-actions';
 import {
+  calculatePrValueAction,
   createCoverageAction,
   deleteCoverageAction,
+  scoreCoverageSentimentAction,
   updateCoverageAction,
 } from '../coverage-actions';
 import { getDocumentDownloadUrlAction } from '../documents-actions';
@@ -381,9 +383,31 @@ function CoverageRowItem({
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [viewerDoc, setViewerDoc] = useState<Document | null>(null);
+  const [scoring, startScoring] = useTransition();
+  const [scoreError, setScoreError] = useState<string | null>(null);
+  const [pricing, startPricing] = useTransition();
+  const [priceError, setPriceError] = useState<string | null>(null);
+
+  const hasPrvSource = Boolean(row.url) || clippings.length > 0;
 
   function openClipping(doc: Document) {
     setViewerDoc(doc);
+  }
+
+  function handleScore() {
+    setScoreError(null);
+    startScoring(async () => {
+      const result = await scoreCoverageSentimentAction(row.coverage_id);
+      if (!result.ok) setScoreError(result.error ?? 'AI scoring failed.');
+    });
+  }
+
+  function handleCalcPrv() {
+    setPriceError(null);
+    startPricing(async () => {
+      const result = await calculatePrValueAction(row.coverage_id);
+      if (!result.ok) setPriceError(result.error ?? 'AI PR-value calculation failed.');
+    });
   }
 
   return (
@@ -472,6 +496,51 @@ function CoverageRowItem({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
+            onClick={handleScore}
+            disabled={scoring}
+            title={row.sentiment ? 'Rescore sentiment with AI' : 'Score sentiment with AI'}
+            aria-label="Score with AI"
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy disabled:opacity-50"
+          >
+            {scoring ? (
+              <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path d="M10 2.5l1.7 4.3 4.3 1.7-4.3 1.7L10 14.5l-1.7-4.3-4.3-1.7 4.3-1.7L10 2.5zm6 9l.85 2.15L19 14.5l-2.15.85L16 17.5l-.85-2.15L13 14.5l2.15-.85L16 11.5z" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleCalcPrv}
+            disabled={pricing || !hasPrvSource}
+            title={
+              !hasPrvSource
+                ? 'Add an article URL or clipping first'
+                : row.prv_value != null
+                ? 'Recalculate PR value with AI'
+                : 'Calculate PR value with AI'
+            }
+            aria-label="Calculate PR value with AI"
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy disabled:opacity-30"
+          >
+            {pricing ? (
+              <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <line x1="12" y1="2" x2="12" y2="22" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={() => setEditOpen(true)}
             title="Edit"
             aria-label="Edit"
@@ -496,6 +565,13 @@ function CoverageRowItem({
           </button>
         </div>
       </div>
+
+      {scoreError && (
+        <div className="mt-1 text-[11px] text-red-600">{scoreError}</div>
+      )}
+      {priceError && (
+        <div className="mt-1 text-[11px] text-red-600">{priceError}</div>
+      )}
 
       <EditCoverageModal
         open={editOpen}
