@@ -531,6 +531,50 @@ export type EventRow = {
   updated_at: string;
 };
 
+export type InterviewFormat = 'in_person' | 'phone' | 'video' | 'email';
+
+export const INTERVIEW_FORMAT_LABEL: Record<InterviewFormat, string> = {
+  in_person: 'In person',
+  phone: 'Phone',
+  video: 'Video call',
+  email: 'Email',
+};
+
+export type InterviewStatus =
+  | 'scheduled'
+  | 'completed'
+  | 'cancelled'
+  | 'postponed';
+
+export const INTERVIEW_STATUS_LABEL: Record<InterviewStatus, string> = {
+  scheduled: 'Scheduled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  postponed: 'Postponed',
+};
+
+export type MediaInterview = {
+  interview_id: string;
+  client_id: string;
+  engagement_id: string | null;
+  client_deliverable_id: string | null;
+  media_id: string | null;
+  publication_name: string | null;
+  reporter_name: string | null;
+  spokesperson_name: string | null;
+  interview_date: string;
+  interview_format: InterviewFormat;
+  status: InterviewStatus;
+  topic: string | null;
+  expected_publish_date: string | null;
+  coverage_id: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type EventGuest = {
   guest_id: string;
   event_id: string;

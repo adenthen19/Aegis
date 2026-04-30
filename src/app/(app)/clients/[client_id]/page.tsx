@@ -21,6 +21,7 @@ import {
   type Document,
   type Engagement,
   type MediaCoverage,
+  type MediaInterview,
   type PressRelease,
   type PrValueReport,
   type Profile,
@@ -42,6 +43,7 @@ import DocumentsSection from './documents-section';
 import { currentBlackout } from '../blackout-helpers';
 import PressReleasesSection from './press-releases-section';
 import PrValueReportsSection from './pr-value-reports-section';
+import MediaInterviewsSection from './media-interviews-section';
 import ClientTabs from './client-tabs';
 
 const TIER_LABEL: Record<ServiceTier, string> = {
@@ -96,6 +98,7 @@ export default async function ClientDetailPage({
     coverageRes,
     reportsRes,
     mediaContactsRes,
+    interviewsRes,
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('client_id', client_id).maybeSingle(),
     supabase
@@ -179,6 +182,11 @@ export default async function ClientDetailPage({
       .from('media_contacts')
       .select('media_id, full_name, company_name')
       .order('full_name'),
+    supabase
+      .from('media_interviews')
+      .select('*')
+      .eq('client_id', client_id)
+      .order('interview_date', { ascending: false }),
   ]);
 
   const client = clientRes.data as Client | null;
@@ -215,6 +223,15 @@ export default async function ClientDetailPage({
     full_name: string;
     company_name: string | null;
   }[];
+  const mediaInterviews = (interviewsRes.data ?? []) as MediaInterview[];
+
+  // Coverage rows surfaced in the interview form so the user can link the
+  // resulting article once it publishes.
+  const coverageOptions = coverage.map((c) => ({
+    coverage_id: c.coverage_id,
+    headline: c.headline,
+    publication_date: c.publication_date,
+  }));
 
   const coverageByPress: Record<string, MediaCoverage[]> = {};
   const unlinkedCoverage: MediaCoverage[] = [];
@@ -269,6 +286,20 @@ export default async function ClientDetailPage({
             d.engagement_id === activeEngagement.engagement_id &&
             d.kind === 'recurring' &&
             /press release/i.test(d.label),
+        )
+      : []
+  ).map((d) => ({ client_deliverable_id: d.client_deliverable_id, label: d.label }));
+
+  // Media-interview commitments — same idea: recurring PR deliverables whose
+  // label mentions interviews. Used to bump the on-track counter when an
+  // interview is marked completed.
+  const interviewCommitments = (
+    activeEngagement
+      ? allDeliverables.filter(
+          (d) =>
+            d.engagement_id === activeEngagement.engagement_id &&
+            d.kind === 'recurring' &&
+            /interview/i.test(d.label),
         )
       : []
   ).map((d) => ({ client_deliverable_id: d.client_deliverable_id, label: d.label }));
@@ -445,7 +476,10 @@ export default async function ClientDetailPage({
       <ClientTabs
         counts={{
           engagements: engagements.length,
-          press: pressReleases.length + prValueReports.length,
+          press:
+            pressReleases.length +
+            mediaInterviews.length +
+            prValueReports.length,
           todos: todos.length,
           documents: documents.length,
         }}
@@ -542,6 +576,16 @@ export default async function ClientDetailPage({
                   clippingsByCoverage={clippingsByCoverage}
                   pressReleaseCommitments={pressReleaseCommitments}
                   mediaContacts={mediaContacts}
+                />
+              </Section>
+
+              <Section title={`Media interviews (${mediaInterviews.length})`}>
+                <MediaInterviewsSection
+                  clientId={client.client_id}
+                  interviews={mediaInterviews}
+                  mediaContacts={mediaContacts}
+                  interviewCommitments={interviewCommitments}
+                  coverageOptions={coverageOptions}
                 />
               </Section>
 
