@@ -151,7 +151,7 @@ export default async function EventDetailPage({
         )}
       </Section>
 
-      <GuestList eventId={event.event_id} guests={guests} />
+      <GuestList eventId={event.event_id} eventName={event.name} guests={guests} />
     </div>
   );
 }
