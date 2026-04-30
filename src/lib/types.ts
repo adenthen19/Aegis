@@ -507,3 +507,44 @@ export type ActionItem = {
   updated_at: string;
 };
 
+export type EventStatus = 'planned' | 'ongoing' | 'completed' | 'cancelled';
+
+export const EVENT_STATUS_LABEL: Record<EventStatus, string> = {
+  planned: 'Planned',
+  ongoing: 'Ongoing',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+export type EventRow = {
+  event_id: string;
+  client_id: string | null;
+  adhoc_client_name: string | null;
+  name: string;
+  event_date: string;
+  location: string | null;
+  description: string | null;
+  status: EventStatus;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventGuest = {
+  guest_id: string;
+  event_id: string;
+  full_name: string;
+  title: string | null;
+  company: string | null;
+  contact_number: string | null;
+  email: string | null;
+  checked_in: boolean;
+  checked_in_at: string | null;
+  notes: string | null;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
