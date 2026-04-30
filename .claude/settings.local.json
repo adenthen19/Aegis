@@ -38,7 +38,9 @@
       "Bash(grep -nA 6 \"^export declare interface UrlContext \" node_modules/@google/genai/dist/genai.d.ts)",
       "Bash(grep -nA 10 \"^export declare interface Blob_2 \" node_modules/@google/genai/dist/genai.d.ts)",
       "Bash(grep -nB 1 -A 6 \"Blob_2 \" node_modules/@google/genai/dist/genai.d.ts)",
-      "Bash(npx --no-install tsc --noEmit)"
+      "Bash(npx --no-install tsc --noEmit)",
+      "Bash(cp \"c:/Users/DELL/.gemini/antigravity/scratch/Aegis/.next/server/app/icon.body\" /tmp/aegis-icon-preview.png)",
+      "Read(//tmp/**)"
     ]
   }
 }
