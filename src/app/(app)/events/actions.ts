@@ -162,6 +162,7 @@ type GuestPayload = {
   company: string | null;
   contact_number: string | null;
   email: string | null;
+  table_number: string | null;
   notes: string | null;
 };
 
@@ -184,6 +185,7 @@ function readGuestPayload(
       company: formData.get('company')?.toString().trim() || null,
       contact_number: formData.get('contact_number')?.toString().trim() || null,
       email,
+      table_number: formData.get('table_number')?.toString().trim() || null,
       notes: formData.get('notes')?.toString().trim() || null,
     },
   };
@@ -324,6 +326,7 @@ function buildGuestImportPayload(
       company: record.company?.trim() || null,
       contact_number: record.contact_number?.trim() || null,
       email,
+      table_number: record.table_number?.trim() || null,
       notes: record.notes?.trim() || null,
     },
   };

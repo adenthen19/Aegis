@@ -26,6 +26,7 @@ export default function GuestListView({
               <Th>Name</Th>
               <Th>Title</Th>
               <Th>Company</Th>
+              <Th>Table</Th>
               <Th>Status</Th>
             </tr>
           </thead>
@@ -44,6 +45,9 @@ export default function GuestListView({
                 <td className="px-5 py-3.5 font-medium text-aegis-navy">{g.full_name}</td>
                 <td className="px-5 py-3.5 text-aegis-gray">{g.title || '—'}</td>
                 <td className="px-5 py-3.5 text-aegis-gray">{g.company || '—'}</td>
+                <td className="px-5 py-3.5">
+                  <TableBadge value={g.table_number} />
+                </td>
                 <td className="px-5 py-3.5">
                   <StatusPill checkedIn={g.checked_in} />
                 </td>
@@ -70,7 +74,10 @@ export default function GuestListView({
                   {[g.title, g.company].filter(Boolean).join(' · ') || '—'}
                 </p>
               </div>
-              <StatusPill checkedIn={g.checked_in} />
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <StatusPill checkedIn={g.checked_in} />
+                <TableBadge value={g.table_number} />
+              </div>
             </button>
           </li>
         ))}
@@ -84,6 +91,27 @@ function Th({ children }: { children: React.ReactNode }) {
     <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
       {children}
     </th>
+  );
+}
+
+function TableBadge({ value }: { value: string | null }) {
+  if (!value) return <span className="text-aegis-gray-300">—</span>;
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md bg-aegis-blue-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
+      <svg
+        className="h-3 w-3"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M3 10h18M5 10v10M19 10v10M3 6h18" />
+      </svg>
+      {value}
+    </span>
   );
 }
 

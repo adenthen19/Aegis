@@ -38,6 +38,13 @@ export default function GuestFormFields({ initial }: { initial?: EventGuest }) {
         placeholder="name@example.com"
         defaultValue={initial?.email ?? undefined}
       />
+      <TextField
+        name="table_number"
+        label="Table number"
+        placeholder='e.g. 5, Table 12, VIP-A'
+        defaultValue={initial?.table_number ?? undefined}
+        hint="Optional — leave blank if the event doesn't use seating."
+      />
       <TextAreaField
         name="notes"
         label="Notes"

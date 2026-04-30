@@ -202,16 +202,35 @@ export default function GuestSearchCheckin({
                         )}
                       </p>
                     </div>
-                    <span
-                      className={[
-                        'inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset',
-                        g.checked_in
-                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                          : 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200',
-                      ].join(' ')}
-                    >
-                      {g.checked_in ? 'Checked in' : 'Pending'}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span
+                        className={[
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset',
+                          g.checked_in
+                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                            : 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200',
+                        ].join(' ')}
+                      >
+                        {g.checked_in ? 'Checked in' : 'Pending'}
+                      </span>
+                      {g.table_number && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-aegis-blue-50 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
+                          <svg
+                            className="h-3 w-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M3 10h18M5 10v10M19 10v10M3 6h18" />
+                          </svg>
+                          {g.table_number}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 </li>
               ))}

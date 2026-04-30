@@ -539,6 +539,7 @@ export type EventGuest = {
   company: string | null;
   contact_number: string | null;
   email: string | null;
+  table_number: string | null;
   checked_in: boolean;
   checked_in_at: string | null;
   notes: string | null;

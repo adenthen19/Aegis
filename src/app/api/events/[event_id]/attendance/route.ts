@@ -22,7 +22,7 @@ export async function GET(
   const { data: guests, error: guestErr } = await supabase
     .from('event_guests')
     .select(
-      'full_name, title, company, contact_number, email, checked_in, checked_in_at, notes',
+      'full_name, title, company, contact_number, email, table_number, checked_in, checked_in_at, notes',
     )
     .eq('event_id', event_id)
     .order('full_name', { ascending: true });
@@ -34,6 +34,7 @@ export async function GET(
     'company',
     'contact_number',
     'email',
+    'table_number',
     'checked_in',
     'checked_in_at',
     'notes',
@@ -48,6 +49,7 @@ export async function GET(
         csvEscape((g.company as string | null) ?? ''),
         csvEscape((g.contact_number as string | null) ?? ''),
         csvEscape((g.email as string | null) ?? ''),
+        csvEscape((g.table_number as string | null) ?? ''),
         g.checked_in ? 'true' : 'false',
         csvEscape((g.checked_in_at as string | null) ?? ''),
         csvEscape((g.notes as string | null) ?? ''),

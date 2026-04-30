@@ -75,6 +75,31 @@ export default function GuestDetailModal({
           <EditForm guest={guest} onDone={() => setEditMode(false)} />
         ) : (
           <div className="space-y-5">
+            {guest.table_number && (
+              <div className="flex items-center gap-3 rounded-lg border border-aegis-blue/30 bg-aegis-blue-50 px-4 py-3">
+                <svg
+                  className="h-5 w-5 text-aegis-navy"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M3 10h18M5 10v10M19 10v10M3 6h18" />
+                </svg>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+                    Table
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums text-aegis-navy">
+                    {guest.table_number}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2.5">
               <Row label="Title">{guest.title || '—'}</Row>
               <Row label="Company">{guest.company || '—'}</Row>
@@ -102,6 +127,7 @@ export default function GuestDetailModal({
                   '—'
                 )}
               </Row>
+              {!guest.table_number && <Row label="Table">—</Row>}
               {guest.notes && (
                 <Row label="Notes">
                   <span className="whitespace-pre-wrap">{guest.notes}</span>

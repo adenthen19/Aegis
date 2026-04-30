@@ -8,6 +8,7 @@ export const EVENT_GUEST_IMPORT_HEADERS = [
   'company',
   'contact_number',
   'email',
+  'table_number',
   'notes',
 ] as const;
 
@@ -17,6 +18,7 @@ export const EVENT_GUEST_IMPORT_EXAMPLE_ROW: string[] = [
   'Aurora Capital',
   '+60 12-345 6789',
   'jane.tan@aurora.com',
+  'Table 5',
   'VIP — front row',
 ];
 
@@ -30,5 +32,6 @@ export const EVENT_GUEST_IMPORT_FIELD_HELP: {
   { name: 'company', help: 'Optional. Affiliation / employer.' },
   { name: 'contact_number', help: 'Optional. Mobile or office number — free-text.' },
   { name: 'email', help: 'Optional but recommended — used to dedupe re-imports.' },
+  { name: 'table_number', help: 'Optional. Free-text, e.g. "5", "Table 12", "VIP-A".' },
   { name: 'notes', help: 'Optional. Dietary, seating, RSVP — anything useful on the day.' },
 ];
