@@ -6,6 +6,8 @@ import DataTableSelectable, {
   type SortState,
 } from '@/components/data-table-selectable';
 import type { MediaContact } from '@/lib/types';
+import { whatsAppUrl } from '@/lib/contact-helpers';
+import WhatsAppIcon from '@/components/whatsapp-icon';
 import MediaRowActions from './row-actions';
 import { bulkDeleteMediaContactsAction } from './actions';
 
@@ -105,17 +107,27 @@ export default function MediaList({
         },
         {
           header: 'Contact',
-          cell: (r) =>
-            r.contact_number ? (
+          cell: (r) => {
+            if (!r.contact_number) {
+              return <span className="text-aegis-gray-300">—</span>;
+            }
+            const wa = whatsAppUrl(r.contact_number);
+            if (!wa) {
+              return <span className="tabular-nums text-aegis-gray">{r.contact_number}</span>;
+            }
+            return (
               <a
-                href={`tel:${r.contact_number.replace(/\s+/g, '')}`}
-                className="tabular-nums text-aegis-gray hover:text-aegis-navy"
+                href={wa}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 tabular-nums text-aegis-gray hover:text-emerald-600"
+                title="Open WhatsApp chat"
               >
+                <WhatsAppIcon />
                 {r.contact_number}
               </a>
-            ) : (
-              <span className="text-aegis-gray-300">—</span>
-            ),
+            );
+          },
         },
         {
           header: 'Email',

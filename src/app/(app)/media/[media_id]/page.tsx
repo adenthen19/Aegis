@@ -4,6 +4,8 @@ import {
   Breadcrumbs, DetailHeader, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
 import type { MediaContact } from '@/lib/types';
+import { whatsAppUrl } from '@/lib/contact-helpers';
+import WhatsAppIcon from '@/components/whatsapp-icon';
 import MediaRowActions from '../row-actions';
 
 export default async function MediaDetailPage({
@@ -44,12 +46,23 @@ export default async function MediaDetailPage({
           </Field>
           <Field label="Contact number">
             {contact.contact_number ? (
-              <a
-                href={`tel:${contact.contact_number.replace(/\s+/g, '')}`}
-                className="tabular-nums text-aegis-navy hover:text-aegis-orange"
-              >
-                {contact.contact_number}
-              </a>
+              (() => {
+                const wa = whatsAppUrl(contact.contact_number);
+                return wa ? (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 tabular-nums text-aegis-navy hover:text-emerald-600"
+                    title="Open WhatsApp chat"
+                  >
+                    <WhatsAppIcon className="h-4 w-4 text-emerald-500" />
+                    {contact.contact_number}
+                  </a>
+                ) : (
+                  <span className="tabular-nums text-aegis-gray">{contact.contact_number}</span>
+                );
+              })()
             ) : (
               <span className="text-aegis-gray-300">—</span>
             )}

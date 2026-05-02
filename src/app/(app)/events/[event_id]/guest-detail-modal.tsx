@@ -12,6 +12,8 @@ import {
   type ActionState,
 } from '../actions';
 import type { EventGuest } from '@/lib/types';
+import { whatsAppUrl } from '@/lib/contact-helpers';
+import WhatsAppIcon from '@/components/whatsapp-icon';
 
 const initialState: ActionState = { ok: false, error: null };
 
@@ -105,12 +107,23 @@ export default function GuestDetailModal({
               <Row label="Company">{guest.company || '—'}</Row>
               <Row label="Contact number">
                 {guest.contact_number ? (
-                  <a
-                    href={`tel:${guest.contact_number}`}
-                    className="text-aegis-navy hover:text-aegis-orange"
-                  >
-                    {guest.contact_number}
-                  </a>
+                  (() => {
+                    const wa = whatsAppUrl(guest.contact_number);
+                    return wa ? (
+                      <a
+                        href={wa}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-aegis-navy hover:text-emerald-600"
+                        title="Open WhatsApp chat"
+                      >
+                        <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-500" />
+                        {guest.contact_number}
+                      </a>
+                    ) : (
+                      <span className="tabular-nums text-aegis-gray">{guest.contact_number}</span>
+                    );
+                  })()
                 ) : (
                   '—'
                 )}

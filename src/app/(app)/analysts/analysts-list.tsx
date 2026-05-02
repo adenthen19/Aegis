@@ -6,6 +6,8 @@ import DataTableSelectable, {
   type SortState,
 } from '@/components/data-table-selectable';
 import type { Analyst } from '@/lib/types';
+import { whatsAppUrl } from '@/lib/contact-helpers';
+import WhatsAppIcon from '@/components/whatsapp-icon';
 import AnalystRowActions from './row-actions';
 import { bulkDeleteAnalystsAction } from './actions';
 
@@ -97,31 +99,34 @@ export default function AnalystsList({
           header: 'Type',
           sortKey: 'analyst_type',
           cell: (r) => (
-            <span
-              className={[
-                'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
-                r.analyst_type === 'buy_side'
-                  ? 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20'
-                  : 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
-              ].join(' ')}
-            >
+            <span className="text-aegis-gray">
               {r.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side'}
             </span>
           ),
         },
         {
           header: 'Contact',
-          cell: (r) =>
-            r.contact_number ? (
+          cell: (r) => {
+            if (!r.contact_number) {
+              return <span className="text-aegis-gray-300">—</span>;
+            }
+            const wa = whatsAppUrl(r.contact_number);
+            if (!wa) {
+              return <span className="tabular-nums text-aegis-gray">{r.contact_number}</span>;
+            }
+            return (
               <a
-                href={`tel:${r.contact_number.replace(/\s+/g, '')}`}
-                className="tabular-nums text-aegis-gray hover:text-aegis-navy"
+                href={wa}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 tabular-nums text-aegis-gray hover:text-emerald-600"
+                title="Open WhatsApp chat"
               >
+                <WhatsAppIcon />
                 {r.contact_number}
               </a>
-            ) : (
-              <span className="text-aegis-gray-300">—</span>
-            ),
+            );
+          },
         },
         {
           header: 'Email',

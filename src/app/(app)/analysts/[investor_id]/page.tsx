@@ -5,6 +5,8 @@ import {
   Breadcrumbs, DetailHeader, EmptyMini, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
 import type { Analyst } from '@/lib/types';
+import { whatsAppUrl } from '@/lib/contact-helpers';
+import WhatsAppIcon from '@/components/whatsapp-icon';
 import AnalystRowActions from '../row-actions';
 
 type Meeting = {
@@ -68,12 +70,23 @@ export default async function AnalystDetailPage({
           </Field>
           <Field label="Contact number">
             {analyst.contact_number ? (
-              <a
-                href={`tel:${analyst.contact_number.replace(/\s+/g, '')}`}
-                className="tabular-nums text-aegis-navy hover:text-aegis-orange"
-              >
-                {analyst.contact_number}
-              </a>
+              (() => {
+                const wa = whatsAppUrl(analyst.contact_number);
+                return wa ? (
+                  <a
+                    href={wa}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 tabular-nums text-aegis-navy hover:text-emerald-600"
+                    title="Open WhatsApp chat"
+                  >
+                    <WhatsAppIcon className="h-4 w-4 text-emerald-500" />
+                    {analyst.contact_number}
+                  </a>
+                ) : (
+                  <span className="tabular-nums text-aegis-gray">{analyst.contact_number}</span>
+                );
+              })()
             ) : (
               <span className="text-aegis-gray-300">—</span>
             )}
