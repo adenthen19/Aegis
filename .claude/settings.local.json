@@ -48,7 +48,9 @@
       "Bash(curl -sS -o /dev/null -w \"login: %{http_code}\\\\n\" http://localhost:3017/login)",
       "Bash(curl -sS -o /dev/null -w \"kiosk \\(no auth, expect redirect\\): %{http_code}\\\\n\" http://localhost:3017/kiosk/00000000-0000-0000-0000-000000000000)",
       "Bash(pkill -f \"next dev\")",
-      "Bash(pkill -f \"next-server\")"
+      "Bash(pkill -f \"next-server\")",
+      "Bash(echo \"tsc: $?\")",
+      "Bash(echo \"eslint: $?\")"
     ]
   }
 }

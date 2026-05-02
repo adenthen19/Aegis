@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import type { EventGuest } from '@/lib/types';
 import {
   kioskCheckInAction,
@@ -177,10 +179,12 @@ export default function KioskShell({
   location: string | null;
   guests: EventGuest[];
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<ToastState>({ kind: 'idle' });
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  const [liveConnected, setLiveConnected] = useState(false);
 
   // Optimistic check-in IDs so the UI flips instantly while the server
   // catches up. Cleared whenever new guest data arrives via revalidation.
@@ -201,6 +205,40 @@ export default function KioskShell({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // ─── Live sync via Supabase Realtime ───────────────────────────────
+  // Multiple kiosks watching the same event get row-level INSERT / UPDATE /
+  // DELETE notifications and re-fetch the server component on any change.
+  // Cheap because the server component is fast and Next dedupes refreshes;
+  // safer than maintaining a parallel client cache that can drift. Requires
+  // event_guests to be in the supabase_realtime publication (migration 0028).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`kiosk-event-${eventId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_guests',
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => {
+          // The server action's revalidatePath already refreshes the device
+          // that did the check-in. This refresh handles all the *other*
+          // kiosks watching the same event.
+          router.refresh();
+        },
+      )
+      .subscribe((status) => {
+        setLiveConnected(status === 'SUBSCRIBED');
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [eventId, router]);
 
   useEffect(() => {
     return () => {
@@ -318,8 +356,9 @@ export default function KioskShell({
       <header className="sticky top-0 z-20 border-b border-aegis-gray-100 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
+            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
               Check-in kiosk
+              <LiveBadge connected={liveConnected} />
             </p>
             <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
               {eventName}
@@ -556,6 +595,32 @@ export default function KioskShell({
         />
       )}
     </div>
+  );
+}
+
+function LiveBadge({ connected }: { connected: boolean }) {
+  // Tiny realtime indicator — green pulse when subscribed, grey idle dot
+  // otherwise. Lets ushers spot at a glance whether their kiosk is in sync
+  // with the others.
+  return (
+    <span
+      className={[
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ring-1 ring-inset',
+        connected
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+          : 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200',
+      ].join(' ')}
+      title={connected ? 'Live sync with other kiosks' : 'Not live — check-ins still save but other kiosks may be stale'}
+    >
+      <span
+        className={[
+          'h-1.5 w-1.5 rounded-full',
+          connected ? 'animate-pulse bg-emerald-500' : 'bg-aegis-gray-300',
+        ].join(' ')}
+        aria-hidden
+      />
+      {connected ? 'Live' : 'Offline'}
+    </span>
   );
 }
 
