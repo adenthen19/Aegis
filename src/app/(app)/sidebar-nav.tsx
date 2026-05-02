@@ -53,6 +53,18 @@ const SECTIONS: Section[] = [
           </svg>
         ),
       },
+      {
+        href: '/integrations',
+        label: 'Integrations',
+        icon: (
+          <svg {...ICON}>
+            <rect x="3" y="3" width="7" height="7" rx="1.5" />
+            <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            <path d="M10 7h11" />
+            <path d="M3 17h11" />
+          </svg>
+        ),
+      },
     ],
   },
   {

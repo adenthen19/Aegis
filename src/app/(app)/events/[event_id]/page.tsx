@@ -47,7 +47,9 @@ export default async function EventDetailPage({
   const { event_id } = await params;
   const supabase = await createClient();
 
-  const [eventRes, guestsRes, clientsRes, activityRes] = await Promise.all([
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const [eventRes, guestsRes, clientsRes, activityRes, googleRes] = await Promise.all([
     supabase
       .from('events')
       .select('*, clients ( client_id, corporate_name )')
@@ -76,6 +78,13 @@ export default async function EventDetailPage({
       .eq('event_id', event_id)
       .order('performed_at', { ascending: false })
       .limit(50),
+    user
+      ? supabase
+          .from('google_connections')
+          .select('google_email')
+          .eq('user_id', user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null } as const),
   ]);
 
   if (!eventRes.data) notFound();
@@ -112,6 +121,8 @@ export default async function EventDetailPage({
       row.profiles?.email ||
       null,
   }));
+
+  const googleConnection = (googleRes.data as { google_email: string } | null) ?? null;
 
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -200,6 +211,12 @@ export default async function EventDetailPage({
         eventName={event.name}
         guests={guests}
         activity={activity}
+        googleSheetId={
+          (event as unknown as { google_sheet_id: string | null })
+            .google_sheet_id ?? null
+        }
+        googleConnected={googleConnection !== null}
+        googleEmail={googleConnection?.google_email ?? null}
       />
     </div>
   );

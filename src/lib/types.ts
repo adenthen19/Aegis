@@ -617,3 +617,14 @@ export type EventGuestCheckin = {
   notes: string | null;
 };
 
+export type GoogleConnection = {
+  user_id: string;
+  google_email: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  scope: string;
+  created_at: string;
+  updated_at: string;
+};
+

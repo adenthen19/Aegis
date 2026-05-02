@@ -50,7 +50,9 @@
       "Bash(pkill -f \"next dev\")",
       "Bash(pkill -f \"next-server\")",
       "Bash(echo \"tsc: $?\")",
-      "Bash(echo \"eslint: $?\")"
+      "Bash(echo \"eslint: $?\")",
+      "Bash(curl -sS -o /dev/null -w '  integrations: %{http_code}\\\\n  oauth start: %{http_code}\\\\n  oauth callback \\(no params\\): %{http_code}\\\\n' http://localhost:3019/integrations http://localhost:3019/api/google/oauth/start http://localhost:3019/api/google/oauth/callback)",
+      "Bash(curl -sS -X POST -o /dev/null -w \"  oauth disconnect: %{http_code}\\\\n\" http://localhost:3019/api/google/oauth/disconnect)"
     ]
   }
 }

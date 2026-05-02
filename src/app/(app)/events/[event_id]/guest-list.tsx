@@ -28,11 +28,17 @@ export default function GuestList({
   eventName,
   guests,
   activity,
+  googleSheetId,
+  googleConnected,
+  googleEmail,
 }: {
   eventId: string;
   eventName: string;
   guests: EventGuest[];
   activity: CheckinFeedEntry[];
+  googleSheetId: string | null;
+  googleConnected: boolean;
+  googleEmail: string | null;
 }) {
   const [tab, setTab] = useState<Tab>('list');
   const [addOpen, setAddOpen] = useState(false);
@@ -146,6 +152,9 @@ export default function GuestList({
           eventName={eventName}
           guests={guests}
           activity={activity}
+          googleSheetId={googleSheetId}
+          googleConnected={googleConnected}
+          googleEmail={googleEmail}
         />
       )}
 

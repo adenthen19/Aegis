@@ -6,6 +6,7 @@ import {
   EVENT_CHECKIN_SOURCE_LABEL,
   type EventGuest,
 } from '@/lib/types';
+import PushToSheetButton from './push-to-sheet-button';
 
 function formatRelative(iso: string): string {
   // Compact relative-time helper for the activity feed. Falls back to an
@@ -28,11 +29,17 @@ export default function GuestReport({
   eventName,
   guests,
   activity,
+  googleSheetId,
+  googleConnected,
+  googleEmail,
 }: {
   eventId: string;
   eventName: string;
   guests: EventGuest[];
   activity: CheckinFeedEntry[];
+  googleSheetId: string | null;
+  googleConnected: boolean;
+  googleEmail: string | null;
 }) {
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -86,6 +93,12 @@ export default function GuestReport({
             <DownloadIcon />
             CSV
           </a>
+          <PushToSheetButton
+            eventId={eventId}
+            defaultSheetId={googleSheetId}
+            googleConnected={googleConnected}
+            googleEmail={googleEmail}
+          />
         </div>
       </div>
 
