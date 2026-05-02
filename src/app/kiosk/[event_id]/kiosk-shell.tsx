@@ -166,8 +166,74 @@ type ToastState =
       company: string | null;
       table: string | null;
       already: boolean;
+      queued: boolean;
     }
   | { kind: 'error'; message: string };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Offline check-in queue
+// ─────────────────────────────────────────────────────────────────────────
+//
+// When the kiosk is offline (or a server call hits a network error), taps
+// go into a localStorage queue per event. The UI flips optimistically so
+// ushers can keep working through a wifi blip; once we're back online the
+// queue is drained automatically and any items that fail will just stay
+// in the queue for the next attempt.
+//
+// Dedup rule: only the LATEST action per guest is kept. So if an usher
+// checks Sarah in offline, then taps Undo, the queue ends with one
+// 'undo'. Keeps the drain simple and avoids racing operations.
+
+type QueueItem = {
+  guest_id: string;
+  action: 'checkin' | 'undo';
+  ts: number; // ms — informational
+};
+
+function queueKey(eventId: string): string {
+  return `aegis-kiosk-queue:${eventId}`;
+}
+
+function readQueueFromStorage(eventId: string): QueueItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(queueKey(eventId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (x): x is QueueItem =>
+        typeof x === 'object' &&
+        x !== null &&
+        typeof (x as QueueItem).guest_id === 'string' &&
+        ((x as QueueItem).action === 'checkin' ||
+          (x as QueueItem).action === 'undo'),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeQueueToStorage(eventId: string, items: QueueItem[]): void {
+  if (typeof window === 'undefined') return;
+  if (items.length === 0) {
+    window.localStorage.removeItem(queueKey(eventId));
+    return;
+  }
+  window.localStorage.setItem(queueKey(eventId), JSON.stringify(items));
+}
+
+// Returns true if the error looks like a network / connectivity failure
+// rather than an application-level error (e.g. "Guest not found"). The
+// kiosk re-queues network failures and drops application failures so a
+// stuck queue can't pile up forever.
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true; // fetch network errors
+  if (err instanceof Error) {
+    return /network|fetch|connection|offline|timeout/i.test(err.message);
+  }
+  return false;
+}
 
 export default function KioskShell({
   eventId,
@@ -202,13 +268,61 @@ export default function KioskShell({
   // Optimistic check-in IDs so the UI flips instantly while the server
   // catches up. Cleared whenever new guest data arrives via revalidation.
   const [optimisticIn, setOptimisticIn] = useState<Set<string>>(new Set());
+  // Symmetric set: ids we've optimistically un-checked locally (queued
+  // undo while offline).
+  const [optimisticOut, setOptimisticOut] = useState<Set<string>>(new Set());
   // Last guest id we checked in — used to expose the "Wrong tap?" undo
   // affordance for ~10s after a check-in.
   const [lastCheckedId, setLastCheckedId] = useState<string | null>(null);
   const lastCheckedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Offline queue + connectivity ─────────────────────────────────────
+  const [queue, setQueueState] = useState<QueueItem[]>(() =>
+    readQueueFromStorage(eventId),
+  );
+  // Lazy initializer so we read navigator.onLine on the client's very first
+  // render rather than starting at `true` and bouncing on mount. Server
+  // render falls back to `true` since navigator isn't available there.
+  const [online, setOnline] = useState<boolean>(() =>
+    typeof navigator === 'undefined' ? true : navigator.onLine,
+  );
+  const [syncing, setSyncing] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Persist queue + keep optimistic sets in sync whenever we mutate it.
+  // Wrapping setQueueState makes sure localStorage and the in-memory copy
+  // never drift apart.
+  function commitQueue(next: QueueItem[]) {
+    writeQueueToStorage(eventId, next);
+    setQueueState(next);
+  }
+
+  function enqueue(item: QueueItem) {
+    // Dedup by guest_id — only the latest action per guest survives.
+    setQueueState((prev) => {
+      const filtered = prev.filter((p) => p.guest_id !== item.guest_id);
+      const next = [...filtered, item];
+      writeQueueToStorage(eventId, next);
+      return next;
+    });
+    if (item.action === 'checkin') {
+      setOptimisticIn((prev) => new Set(prev).add(item.guest_id));
+      setOptimisticOut((prev) => {
+        const next = new Set(prev);
+        next.delete(item.guest_id);
+        return next;
+      });
+    } else {
+      setOptimisticOut((prev) => new Set(prev).add(item.guest_id));
+      setOptimisticIn((prev) => {
+        const next = new Set(prev);
+        next.delete(item.guest_id);
+        return next;
+      });
+    }
+  }
 
   // Auto-focus the search box on mount so the kiosk is immediately usable.
   // The set of optimistic ids is allowed to keep stale entries — `isCheckedIn`
@@ -218,6 +332,37 @@ export default function KioskShell({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // ─── Online / offline detection ─────────────────────────────────────
+  // Listen to the browser's online events as the primary signal. Server
+  // calls also opportunistically flip the state when they error with a
+  // network problem, so a "navigator.onLine = true but server unreachable"
+  // case also lights up the offline badge after the first failed tap.
+  useEffect(() => {
+    function on() {
+      setOnline(true);
+    }
+    function off() {
+      setOnline(false);
+    }
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
+
+  // ─── Beforeunload warning when pending taps haven't synced ──────────
+  useEffect(() => {
+    function handler(e: BeforeUnloadEvent) {
+      if (queue.length === 0) return;
+      e.preventDefault();
+      e.returnValue = '';
+    }
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [queue.length]);
 
   // ─── Live sync via Supabase Realtime ───────────────────────────────
   // Multiple kiosks watching the same event get row-level INSERT / UPDATE /
@@ -318,10 +463,13 @@ export default function KioskShell({
   const checkedIn = useMemo(() => {
     let c = 0;
     for (const g of guests) {
+      // optimisticOut has priority over the server flag (queued undos), then
+      // optimisticIn covers queued check-ins that haven't synced yet.
+      if (optimisticOut.has(g.guest_id)) continue;
       if (g.checked_in || optimisticIn.has(g.guest_id)) c += 1;
     }
     return c;
-  }, [guests, optimisticIn]);
+  }, [guests, optimisticIn, optimisticOut]);
   const pct = total === 0 ? 0 : Math.round((checkedIn / total) * 100);
 
   const classified = useMemo(() => classifyQuery(query), [query]);
@@ -331,6 +479,7 @@ export default function KioskShell({
   );
 
   function isCheckedIn(g: EventGuest): boolean {
+    if (optimisticOut.has(g.guest_id)) return false;
     return g.checked_in || optimisticIn.has(g.guest_id);
   }
 
@@ -360,9 +509,34 @@ export default function KioskShell({
         company: guest.company ? displayCompany(guest.company) : null,
         table: guest.table_number,
         already: true,
+        queued: false,
       });
       setQuery('');
       inputRef.current?.focus();
+      return;
+    }
+
+    // Reusable "we showed it as checked-in" feedback — fired both for the
+    // online happy path and the offline-queued path so usher experience
+    // stays identical regardless of connectivity.
+    function showSuccess(queued: boolean) {
+      rememberLastChecked(guest.guest_id);
+      flashToast({
+        kind: 'success',
+        name: displayName(guest.full_name),
+        company: guest.company ? displayCompany(guest.company) : null,
+        table: guest.table_number,
+        already: false,
+        queued,
+      });
+      setQuery('');
+      inputRef.current?.focus();
+    }
+
+    // Already-known offline → enqueue immediately and skip the network call.
+    if (!online) {
+      enqueue({ guest_id: guest.guest_id, action: 'checkin', ts: Date.now() });
+      showSuccess(true);
       return;
     }
 
@@ -370,52 +544,180 @@ export default function KioskShell({
     setOptimisticIn((prev) => new Set(prev).add(guest.guest_id));
 
     startTransition(async () => {
-      const result: KioskCheckInResult = await kioskCheckInAction(
-        eventId,
-        guest.guest_id,
-      );
-      if (!result.ok) {
-        // Roll back the optimistic flip.
+      try {
+        const result: KioskCheckInResult = await kioskCheckInAction(
+          eventId,
+          guest.guest_id,
+        );
+        if (!result.ok) {
+          // Application-level error (e.g. guest deleted). Roll back and
+          // surface the message — no point queuing.
+          setOptimisticIn((prev) => {
+            const next = new Set(prev);
+            next.delete(guest.guest_id);
+            return next;
+          });
+          flashToast({ kind: 'error', message: result.error });
+          return;
+        }
+        showSuccess(false);
+      } catch (err) {
+        // Network / fetch failure — flip into offline mode and queue.
+        if (isNetworkError(err)) {
+          setOnline(false);
+          enqueue({
+            guest_id: guest.guest_id,
+            action: 'checkin',
+            ts: Date.now(),
+          });
+          showSuccess(true);
+          return;
+        }
+        // Unknown error — roll back and report.
         setOptimisticIn((prev) => {
           const next = new Set(prev);
           next.delete(guest.guest_id);
           return next;
         });
-        flashToast({ kind: 'error', message: result.error });
-        return;
+        flashToast({
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Check-in failed.',
+        });
       }
-      rememberLastChecked(result.guest.guest_id);
-      flashToast({
-        kind: 'success',
-        name: displayName(result.guest.full_name),
-        company: result.guest.company ? displayCompany(result.guest.company) : null,
-        table: result.guest.table_number,
-        already: result.already,
-      });
-      setQuery('');
-      inputRef.current?.focus();
     });
   }
 
   function undoLast() {
     if (!lastCheckedId || pending) return;
     const id = lastCheckedId;
-    startTransition(async () => {
-      const res = await kioskUndoCheckInAction(eventId, id);
-      if (!res.ok) {
-        flashToast({ kind: 'error', message: res.error ?? 'Undo failed.' });
-        return;
-      }
-      // Drop optimistic flag too in case revalidation hasn't landed yet.
-      setOptimisticIn((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+
+    // Mirror checkIn's offline path: queue the undo + flip optimistic state.
+    if (!online) {
+      enqueue({ guest_id: id, action: 'undo', ts: Date.now() });
       setLastCheckedId(null);
       setToast({ kind: 'idle' });
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const res = await kioskUndoCheckInAction(eventId, id);
+        if (!res.ok) {
+          flashToast({ kind: 'error', message: res.error ?? 'Undo failed.' });
+          return;
+        }
+        // Drop optimistic flag too in case revalidation hasn't landed yet.
+        setOptimisticIn((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        setLastCheckedId(null);
+        setToast({ kind: 'idle' });
+      } catch (err) {
+        if (isNetworkError(err)) {
+          setOnline(false);
+          enqueue({ guest_id: id, action: 'undo', ts: Date.now() });
+          setLastCheckedId(null);
+          setToast({ kind: 'idle' });
+          return;
+        }
+        flashToast({
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Undo failed.',
+        });
+      }
     });
   }
+
+  // ─── Drain queue when we come back online ─────────────────────────────
+  // Run any time `online` flips true OR new items appear in the queue
+  // while we're already online. Uses a ref to avoid overlapping drains
+  // (re-entrant if the user keeps tapping during a drain).
+  const drainingRef = useRef(false);
+  useEffect(() => {
+    if (!online || queue.length === 0) return;
+    if (drainingRef.current) return;
+
+    drainingRef.current = true;
+    setSyncing(true);
+
+    (async () => {
+      // Snapshot at start; if more items get added mid-drain we just pick
+      // them up on the next effect run.
+      let working = readQueueFromStorage(eventId);
+      let netError = false;
+
+      for (const item of working) {
+        try {
+          const res =
+            item.action === 'checkin'
+              ? await kioskCheckInAction(eventId, item.guest_id)
+              : await kioskUndoCheckInAction(eventId, item.guest_id);
+          if (res.ok) {
+            // Success — remove this one item from the live queue. Re-read
+            // from storage in case another tap added something while we
+            // were awaiting the server.
+            working = readQueueFromStorage(eventId).filter(
+              (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
+            );
+            writeQueueToStorage(eventId, working);
+          } else {
+            // Application failure — drop the item so the queue doesn't
+            // get stuck on a single bad row.
+            working = readQueueFromStorage(eventId).filter(
+              (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
+            );
+            writeQueueToStorage(eventId, working);
+          }
+        } catch (err) {
+          if (isNetworkError(err)) {
+            netError = true;
+            break;
+          }
+          // Unknown error — drop and move on, log for debug.
+          console.error('Kiosk drain: unknown error', err);
+          working = readQueueFromStorage(eventId).filter(
+            (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
+          );
+          writeQueueToStorage(eventId, working);
+        }
+      }
+
+      // Push the final queue into React state so the badge updates.
+      const final = readQueueFromStorage(eventId);
+      setQueueState(final);
+      // Clear optimistic sets for guests whose canonical state matches —
+      // the server-write will land via realtime / revalidatePath shortly.
+      // We're conservative here: only drop optimistic flags for ids that
+      // are NOT still in the queue (i.e. successfully drained).
+      const stillQueued = new Set(final.map((q) => q.guest_id));
+      setOptimisticIn((prev) => {
+        const next = new Set<string>();
+        for (const id of prev) if (stillQueued.has(id)) next.add(id);
+        return next;
+      });
+      setOptimisticOut((prev) => {
+        const next = new Set<string>();
+        for (const id of prev) if (stillQueued.has(id)) next.add(id);
+        return next;
+      });
+
+      drainingRef.current = false;
+      setSyncing(false);
+      if (netError) setOnline(false);
+
+      // Pull fresh server data so the success toast / counters reflect
+      // what just landed. This covers the case where realtime hasn't
+      // delivered yet by the time we're done draining.
+      router.refresh();
+    })();
+  }, [online, queue, eventId, router]);
+
+  // Helps the linter know commitQueue is "used" (kept for future API
+  // consistency with the bulk reset / clear flows). Direct uses go via
+  // setQueueState + writeQueueToStorage so concurrent updates are atomic.
+  void commitQueue;
 
   return (
     <div className="flex min-h-screen flex-col bg-aegis-gray-50/40">
@@ -439,7 +741,12 @@ export default function KioskShell({
             <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
                 Check-in kiosk
-                <LiveBadge connected={liveConnected} />
+                <ConnectionBadge
+                  online={online}
+                  realtimeConnected={liveConnected}
+                  syncing={syncing}
+                  pending={queue.length}
+                />
                 {googleSheetId && (
                   <SheetSyncBadge
                     status={sheetSyncStatus}
@@ -664,6 +971,7 @@ export default function KioskShell({
           company={toast.company}
           table={toast.table}
           already={toast.already}
+          queued={toast.queued}
           onUndo={lastCheckedId ? undoLast : null}
           onClose={() => setToast({ kind: 'idle' })}
         />
@@ -732,28 +1040,85 @@ function SheetSyncBadge({
   );
 }
 
-function LiveBadge({ connected }: { connected: boolean }) {
-  // Tiny realtime indicator — green pulse when subscribed, grey idle dot
-  // otherwise. Lets ushers spot at a glance whether their kiosk is in sync
-  // with the others.
+function ConnectionBadge({
+  online,
+  realtimeConnected,
+  syncing,
+  pending,
+}: {
+  online: boolean;
+  realtimeConnected: boolean;
+  syncing: boolean;
+  pending: number;
+}) {
+  // Five visual states, ordered worst-to-best so the most attention-grabbing
+  // condition wins:
+  //   1. Offline + queued      → red, bold "Offline · N pending"
+  //   2. Offline (no queue)    → red "Offline"
+  //   3. Online + draining     → blue pulse "Syncing N…"
+  //   4. Online + queued idle  → amber "Queued · N" (rare — drain effect
+  //                              flips us into syncing almost immediately)
+  //   5. Online + realtime     → green pulse "Live"
+  //   6. Online, realtime down → grey "Connecting…"
+  let tone: 'red' | 'blue' | 'amber' | 'green' | 'gray' = 'green';
+  let label = 'Live';
+  let pulse = true;
+  let title = 'Live sync with other kiosks';
+
+  if (!online) {
+    tone = 'red';
+    label = pending > 0 ? `Offline · ${pending} pending` : 'Offline';
+    pulse = pending > 0;
+    title = pending > 0
+      ? `Offline. ${pending} check-in${pending === 1 ? '' : 's'} queued — will sync automatically when wifi returns. Don't close this tab.`
+      : 'Offline. Check-ins will be queued and synced when wifi returns.';
+  } else if (syncing) {
+    tone = 'blue';
+    label = `Syncing ${pending}…`;
+    title = `Syncing ${pending} queued check-in${pending === 1 ? '' : 's'} to the server.`;
+  } else if (pending > 0) {
+    tone = 'amber';
+    label = `Queued · ${pending}`;
+    title = `${pending} check-in${pending === 1 ? '' : 's'} pending sync.`;
+  } else if (!realtimeConnected) {
+    tone = 'gray';
+    label = 'Connecting…';
+    pulse = false;
+    title = 'Connecting to live updates. Check-ins still save.';
+  }
+
+  const palette = {
+    red: 'bg-red-50 text-red-700 ring-red-200',
+    blue: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+    amber: 'bg-amber-50 text-amber-700 ring-amber-200',
+    green: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    gray: 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200',
+  } as const;
+  const dot = {
+    red: 'bg-red-500',
+    blue: 'bg-aegis-blue',
+    amber: 'bg-amber-500',
+    green: 'bg-emerald-500',
+    gray: 'bg-aegis-gray-300',
+  } as const;
+
   return (
     <span
       className={[
         'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ring-1 ring-inset',
-        connected
-          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-          : 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200',
+        palette[tone],
       ].join(' ')}
-      title={connected ? 'Live sync with other kiosks' : 'Not live — check-ins still save but other kiosks may be stale'}
+      title={title}
     >
       <span
         className={[
           'h-1.5 w-1.5 rounded-full',
-          connected ? 'animate-pulse bg-emerald-500' : 'bg-aegis-gray-300',
+          dot[tone],
+          pulse ? 'animate-pulse' : '',
         ].join(' ')}
         aria-hidden
       />
-      {connected ? 'Live' : 'Offline'}
+      {label}
     </span>
   );
 }
@@ -898,6 +1263,7 @@ function ToastSuccess({
   company,
   table,
   already,
+  queued,
   onUndo,
   onClose,
 }: {
@@ -905,9 +1271,21 @@ function ToastSuccess({
   company: string | null;
   table: string | null;
   already: boolean;
+  queued: boolean;
   onUndo: (() => void) | null;
   onClose: () => void;
 }) {
+  // Three visual variants:
+  //   • Already checked in → blue tint, low-key (informational).
+  //   • Queued offline     → amber tint with the "WILL SYNC" caption so
+  //                          the usher knows the action is captured but
+  //                          not yet committed server-side.
+  //   • Online committed   → emerald, default celebratory state.
+  const variant: 'already' | 'queued' | 'committed' = already
+    ? 'already'
+    : queued
+      ? 'queued'
+      : 'committed';
   return (
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4 sm:items-center sm:justify-center sm:p-6"
@@ -917,20 +1295,22 @@ function ToastSuccess({
       <div
         className={[
           'pointer-events-auto w-full max-w-md rounded-2xl px-5 py-4 shadow-2xl ring-1 sm:px-6 sm:py-5',
-          already
+          variant === 'already'
             ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
-            : 'bg-emerald-600 text-white ring-emerald-700/20',
+            : variant === 'queued'
+              ? 'bg-amber-500 text-white ring-amber-700/20'
+              : 'bg-emerald-600 text-white ring-emerald-700/20',
         ].join(' ')}
       >
         <div className="flex items-stretch gap-3">
           <div
             className={[
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-full self-start',
-              already ? 'bg-aegis-blue/20' : 'bg-white/20',
+              variant === 'already' ? 'bg-aegis-blue/20' : 'bg-white/20',
             ].join(' ')}
           >
             <svg
-              className={`h-7 w-7 ${already ? 'text-aegis-navy' : 'text-white'}`}
+              className={`h-7 w-7 ${variant === 'already' ? 'text-aegis-navy' : 'text-white'}`}
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -946,17 +1326,21 @@ function ToastSuccess({
             <p
               className={[
                 'text-[10px] font-semibold uppercase tracking-[0.12em]',
-                already ? 'text-aegis-navy/70' : 'text-white/80',
+                variant === 'already' ? 'text-aegis-navy/70' : 'text-white/80',
               ].join(' ')}
             >
-              {already ? 'Already checked in' : 'Checked in'}
+              {variant === 'already'
+                ? 'Already checked in'
+                : variant === 'queued'
+                  ? 'Checked in · Queued · Will sync'
+                  : 'Checked in'}
             </p>
             <p className="mt-0.5 truncate text-lg font-semibold sm:text-xl">{name}</p>
             {company && (
               <p
                 className={[
                   'truncate text-sm',
-                  already ? 'text-aegis-navy/80' : 'text-white/85',
+                  variant === 'already' ? 'text-aegis-navy/80' : 'text-white/85',
                 ].join(' ')}
               >
                 {company}
@@ -970,9 +1354,11 @@ function ToastSuccess({
           <div
             className={[
               'flex shrink-0 flex-col items-center justify-center rounded-xl px-3 py-2 text-center',
-              already
+              variant === 'already'
                 ? 'bg-white text-aegis-navy ring-1 ring-aegis-blue/40'
-                : 'bg-white text-emerald-700 ring-1 ring-white/30',
+                : variant === 'queued'
+                  ? 'bg-white text-amber-600 ring-1 ring-white/30'
+                  : 'bg-white text-emerald-700 ring-1 ring-white/30',
             ].join(' ')}
           >
             <p className="text-[9px] font-semibold uppercase tracking-[0.12em] opacity-60">
@@ -983,7 +1369,7 @@ function ToastSuccess({
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-2 self-start">
-            {!already && onUndo && (
+            {variant !== 'already' && onUndo && (
               <button
                 type="button"
                 onClick={onUndo}
@@ -998,7 +1384,7 @@ function ToastSuccess({
               aria-label="Dismiss"
               className={[
                 'inline-flex h-8 w-8 items-center justify-center rounded-md',
-                already
+                variant === 'already'
                   ? 'text-aegis-navy/60 hover:bg-aegis-blue/20'
                   : 'text-white/80 hover:bg-white/15',
               ].join(' ')}
