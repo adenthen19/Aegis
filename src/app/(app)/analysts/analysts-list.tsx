@@ -13,7 +13,6 @@ import {
   displayName,
   displayPhone,
 } from '@/lib/display-format';
-import WhatsAppIcon from '@/components/whatsapp-icon';
 import AnalystRowActions from './row-actions';
 import { bulkDeleteAnalystsAction } from './actions';
 
@@ -109,7 +108,7 @@ export default function AnalystsList({
           header: 'Type',
           sortKey: 'analyst_type',
           cell: (r) => (
-            <span className="text-aegis-gray">
+            <span className="whitespace-nowrap text-aegis-gray">
               {r.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side'}
             </span>
           ),
@@ -123,17 +122,20 @@ export default function AnalystsList({
             const wa = whatsAppUrl(r.contact_number);
             const display = displayPhone(r.contact_number);
             if (!wa) {
-              return <span className="tabular-nums text-aegis-gray">{display}</span>;
+              return (
+                <span className="block whitespace-nowrap tabular-nums text-aegis-gray">
+                  {display}
+                </span>
+              );
             }
             return (
               <a
                 href={wa}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 tabular-nums text-aegis-gray hover:text-emerald-600"
+                className="block whitespace-nowrap tabular-nums text-aegis-gray hover:text-emerald-600"
                 title="Open WhatsApp chat"
               >
-                <WhatsAppIcon />
                 {display}
               </a>
             );

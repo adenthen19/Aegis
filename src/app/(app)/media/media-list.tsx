@@ -13,7 +13,6 @@ import {
   displayName,
   displayPhone,
 } from '@/lib/display-format';
-import WhatsAppIcon from '@/components/whatsapp-icon';
 import MediaRowActions from './row-actions';
 import { bulkDeleteMediaContactsAction } from './actions';
 
@@ -125,17 +124,20 @@ export default function MediaList({
             const wa = whatsAppUrl(r.contact_number);
             const display = displayPhone(r.contact_number);
             if (!wa) {
-              return <span className="tabular-nums text-aegis-gray">{display}</span>;
+              return (
+                <span className="block whitespace-nowrap tabular-nums text-aegis-gray">
+                  {display}
+                </span>
+              );
             }
             return (
               <a
                 href={wa}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 tabular-nums text-aegis-gray hover:text-emerald-600"
+                className="block whitespace-nowrap tabular-nums text-aegis-gray hover:text-emerald-600"
                 title="Open WhatsApp chat"
               >
-                <WhatsAppIcon />
                 {display}
               </a>
             );
