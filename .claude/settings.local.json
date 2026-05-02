@@ -41,7 +41,14 @@
       "Bash(npx --no-install tsc --noEmit)",
       "Bash(cp \"c:/Users/DELL/.gemini/antigravity/scratch/Aegis/.next/server/app/icon.body\" /tmp/aegis-icon-preview.png)",
       "Read(//tmp/**)",
-      "Bash(curl -sS -X POST https://kngwavjodgcdcgzndwnr.supabase.co/rest/v1/deliverable_templates -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ3dhdmpvZGdjZGNnem5kd25yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzEzMDAwMywiZXhwIjoyMDkyNzA2MDAzfQ.qXnBqWNfT8eRnYHK8mUXcpDXwaAXN34uk0auG3qOJD8' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ3dhdmpvZGNnem5kd25yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzEzMDAwMywiZXhwIjoyMDkyNzA2MDAzfQ.qXnBqWNfT8eRnYHK8mUXcpDXwaAXN34uk0auG3qOJD8' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"service_tier\":\"ipo\",\"kind\":\"ongoing\",\"label\":\"End-to-end IPO listing communications and event management — covering pre-IPO collaterals \\(corporate deck, factsheet, press releases\\), investor roadshows, prospectus launch event \\(media kit, gimmick, press conference, analysts'\\\\'' briefing, retail webinars\\), Bursa listing day ceremony, and post-event reporting across all 6 IPO stages.\",\"default_target_count\":null,\"display_order\":10,\"is_active\":true}')"
+      "Bash(curl -sS -X POST https://kngwavjodgcdcgzndwnr.supabase.co/rest/v1/deliverable_templates -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ3dhdmpvZGdjZGNnem5kd25yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzEzMDAwMywiZXhwIjoyMDkyNzA2MDAzfQ.qXnBqWNfT8eRnYHK8mUXcpDXwaAXN34uk0auG3qOJD8' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuZ3dhdmpvZGNnem5kd25yIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzEzMDAwMywiZXhwIjoyMDkyNzA2MDAzfQ.qXnBqWNfT8eRnYHK8mUXcpDXwaAXN34uk0auG3qOJD8' -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d '{\"service_tier\":\"ipo\",\"kind\":\"ongoing\",\"label\":\"End-to-end IPO listing communications and event management — covering pre-IPO collaterals \\(corporate deck, factsheet, press releases\\), investor roadshows, prospectus launch event \\(media kit, gimmick, press conference, analysts'\\\\'' briefing, retail webinars\\), Bursa listing day ceremony, and post-event reporting across all 6 IPO stages.\",\"default_target_count\":null,\"display_order\":10,\"is_active\":true}')",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(echo \"eslint exit: $?\")",
+      "Bash(curl -sSf -o /dev/null http://localhost:3017/login)",
+      "Bash(curl -sS -o /dev/null -w \"login: %{http_code}\\\\n\" http://localhost:3017/login)",
+      "Bash(curl -sS -o /dev/null -w \"kiosk \\(no auth, expect redirect\\): %{http_code}\\\\n\" http://localhost:3017/kiosk/00000000-0000-0000-0000-000000000000)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(pkill -f \"next-server\")"
     ]
   }
 }

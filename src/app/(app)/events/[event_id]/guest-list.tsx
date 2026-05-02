@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import Modal from '@/components/ui/modal';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { FormActions, FormError } from '@/components/ui/form';
@@ -57,9 +58,12 @@ export default function GuestList({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={`/api/events/${eventId}/attendance`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-aegis-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-aegis-navy hover:bg-aegis-gray-50"
+          <Link
+            href={`/kiosk/${eventId}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1.5 rounded-md border border-aegis-orange/30 bg-aegis-orange-50 px-3 py-1.5 text-xs font-semibold text-aegis-orange-600 hover:bg-aegis-orange-100"
+            title="Open the front-desk check-in kiosk in a new tab — designed for ad-hoc ushers on mobile or tablet."
           >
             <svg
               className="h-3.5 w-3.5"
@@ -71,12 +75,12 @@ export default function GuestList({
               strokeLinejoin="round"
               aria-hidden
             >
-              <path d="M12 3v12" />
-              <path d="M7 12l5 5 5-5" />
-              <path d="M5 21h14" />
+              <rect x="3" y="4" width="18" height="14" rx="2" />
+              <path d="M7 21h10M9 18v3M15 18v3" />
+              <path d="M8 11h8" />
             </svg>
-            Export
-          </a>
+            Kiosk mode
+          </Link>
           <ImportGuests eventId={eventId} />
           <button
             type="button"
