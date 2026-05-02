@@ -1,6 +1,49 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import type { EventGuest } from '@/lib/types';
+
+type SortKey = 'default' | 'table' | 'name';
+
+const SORT_LABEL: Record<SortKey, string> = {
+  default: 'Status, then name',
+  table: 'Table number',
+  name: 'Name (A → Z)',
+};
+
+// Numeric tables sort numerically (Table 2 before Table 10), text falls
+// back to alpha. Guests with no table land last so the floor plan reads
+// top-down.
+function compareTable(a: string | null, b: string | null): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  const an = Number(a);
+  const bn = Number(b);
+  if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+  return a.localeCompare(b);
+}
+
+function sortGuests(guests: EventGuest[], key: SortKey): EventGuest[] {
+  const copy = [...guests];
+  if (key === 'table') {
+    copy.sort((a, b) => {
+      const t = compareTable(a.table_number, b.table_number);
+      if (t !== 0) return t;
+      return a.full_name.localeCompare(b.full_name);
+    });
+  } else if (key === 'name') {
+    copy.sort((a, b) => a.full_name.localeCompare(b.full_name));
+  } else {
+    // default: not-checked-in first (so the next person to check in is at
+    // the top), then alpha within each group.
+    copy.sort((a, b) => {
+      if (a.checked_in !== b.checked_in) return a.checked_in ? 1 : -1;
+      return a.full_name.localeCompare(b.full_name);
+    });
+  }
+  return copy;
+}
 
 export default function GuestListView({
   guests,
@@ -9,6 +52,9 @@ export default function GuestListView({
   guests: EventGuest[];
   onPick: (guest: EventGuest) => void;
 }) {
+  const [sortKey, setSortKey] = useState<SortKey>('default');
+  const sorted = useMemo(() => sortGuests(guests, sortKey), [guests, sortKey]);
+
   if (guests.length === 0) {
     return (
       <p className="px-5 py-12 text-center text-sm text-aegis-gray-500">
@@ -19,6 +65,27 @@ export default function GuestListView({
 
   return (
     <>
+      <div className="flex items-center justify-end gap-2 border-b border-aegis-gray-100 px-4 py-2 text-[11px] sm:px-5">
+        <label
+          htmlFor="guest-sort"
+          className="font-medium uppercase tracking-[0.08em] text-aegis-gray-500"
+        >
+          Sort
+        </label>
+        <select
+          id="guest-sort"
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          className="rounded-md border border-aegis-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-aegis-navy outline-none focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
+        >
+          {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+            <option key={k} value={k}>
+              {SORT_LABEL[k]}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
@@ -31,7 +98,7 @@ export default function GuestListView({
             </tr>
           </thead>
           <tbody className="divide-y divide-aegis-gray-100">
-            {guests.map((g) => (
+            {sorted.map((g) => (
               <tr
                 key={g.guest_id}
                 onClick={() => onPick(g)}
@@ -58,7 +125,7 @@ export default function GuestListView({
       </div>
 
       <ul className="divide-y divide-aegis-gray-100 sm:hidden">
-        {guests.map((g) => (
+        {sorted.map((g) => (
           <li key={g.guest_id}>
             <button
               type="button"

@@ -62,6 +62,35 @@ export default function GuestReport({
       .sort((a, b) => b.total - a.total);
   }, [guests]);
 
+  // Per-table breakdown — for the host walking the room. Sort numerically
+  // when the table number parses as an integer (Table 2 < Table 10),
+  // otherwise alphabetically. Guests with no table land in a separate
+  // "No table" group that always sorts last.
+  const byTable = useMemo(() => {
+    const map = new Map<string, EventGuest[]>();
+    for (const g of guests) {
+      const key = g.table_number?.trim() || '__none__';
+      const arr = map.get(key) ?? [];
+      arr.push(g);
+      map.set(key, arr);
+    }
+    const entries = Array.from(map.entries()).map(([table_number, list]) => ({
+      table_number,
+      guests: list.sort((a, b) => a.full_name.localeCompare(b.full_name)),
+      total: list.length,
+      checkedIn: list.filter((g) => g.checked_in).length,
+    }));
+    entries.sort((a, b) => {
+      if (a.table_number === '__none__') return 1;
+      if (b.table_number === '__none__') return -1;
+      const an = Number(a.table_number);
+      const bn = Number(b.table_number);
+      if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+      return a.table_number.localeCompare(b.table_number);
+    });
+    return entries;
+  }, [guests]);
+
   return (
     <div className="px-4 py-5 sm:px-5">
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between print:hidden">
@@ -164,6 +193,131 @@ export default function GuestReport({
             </div>
           )}
         </section>
+
+        {byTable.length > 0 && (
+          <section className="lg:col-span-2">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+                By table
+              </h4>
+              <span className="text-[10px] uppercase tracking-[0.08em] text-aegis-gray-400">
+                {byTable.filter((t) => t.table_number !== '__none__').length}
+                {' '}
+                {byTable.filter((t) => t.table_number !== '__none__').length === 1
+                  ? 'table'
+                  : 'tables'}
+                {byTable.some((t) => t.table_number === '__none__') &&
+                  ' · some unassigned'}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {byTable.map((t) => {
+                const isNone = t.table_number === '__none__';
+                const allIn = !isNone && t.checkedIn === t.total && t.total > 0;
+                return (
+                  <div
+                    key={t.table_number}
+                    className={[
+                      'overflow-hidden rounded-md border',
+                      isNone
+                        ? 'border-dashed border-aegis-gray-200 bg-aegis-gray-50/40'
+                        : allIn
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : 'border-aegis-gray-100 bg-white',
+                    ].join(' ')}
+                  >
+                    <div
+                      className={[
+                        'flex items-center justify-between gap-2 border-b px-3 py-2',
+                        isNone
+                          ? 'border-aegis-gray-200 text-aegis-gray-500'
+                          : 'border-aegis-gray-100',
+                      ].join(' ')}
+                    >
+                      <p className="flex items-baseline gap-2 text-sm font-semibold text-aegis-navy">
+                        {isNone ? (
+                          <span className="text-aegis-gray-500">No table</span>
+                        ) : (
+                          <>
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-aegis-gray-400">
+                              Table
+                            </span>
+                            <span className="text-lg tabular-nums">
+                              {t.table_number}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      <span
+                        className={[
+                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset',
+                          allIn
+                            ? 'bg-emerald-100 text-emerald-700 ring-emerald-200'
+                            : t.checkedIn > 0
+                              ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
+                              : 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200',
+                        ].join(' ')}
+                        title={`${t.checkedIn} of ${t.total} arrived`}
+                      >
+                        {t.checkedIn} / {t.total}
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-aegis-gray-100">
+                      {t.guests.slice(0, 8).map((g) => (
+                        <li
+                          key={g.guest_id}
+                          className={[
+                            'flex items-center justify-between gap-2 px-3 py-1.5',
+                            g.checked_in ? 'bg-emerald-50/30' : '',
+                          ].join(' ')}
+                        >
+                          <div className="min-w-0">
+                            <p
+                              className={[
+                                'truncate text-[13px]',
+                                g.checked_in
+                                  ? 'font-medium text-aegis-navy'
+                                  : 'text-aegis-gray',
+                              ].join(' ')}
+                            >
+                              {g.full_name}
+                            </p>
+                            {g.company && (
+                              <p className="truncate text-[10px] text-aegis-gray-400">
+                                {g.company}
+                              </p>
+                            )}
+                          </div>
+                          {g.checked_in ? (
+                            <svg
+                              className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden
+                            >
+                              <path d="M5 12l5 5 9-11" />
+                            </svg>
+                          ) : (
+                            <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-aegis-gray-200" />
+                          )}
+                        </li>
+                      ))}
+                      {t.guests.length > 8 && (
+                        <li className="px-3 py-1.5 text-[10px] text-aegis-gray-400">
+                          + {t.guests.length - 8} more
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <section>
           <div className="mb-2 flex items-center justify-between">

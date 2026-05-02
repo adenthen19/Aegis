@@ -824,9 +824,16 @@ function GuestCard({
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {guest.table_number && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-aegis-blue-50 px-2 py-1 text-xs font-semibold tabular-nums text-aegis-navy ring-1 ring-inset ring-aegis-blue/30 sm:text-sm">
+            <span
+              className={[
+                'inline-flex items-center gap-1.5 rounded-lg bg-aegis-gold-50 font-bold tabular-nums text-aegis-orange-600 ring-1 ring-inset ring-aegis-gold/40',
+                tone === 'primary'
+                  ? 'px-3 py-1.5 text-sm shadow-sm sm:text-base'
+                  : 'px-2 py-1 text-xs sm:text-sm',
+              ].join(' ')}
+            >
               <svg
-                className="h-3.5 w-3.5"
+                className={tone === 'primary' ? 'h-4 w-4 sm:h-4.5 sm:w-4.5' : 'h-3.5 w-3.5'}
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -837,7 +844,12 @@ function GuestCard({
               >
                 <path d="M3 10h18M5 10v10M19 10v10M3 6h18" />
               </svg>
-              T{guest.table_number}
+              <span className="font-semibold uppercase tracking-wide opacity-70">
+                Table
+              </span>
+              <span className="text-[1.1em] leading-none">
+                {guest.table_number}
+              </span>
             </span>
           )}
           {checkedIn ? (
@@ -900,10 +912,10 @@ function ToastSuccess({
             : 'bg-emerald-600 text-white ring-emerald-700/20',
         ].join(' ')}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-stretch gap-3">
           <div
             className={[
-              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full self-start',
               already ? 'bg-aegis-blue/20' : 'bg-white/20',
             ].join(' ')}
           >
@@ -930,16 +942,37 @@ function ToastSuccess({
               {already ? 'Already checked in' : 'Checked in'}
             </p>
             <p className="mt-0.5 truncate text-lg font-semibold sm:text-xl">{name}</p>
-            <p
-              className={[
-                'truncate text-sm',
-                already ? 'text-aegis-navy/80' : 'text-white/85',
-              ].join(' ')}
-            >
-              {[company, table ? `Table ${table}` : null].filter(Boolean).join(' · ') || '—'}
+            {company && (
+              <p
+                className={[
+                  'truncate text-sm',
+                  already ? 'text-aegis-navy/80' : 'text-white/85',
+                ].join(' ')}
+              >
+                {company}
+              </p>
+            )}
+          </div>
+          {/* Big table-number block — usher's eye lands here first so they
+              can guide the guest without re-reading the row. Falls back to
+              "—" so the layout doesn't jump around for guests with no
+              table assignment. */}
+          <div
+            className={[
+              'flex shrink-0 flex-col items-center justify-center rounded-xl px-3 py-2 text-center',
+              already
+                ? 'bg-white text-aegis-navy ring-1 ring-aegis-blue/40'
+                : 'bg-white text-emerald-700 ring-1 ring-white/30',
+            ].join(' ')}
+          >
+            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] opacity-60">
+              Table
+            </p>
+            <p className="mt-0.5 text-3xl font-black leading-none tabular-nums sm:text-4xl">
+              {table ?? '—'}
             </p>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex shrink-0 flex-col items-end gap-2 self-start">
             {!already && onUndo && (
               <button
                 type="button"
