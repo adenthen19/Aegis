@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { displayEmail, displayName } from '@/lib/display-format';
 
 export type BirthdayProfile = {
   user_id: string;
@@ -50,7 +51,8 @@ function birthdayMatchesToday(birthday: string): boolean {
 }
 
 function profileLabel(p: BirthdayProfile): string {
-  return (p.display_name && p.display_name.trim()) || p.email;
+  const friendly = displayName(p.display_name ?? '');
+  return friendly || displayEmail(p.email);
 }
 
 function profileInitial(p: BirthdayProfile): string {

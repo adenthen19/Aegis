@@ -6,6 +6,12 @@ import {
 } from '@/components/detail-shell';
 import type { Analyst } from '@/lib/types';
 import { whatsAppUrl } from '@/lib/contact-helpers';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 import WhatsAppIcon from '@/components/whatsapp-icon';
 import AnalystRowActions from '../row-actions';
 
@@ -39,7 +45,9 @@ export default async function AnalystDetailPage({
   if (!analyst) notFound();
 
   const meetings = (meetingsRes.data ?? []) as unknown as Meeting[];
-  const headerTitle = analyst.full_name ?? analyst.institution_name;
+  const niceName = displayName(analyst.full_name ?? null);
+  const niceInstitution = displayCompany(analyst.institution_name);
+  const headerTitle = niceName || niceInstitution;
 
   return (
     <div>
@@ -52,7 +60,7 @@ export default async function AnalystDetailPage({
         title={headerTitle}
         subtitle={
           [
-            analyst.full_name ? analyst.institution_name : null,
+            niceName ? niceInstitution : null,
             analyst.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side',
           ].filter(Boolean).join(' · ') || undefined
         }
@@ -62,9 +70,9 @@ export default async function AnalystDetailPage({
       <Section title="Profile">
         <FieldGrid>
           <Field label="Name">
-            {analyst.full_name ?? <span className="text-aegis-gray-300">—</span>}
+            {niceName || <span className="text-aegis-gray-300">—</span>}
           </Field>
-          <Field label="Institution">{analyst.institution_name}</Field>
+          <Field label="Institution">{niceInstitution}</Field>
           <Field label="Type">
             {analyst.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side'}
           </Field>
@@ -72,6 +80,7 @@ export default async function AnalystDetailPage({
             {analyst.contact_number ? (
               (() => {
                 const wa = whatsAppUrl(analyst.contact_number);
+                const display = displayPhone(analyst.contact_number);
                 return wa ? (
                   <a
                     href={wa}
@@ -81,10 +90,10 @@ export default async function AnalystDetailPage({
                     title="Open WhatsApp chat"
                   >
                     <WhatsAppIcon className="h-4 w-4 text-emerald-500" />
-                    {analyst.contact_number}
+                    {display}
                   </a>
                 ) : (
-                  <span className="tabular-nums text-aegis-gray">{analyst.contact_number}</span>
+                  <span className="tabular-nums text-aegis-gray">{display}</span>
                 );
               })()
             ) : (
@@ -92,16 +101,19 @@ export default async function AnalystDetailPage({
             )}
           </Field>
           <Field label="Email">
-            {analyst.email ? (
-              <a
-                href={`mailto:${analyst.email}`}
-                className="text-aegis-navy hover:text-aegis-orange"
-              >
-                {analyst.email}
-              </a>
-            ) : (
-              <span className="text-aegis-gray-300">—</span>
-            )}
+            {(() => {
+              const lower = displayEmail(analyst.email);
+              return lower ? (
+                <a
+                  href={`mailto:${lower}`}
+                  className="text-aegis-navy hover:text-aegis-orange"
+                >
+                  {lower}
+                </a>
+              ) : (
+                <span className="text-aegis-gray-300">—</span>
+              );
+            })()}
           </Field>
         </FieldGrid>
       </Section>
@@ -136,7 +148,9 @@ export default async function AnalystDetailPage({
                   {m.clients?.corporate_name && (
                     <>
                       <span className="text-aegis-gray-200">·</span>
-                      <span className="text-xs text-aegis-gray-500">{m.clients.corporate_name}</span>
+                      <span className="text-xs text-aegis-gray-500">
+                        {displayCompany(m.clients.corporate_name)}
+                      </span>
                     </>
                   )}
                 </div>

@@ -6,6 +6,7 @@ import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import FilterTabs from '@/components/ui/filter-tabs';
 import type { Project, ProjectStatus } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import NewProject from './new-project';
 import ProjectRowActions from './row-actions';
 
@@ -107,13 +108,18 @@ export default async function ProjectsPage({
                 href={`/projects/${r.project_id}`}
                 className="font-medium text-aegis-navy hover:text-aegis-orange"
               >
-                {r.deliverable_name}
+                {displayName(r.deliverable_name)}
               </Link>
             ),
           },
           {
             header: 'Client',
-            cell: (r) => r.clients?.corporate_name ?? <span className="text-aegis-gray-300">—</span>,
+            cell: (r) =>
+              r.clients?.corporate_name ? (
+                displayCompany(r.clients.corporate_name)
+              ) : (
+                <span className="text-aegis-gray-300">—</span>
+              ),
           },
           {
             header: 'Status',

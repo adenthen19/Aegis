@@ -32,7 +32,7 @@ export default function EditClient({
       <form action={action} className="space-y-4">
         <ClientFormFields initial={row} />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

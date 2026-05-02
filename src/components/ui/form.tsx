@@ -215,7 +215,19 @@ export function FormError({ message }: { message: string | null }) {
   );
 }
 
-export function FormActions({ onCancel }: { onCancel: () => void }) {
+export function FormActions({
+  onCancel,
+  submitLabel = 'Create',
+  pendingLabel = 'Saving…',
+}: {
+  onCancel: () => void;
+  // Static label for the submit button. Override to e.g. 'Update' on edit
+  // modals so the action matches the form's intent.
+  submitLabel?: string;
+  // Label while the action is in flight. Defaults to 'Saving…' which works
+  // for both create and update; override only when the verb really differs.
+  pendingLabel?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <div className="mt-2 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -238,7 +250,7 @@ export function FormActions({ onCancel }: { onCancel: () => void }) {
             <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>
         )}
-        {pending ? 'Saving…' : 'Create'}
+        {pending ? pendingLabel : submitLabel}
       </button>
     </div>
   );

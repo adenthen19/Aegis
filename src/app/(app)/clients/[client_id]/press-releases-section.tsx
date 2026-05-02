@@ -674,7 +674,7 @@ function EditPressReleaseModal({
           mediaContacts={mediaContacts}
         />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );
@@ -748,7 +748,7 @@ function EditCoverageModal({
           mediaContacts={mediaContacts}
         />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

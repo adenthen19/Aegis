@@ -13,6 +13,12 @@ import {
   writeRangeReplacing,
 } from '@/lib/google/sheets';
 import type { EventGuest } from '@/lib/types';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 
 export type SyncSheetResult =
   | {
@@ -96,8 +102,8 @@ function buildSheetRows(
   // row index for the data-table header.
   const summary: (string | number)[][] = [
     ['Aegis Attendance Report'],
-    ['Event', event.name],
-    ['Client', event.clientLabel],
+    ['Event', displayName(event.name)],
+    ['Client', displayCompany(event.clientLabel)],
     ['Date', new Date(event.event_date).toLocaleString('en-GB')],
     ['Location', event.location ?? ''],
     ['Total guests', total],
@@ -112,11 +118,11 @@ function buildSheetRows(
   // applied after writing, this renders as a tap-to-toggle checkbox in the
   // sheet. Ushers tick → TRUE → next sync flips Aegis to checked-in.
   const data: (string | number | boolean | null)[][] = sorted.map((g) => [
-    g.full_name,
-    g.title ?? '',
-    g.company ?? '',
-    g.email ?? '',
-    g.contact_number ?? '',
+    displayName(g.full_name),
+    g.title ? displayName(g.title) : '',
+    g.company ? displayCompany(g.company) : '',
+    displayEmail(g.email),
+    g.contact_number ? displayPhone(g.contact_number) : '',
     g.table_number ?? '',
     g.checked_in,
     g.checked_in_at ? new Date(g.checked_in_at).toLocaleString('en-GB') : '',

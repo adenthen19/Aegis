@@ -6,6 +6,7 @@ import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import FilterTabs from '@/components/ui/filter-tabs';
 import type { ActionItem, Meeting } from '@/lib/types';
+import { displayCompany } from '@/lib/display-format';
 import NewMeeting from './new-meeting';
 import MeetingRowActions from './row-actions';
 
@@ -139,7 +140,14 @@ export default async function MeetingsPage({
           {
             header: 'Linked',
             cell: (r) => {
-              const linked = [r.clients?.corporate_name, r.analysts?.institution_name]
+              const linked = [
+                r.clients?.corporate_name
+                  ? displayCompany(r.clients.corporate_name)
+                  : null,
+                r.analysts?.institution_name
+                  ? displayCompany(r.analysts.institution_name)
+                  : null,
+              ]
                 .filter(Boolean)
                 .join(' × ');
               return linked || <span className="text-aegis-gray-300">—</span>;

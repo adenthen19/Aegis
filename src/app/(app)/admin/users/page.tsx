@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import DataTable from '@/components/data-table';
 import type { Profile } from '@/lib/types';
+import {
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 import NewUser from './new-user';
 import UserRowActions from './row-actions';
 
@@ -44,11 +49,17 @@ export default async function AdminUsersPage() {
                   />
                 ) : (
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-aegis-blue-50 text-xs font-semibold text-aegis-navy">
-                    {(r.display_name || r.email).charAt(0).toUpperCase()}
+                    {(displayName(r.display_name ?? '') || r.email)
+                      .charAt(0)
+                      .toUpperCase()}
                   </span>
                 )}
                 <span className="font-medium text-aegis-navy">
-                  {r.display_name ?? <span className="text-aegis-gray-300">—</span>}
+                  {r.display_name ? (
+                    displayName(r.display_name)
+                  ) : (
+                    <span className="text-aegis-gray-300">—</span>
+                  )}
                 </span>
               </div>
             ),
@@ -64,13 +75,15 @@ export default async function AdminUsersPage() {
           },
           {
             header: 'Company email',
-            cell: (r) => <span className="text-sm text-aegis-gray-500">{r.email}</span>,
+            cell: (r) => (
+              <span className="text-sm text-aegis-gray-500">{displayEmail(r.email)}</span>
+            ),
           },
           {
             header: 'Gmail',
             cell: (r) =>
               r.gmail_address ? (
-                <span className="text-xs text-aegis-gray-500">{r.gmail_address}</span>
+                <span className="text-xs text-aegis-gray-500">{displayEmail(r.gmail_address)}</span>
               ) : (
                 <span className="text-aegis-gray-300">—</span>
               ),
@@ -79,7 +92,9 @@ export default async function AdminUsersPage() {
             header: 'Contact',
             cell: (r) =>
               r.contact_number ? (
-                <span className="tabular-nums text-xs text-aegis-gray-500">{r.contact_number}</span>
+                <span className="tabular-nums text-xs text-aegis-gray-500">
+                  {displayPhone(r.contact_number)}
+                </span>
               ) : (
                 <span className="text-aegis-gray-300">—</span>
               ),

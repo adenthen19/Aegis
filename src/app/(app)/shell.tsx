@@ -8,6 +8,7 @@ import SignOutButton from './sign-out-button';
 import OnboardingDialog from './onboarding-dialog';
 import ProfileDialog from './profile-dialog';
 import BirthdayGreeter, { type BirthdayProfile } from './birthday-greeter';
+import { displayEmail, displayName as formatName } from '@/lib/display-format';
 
 const STORAGE_KEY = 'aegis-sidebar-collapsed';
 
@@ -37,7 +38,9 @@ export default function Shell({
   const [profileOpen, setProfileOpen] = useState(false);
   const pathname = usePathname();
   const needsOnboarding = !displayName;
-  const friendlyName = displayName || userEmail;
+  const niceDisplayName = formatName(displayName);
+  const niceEmail = displayEmail(userEmail);
+  const friendlyName = niceDisplayName || niceEmail;
   const initial = (friendlyName || '?').charAt(0).toUpperCase();
 
   // Restore desktop collapse preference
@@ -272,7 +275,7 @@ export default function Shell({
                     {friendlyName}
                   </span>
                   <span className="block truncate text-[10px] tracking-wide text-aegis-blue-100/50">
-                    {displayName ? userEmail : 'Signed in'}
+                    {displayName ? niceEmail : 'Signed in'}
                   </span>
                 </span>
               </button>

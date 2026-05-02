@@ -511,7 +511,10 @@ function ScheduleFormModal({
         />
 
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions
+          onCancel={onClose}
+          submitLabel={isEdit ? 'Update' : 'Create'}
+        />
       </form>
     </Modal>
   );

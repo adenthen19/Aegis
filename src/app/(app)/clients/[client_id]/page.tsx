@@ -27,6 +27,7 @@ import {
   type Profile,
   type ServiceTier,
 } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import ClientRowActions from '../row-actions';
 import ActionItemToggle from '../../meetings/action-item-toggle';
 import NewTodo from '../../todos/new-todo';
@@ -400,7 +401,7 @@ export default async function ClientDetailPage({
       <Breadcrumbs
         items={[
           { href: '/clients', label: 'Clients' },
-          { label: client.corporate_name },
+          { label: displayCompany(client.corporate_name) },
         ]}
       />
 
@@ -411,7 +412,7 @@ export default async function ClientDetailPage({
               {client.logo_url ? (
                 <Image
                   src={client.logo_url}
-                  alt={client.corporate_name}
+                  alt={displayCompany(client.corporate_name)}
                   width={224}
                   height={112}
                   unoptimized
@@ -419,11 +420,11 @@ export default async function ClientDetailPage({
                 />
               ) : (
                 <span className="text-[10px] font-medium uppercase text-aegis-gray-300">
-                  {client.corporate_name.slice(0, 2)}
+                  {displayCompany(client.corporate_name).slice(0, 2)}
                 </span>
               )}
             </span>
-            <span>{client.corporate_name}</span>
+            <span>{displayCompany(client.corporate_name)}</span>
           </span>
         }
         subtitle={
@@ -489,7 +490,7 @@ export default async function ClientDetailPage({
             <>
               <Section title="Profile">
                 <FieldGrid>
-                  <Field label="Company name">{client.corporate_name}</Field>
+                  <Field label="Company name">{displayCompany(client.corporate_name)}</Field>
                   <Field label="Ticker code">
                     {client.ticker_code ?? <span className="text-aegis-gray-300">—</span>}
                   </Field>

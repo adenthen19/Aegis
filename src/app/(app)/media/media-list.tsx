@@ -7,6 +7,12 @@ import DataTableSelectable, {
 } from '@/components/data-table-selectable';
 import type { MediaContact } from '@/lib/types';
 import { whatsAppUrl } from '@/lib/contact-helpers';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 import WhatsAppIcon from '@/components/whatsapp-icon';
 import MediaRowActions from './row-actions';
 import { bulkDeleteMediaContactsAction } from './actions';
@@ -84,14 +90,19 @@ export default function MediaList({
               href={`/media/${r.media_id}`}
               className="font-medium text-aegis-navy hover:text-aegis-orange"
             >
-              {r.full_name}
+              {displayName(r.full_name)}
             </Link>
           ),
         },
         {
           header: 'Company',
           sortKey: 'company_name',
-          cell: (r) => r.company_name ?? <span className="text-aegis-gray-300">—</span>,
+          cell: (r) =>
+            r.company_name ? (
+              displayCompany(r.company_name)
+            ) : (
+              <span className="text-aegis-gray-300">—</span>
+            ),
         },
         {
           header: 'State',
@@ -112,8 +123,9 @@ export default function MediaList({
               return <span className="text-aegis-gray-300">—</span>;
             }
             const wa = whatsAppUrl(r.contact_number);
+            const display = displayPhone(r.contact_number);
             if (!wa) {
-              return <span className="tabular-nums text-aegis-gray">{r.contact_number}</span>;
+              return <span className="tabular-nums text-aegis-gray">{display}</span>;
             }
             return (
               <a
@@ -124,7 +136,7 @@ export default function MediaList({
                 title="Open WhatsApp chat"
               >
                 <WhatsAppIcon />
-                {r.contact_number}
+                {display}
               </a>
             );
           },
@@ -132,17 +144,19 @@ export default function MediaList({
         {
           header: 'Email',
           sortKey: 'email',
-          cell: (r) =>
-            r.email ? (
+          cell: (r) => {
+            const lower = displayEmail(r.email);
+            return lower ? (
               <a
-                href={`mailto:${r.email}`}
+                href={`mailto:${lower}`}
                 className="text-aegis-navy hover:text-aegis-orange"
               >
-                {r.email}
+                {lower}
               </a>
             ) : (
               <span className="text-aegis-gray-300">—</span>
-            ),
+            );
+          },
         },
         { header: '', cell: (r) => <MediaRowActions row={r} /> },
       ]}

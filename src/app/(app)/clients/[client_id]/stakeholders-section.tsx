@@ -9,6 +9,7 @@ import {
   type ClientStakeholder,
   type StakeholderCategory,
 } from '@/lib/types';
+import { displayEmail, displayName } from '@/lib/display-format';
 import {
   type ActionState,
   createStakeholderAction,
@@ -99,7 +100,7 @@ function StakeholderRow({
     <li className="flex items-start gap-3 px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium text-aegis-navy">{row.full_name}</span>
+          <span className="text-sm font-medium text-aegis-navy">{displayName(row.full_name)}</span>
           <span className="text-[11px] text-aegis-gray-500">{row.role}</span>
           {row.is_primary && (
             <span className="inline-flex items-center rounded-full bg-aegis-orange-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-orange/30">
@@ -110,10 +111,10 @@ function StakeholderRow({
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-aegis-gray-500">
           {row.email && (
             <a
-              href={`mailto:${row.email}`}
+              href={`mailto:${displayEmail(row.email)}`}
               className="hover:text-aegis-navy"
             >
-              {row.email}
+              {displayEmail(row.email)}
             </a>
           )}
           {row.phone && <span className="tabular-nums">{row.phone}</span>}
@@ -162,7 +163,7 @@ function StakeholderRow({
         onClose={() => setConfirmOpen(false)}
         onConfirm={() => deleteStakeholderAction(row.stakeholder_id)}
         title="Delete stakeholder?"
-        description={`This will permanently remove "${row.full_name}" from this client.`}
+        description={`This will permanently remove "${displayName(row.full_name)}" from this client.`}
         confirmLabel="Delete"
         destructive
       />
@@ -223,12 +224,12 @@ function EditStakeholderModal({
       open={open}
       onClose={onClose}
       title="Edit stakeholder"
-      description={row.full_name}
+      description={displayName(row.full_name)}
     >
       <form action={action} className="space-y-4">
         <StakeholderFormFields clientId={clientId} initial={row} />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

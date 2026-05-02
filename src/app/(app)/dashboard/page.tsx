@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import type { ProjectStatus, ServiceTier } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 
 type ProjectRow = {
   project_id: string;
@@ -72,8 +73,10 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const sevenDaysAgo = new Date(Date.now() - 7 * MS_PER_DAY).toISOString();
   const { data: { user } } = await supabase.auth.getUser();
-  const displayName = (user?.user_metadata?.display_name as string | undefined)?.trim() ?? '';
-  const firstName = displayName ? displayName.split(/\s+/)[0] : '';
+  const friendlyDisplayName = displayName(
+    (user?.user_metadata?.display_name as string | undefined) ?? '',
+  );
+  const firstName = friendlyDisplayName ? friendlyDisplayName.split(/\s+/)[0] : '';
 
   const [
     cClients, cAnalysts, cMedia, cProjects,
@@ -311,10 +314,12 @@ export default async function DashboardPage() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-aegis-navy">
-                        {p.deliverable_name}
+                        {displayName(p.deliverable_name)}
                       </p>
                       <p className="truncate text-xs text-aegis-gray-500">
-                        {p.clients?.corporate_name ?? '—'}
+                        {p.clients?.corporate_name
+                          ? displayCompany(p.clients.corporate_name)
+                          : '—'}
                       </p>
                     </div>
                     <span
@@ -350,7 +355,16 @@ export default async function DashboardPage() {
               {meetings.map((m) => {
                 const preview = m.summary || m.other_remarks;
                 const title =
-                  [m.clients?.corporate_name, m.analysts?.institution_name].filter(Boolean).join(' × ') ||
+                  [
+                    m.clients?.corporate_name
+                      ? displayCompany(m.clients.corporate_name)
+                      : null,
+                    m.analysts?.institution_name
+                      ? displayCompany(m.analysts.institution_name)
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' × ') ||
                   (m.meeting_type === 'internal' ? 'Internal meeting' : '—');
                 return (
                   <li key={m.meeting_id} className="py-3">

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Modal from '@/components/ui/modal';
 import { createClient } from '@/lib/supabase/client';
+import { displayEmail } from '@/lib/display-format';
 import AvatarUpload from './avatar-upload';
 
 export default function ProfileDialog({
@@ -116,7 +117,7 @@ export default function ProfileDialog({
             Email
           </span>
           <p className="rounded-md border border-aegis-gray-100 bg-aegis-gray-50/60 px-3 py-2 text-sm text-aegis-gray-500">
-            {email}
+            {displayEmail(email)}
           </p>
           <p className="mt-1 text-[11px] text-aegis-gray-300">Email is managed via Supabase Auth.</p>
         </div>

@@ -384,7 +384,7 @@ function EditEngagementModal({
           clientTiers={clientTiers}
         />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

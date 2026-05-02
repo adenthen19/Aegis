@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
+import { displayCompany, displayName } from '@/lib/display-format';
 
 /**
  * Firm-wide activity feed. Derives from the audit columns on every business
@@ -33,7 +34,8 @@ type FeedItem = {
 
 function actorLabel(a: ActorJoin): string {
   if (!a) return 'Someone';
-  return (a.display_name && a.display_name.trim()) || a.email;
+  const friendly = displayName(a.display_name ?? '');
+  return friendly || a.email.toLowerCase();
 }
 
 function actorInitial(a: ActorJoin): string {
@@ -232,7 +234,7 @@ export default async function ActivityPage() {
     at: r.created_at,
     actor: r.profiles,
     verb: 'Logged coverage',
-    detail: `${r.headline} — ${r.publication_name}`,
+    detail: `${r.headline} — ${displayCompany(r.publication_name)}`,
     href: r.clients ? `/clients/${r.clients.client_id}` : null,
     client: r.clients ?? null,
   }));
@@ -247,7 +249,7 @@ export default async function ActivityPage() {
     at: r.created_at,
     actor: r.profiles,
     verb: 'Opened engagement',
-    detail: r.name,
+    detail: displayName(r.name),
     href: r.clients ? `/clients/${r.clients.client_id}` : null,
     client: r.clients ?? null,
   }));
@@ -262,7 +264,7 @@ export default async function ActivityPage() {
     at: r.created_at,
     actor: r.profiles,
     verb: 'Added stakeholder',
-    detail: `${r.full_name} (${r.role})`,
+    detail: `${displayName(r.full_name)} (${r.role})`,
     href: r.clients ? `/clients/${r.clients.client_id}` : null,
     client: r.clients ?? null,
   }));
@@ -292,7 +294,9 @@ export default async function ActivityPage() {
     at: r.created_at,
     actor: r.profiles,
     verb: 'Added analyst',
-    detail: r.full_name ? `${r.full_name} — ${r.institution_name}` : r.institution_name,
+    detail: r.full_name
+      ? `${displayName(r.full_name)} — ${displayCompany(r.institution_name)}`
+      : displayCompany(r.institution_name),
     href: `/analysts/${r.investor_id}`,
     client: null,
   }));
@@ -307,7 +311,9 @@ export default async function ActivityPage() {
     at: r.created_at,
     actor: r.profiles,
     verb: 'Added media contact',
-    detail: r.company_name ? `${r.full_name} — ${r.company_name}` : r.full_name,
+    detail: r.company_name
+      ? `${displayName(r.full_name)} — ${displayCompany(r.company_name)}`
+      : displayName(r.full_name),
     href: `/media/${r.media_id}`,
     client: null,
   }));
@@ -375,7 +381,7 @@ export default async function ActivityPage() {
                         href={`/clients/${item.client.client_id}`}
                         className="font-medium text-aegis-navy hover:text-aegis-orange"
                       >
-                        {item.client.corporate_name}
+                        {displayCompany(item.client.corporate_name)}
                       </Link>
                     </>
                   )}

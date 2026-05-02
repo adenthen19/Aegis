@@ -27,7 +27,7 @@ export default function EditMediaContact({
       <form action={action} className="space-y-4">
         <MediaFormFields initial={row} />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

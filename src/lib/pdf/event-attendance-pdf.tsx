@@ -12,6 +12,7 @@ import {
   View,
 } from '@react-pdf/renderer';
 import type { EventGuest } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Aegis brand palette — pulled from globals.css so the PDF matches the app.
@@ -318,10 +319,12 @@ export function EventAttendancePdf({
   const pct = total === 0 ? 0 : Math.round((checkedIn / total) * 100);
 
   // Per-company stats — used in both the cover summary and the breakdown
-  // table on page 2+.
+  // table on page 2+. We display-normalise the company key so different
+  // casings of the same firm (`RHB`, `rhb`, `Rhb`) collapse together.
   const companyMap = new Map<string, { total: number; checkedIn: number }>();
   for (const g of guests) {
-    const key = (g.company?.trim() || 'Independent / unknown').slice(0, 80);
+    const display = g.company ? displayCompany(g.company) : 'Independent / unknown';
+    const key = display.slice(0, 80);
     const slot = companyMap.get(key) ?? { total: 0, checkedIn: 0 };
     slot.total += 1;
     if (g.checked_in) slot.checkedIn += 1;
@@ -345,7 +348,7 @@ export function EventAttendancePdf({
 
   return (
     <Document
-      title={`Attendance — ${event.name}`}
+      title={`Attendance — ${displayName(event.name)}`}
       author="Aegis Communication"
     >
       <Page size="A4" style={styles.page} wrap>
@@ -377,10 +380,10 @@ export function EventAttendancePdf({
           </View>
           <View style={styles.headerEventRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerEventTitle}>{event.name}</Text>
+              <Text style={styles.headerEventTitle}>{displayName(event.name)}</Text>
               {event.clientLabel && (
                 <Text style={styles.headerEventClient}>
-                  For {event.clientLabel}
+                  For {displayCompany(event.clientLabel)}
                 </Text>
               )}
             </View>
@@ -591,13 +594,13 @@ export function EventAttendancePdf({
                     },
                   ]}
                 >
-                  {g.full_name}
+                  {displayName(g.full_name)}
                 </Text>
                 <Text style={[styles.td, { flex: GUEST_COLS.title }]}>
-                  {g.title || '—'}
+                  {g.title ? displayName(g.title) : '—'}
                 </Text>
                 <Text style={[styles.td, { flex: GUEST_COLS.company }]}>
-                  {g.company || '—'}
+                  {g.company ? displayCompany(g.company) : '—'}
                 </Text>
                 <Text
                   style={[

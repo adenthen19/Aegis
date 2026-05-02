@@ -10,6 +10,7 @@ import {
   type PressReleaseStatus,
   type ScheduleStatus,
 } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import { currentBlackout } from '../clients/blackout-helpers';
 
 const PRESS_BADGE: Record<PressReleaseStatus, string> = {
@@ -239,7 +240,7 @@ export default async function DirectorDashboardPage() {
   for (const c of blackoutCommits) {
     if (!c.clients) continue;
     const cur = byClient.get(c.clients.client_id) ?? {
-      name: c.clients.corporate_name,
+      name: displayCompany(c.clients.corporate_name),
       deliverables: [],
     };
     cur.deliverables.push(c);
@@ -348,7 +349,7 @@ export default async function DirectorDashboardPage() {
                           href={`/clients/${d.clients.client_id}`}
                           className="text-xs font-medium text-aegis-navy hover:text-aegis-orange"
                         >
-                          {d.clients.corporate_name}
+                          {displayCompany(d.clients.corporate_name)}
                         </Link>
                       )}
                       {isBursa && (
@@ -401,7 +402,7 @@ export default async function DirectorDashboardPage() {
                         href={`/clients/${s.client_deliverables.clients.client_id}`}
                         className="ml-auto text-[11px] text-aegis-gray-500 hover:text-aegis-navy"
                       >
-                        {s.client_deliverables.clients.corporate_name}
+                        {displayCompany(s.client_deliverables.clients.corporate_name)}
                       </Link>
                     )}
                   </div>
@@ -433,10 +434,10 @@ export default async function DirectorDashboardPage() {
                           href={`/clients/${e.clients.client_id}`}
                           className="text-xs font-medium text-aegis-navy hover:text-aegis-orange"
                         >
-                          {e.clients.corporate_name}
+                          {displayCompany(e.clients.corporate_name)}
                         </Link>
                       )}
-                      <span className="text-[11px] text-aegis-gray-500">{e.name}</span>
+                      <span className="text-[11px] text-aegis-gray-500">{displayName(e.name)}</span>
                       <span className="ml-auto text-[11px] tabular-nums text-aegis-gray-500">
                         Ends {fmtDate(e.end_date)}
                         <span
@@ -475,7 +476,7 @@ export default async function DirectorDashboardPage() {
                         href={`/clients/${p.clients.client_id}`}
                         className="text-xs font-medium text-aegis-navy hover:text-aegis-orange"
                       >
-                        {p.clients.corporate_name}
+                        {displayCompany(p.clients.corporate_name)}
                       </Link>
                     )}
                     <span
@@ -511,7 +512,7 @@ export default async function DirectorDashboardPage() {
                         href={`/clients/${c.clients.client_id}`}
                         className="text-xs font-medium text-aegis-navy hover:text-aegis-orange"
                       >
-                        {c.clients.corporate_name}
+                        {displayCompany(c.clients.corporate_name)}
                       </Link>
                     )}
                     {c.sentiment && (
@@ -534,7 +535,7 @@ export default async function DirectorDashboardPage() {
                   </div>
                   <p className="mt-0.5 text-[12px] text-aegis-gray">
                     {c.headline}
-                    <span className="text-aegis-gray-500"> · {c.publication_name}</span>
+                    <span className="text-aegis-gray-500"> · {displayCompany(c.publication_name)}</span>
                   </p>
                   {(c.ave_value != null || c.prv_value != null) && (
                     <p className="mt-0.5 text-[11px] tabular-nums text-aegis-gray-500">

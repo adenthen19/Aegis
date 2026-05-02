@@ -12,6 +12,7 @@ import {
   type Client,
   type ServiceTier,
 } from '@/lib/types';
+import { displayCompany } from '@/lib/display-format';
 import NewClient from './new-client';
 import ClientRowActions from './row-actions';
 import ImportClients from './import-clients';
@@ -131,7 +132,7 @@ export default async function ClientsPage({
                 {r.logo_url ? (
                   <Image
                     src={r.logo_url}
-                    alt={r.corporate_name}
+                    alt={displayCompany(r.corporate_name)}
                     width={160}
                     height={80}
                     unoptimized
@@ -139,7 +140,7 @@ export default async function ClientsPage({
                   />
                 ) : (
                   <span className="text-[10px] font-medium uppercase text-aegis-gray-300">
-                    {r.corporate_name.slice(0, 2)}
+                    {displayCompany(r.corporate_name).slice(0, 2)}
                   </span>
                 )}
               </div>
@@ -154,7 +155,7 @@ export default async function ClientsPage({
                   href={`/clients/${r.client_id}`}
                   className="block truncate font-medium text-aegis-navy hover:text-aegis-orange"
                 >
-                  {r.corporate_name}
+                  {displayCompany(r.corporate_name)}
                 </Link>
                 {r.ticker_code && (
                   <p className="text-[11px] font-medium tabular-nums text-aegis-gray-500">

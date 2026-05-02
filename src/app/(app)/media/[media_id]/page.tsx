@@ -5,6 +5,12 @@ import {
 } from '@/components/detail-shell';
 import type { MediaContact } from '@/lib/types';
 import { whatsAppUrl } from '@/lib/contact-helpers';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 import WhatsAppIcon from '@/components/whatsapp-icon';
 import MediaRowActions from '../row-actions';
 
@@ -20,26 +26,30 @@ export default async function MediaDetailPage({
   const contact = data as MediaContact | null;
   if (!contact) notFound();
 
+  const niceName = displayName(contact.full_name);
+  const niceCompany = displayCompany(contact.company_name);
+  const niceEmail = displayEmail(contact.email);
+
   return (
     <div>
       <Breadcrumbs items={[
         { href: '/media', label: 'Media Contacts' },
-        { label: contact.full_name },
+        { label: niceName },
       ]} />
 
       <DetailHeader
-        title={contact.full_name}
+        title={niceName}
         subtitle={
-          [contact.company_name, contact.state].filter(Boolean).join(' · ') || undefined
+          [niceCompany, contact.state].filter(Boolean).join(' · ') || undefined
         }
         actions={<MediaRowActions row={contact} />}
       />
 
       <Section title="Profile">
         <FieldGrid>
-          <Field label="Name">{contact.full_name}</Field>
+          <Field label="Name">{niceName}</Field>
           <Field label="Company name">
-            {contact.company_name ?? <span className="text-aegis-gray-300">—</span>}
+            {niceCompany || <span className="text-aegis-gray-300">—</span>}
           </Field>
           <Field label="State">
             {contact.state ?? <span className="text-aegis-gray-300">—</span>}
@@ -48,6 +58,7 @@ export default async function MediaDetailPage({
             {contact.contact_number ? (
               (() => {
                 const wa = whatsAppUrl(contact.contact_number);
+                const display = displayPhone(contact.contact_number);
                 return wa ? (
                   <a
                     href={wa}
@@ -57,10 +68,10 @@ export default async function MediaDetailPage({
                     title="Open WhatsApp chat"
                   >
                     <WhatsAppIcon className="h-4 w-4 text-emerald-500" />
-                    {contact.contact_number}
+                    {display}
                   </a>
                 ) : (
-                  <span className="tabular-nums text-aegis-gray">{contact.contact_number}</span>
+                  <span className="tabular-nums text-aegis-gray">{display}</span>
                 );
               })()
             ) : (
@@ -68,12 +79,12 @@ export default async function MediaDetailPage({
             )}
           </Field>
           <Field label="Email">
-            {contact.email ? (
+            {niceEmail ? (
               <a
-                href={`mailto:${contact.email}`}
+                href={`mailto:${niceEmail}`}
                 className="text-aegis-navy hover:text-aegis-orange"
               >
-                {contact.email}
+                {niceEmail}
               </a>
             ) : (
               <span className="text-aegis-gray-300">—</span>

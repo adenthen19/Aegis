@@ -10,6 +10,7 @@ import {
   type EventRow,
   type EventStatus,
 } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import NewEvent from './new-event';
 import EventRowActions from './row-actions';
 
@@ -147,7 +148,7 @@ export default async function EventsPage({
                   href={`/events/${r.event_id}`}
                   className="block truncate font-medium text-aegis-navy hover:text-aegis-orange"
                 >
-                  {r.name}
+                  {displayName(r.name)}
                 </Link>
                 {r.location && (
                   <p className="truncate text-[11px] text-aegis-gray-500">{r.location}</p>
@@ -164,11 +165,11 @@ export default async function EventsPage({
                     href={`/clients/${r.client_id}`}
                     className="truncate text-xs text-aegis-navy hover:text-aegis-orange"
                   >
-                    {r.clients.corporate_name}
+                    {displayCompany(r.clients.corporate_name)}
                   </Link>
                 ) : r.adhoc_client_name ? (
                   <span className="text-xs text-aegis-gray">
-                    {r.adhoc_client_name}
+                    {displayCompany(r.adhoc_client_name)}
                     <span className="ml-1.5 inline-flex rounded-full bg-aegis-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aegis-gray-500">
                       ad-hoc
                     </span>

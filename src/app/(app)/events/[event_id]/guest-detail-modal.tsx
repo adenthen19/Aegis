@@ -13,6 +13,12 @@ import {
 } from '../actions';
 import type { EventGuest } from '@/lib/types';
 import { whatsAppUrl } from '@/lib/contact-helpers';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 import WhatsAppIcon from '@/components/whatsapp-icon';
 
 const initialState: ActionState = { ok: false, error: null };
@@ -64,7 +70,7 @@ export default function GuestDetailModal({
       <Modal
         open={open}
         onClose={onClose}
-        title={editMode ? 'Edit guest' : guest.full_name}
+        title={editMode ? 'Edit guest' : displayName(guest.full_name)}
         description={
           editMode
             ? 'Update contact info or notes.'
@@ -103,12 +109,13 @@ export default function GuestDetailModal({
             )}
 
             <div className="space-y-2.5">
-              <Row label="Title">{guest.title || '—'}</Row>
-              <Row label="Company">{guest.company || '—'}</Row>
+              <Row label="Title">{guest.title ? displayName(guest.title) : '—'}</Row>
+              <Row label="Company">{guest.company ? displayCompany(guest.company) : '—'}</Row>
               <Row label="Contact number">
                 {guest.contact_number ? (
                   (() => {
                     const wa = whatsAppUrl(guest.contact_number);
+                    const display = displayPhone(guest.contact_number);
                     return wa ? (
                       <a
                         href={wa}
@@ -118,10 +125,10 @@ export default function GuestDetailModal({
                         title="Open WhatsApp chat"
                       >
                         <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-500" />
-                        {guest.contact_number}
+                        {display}
                       </a>
                     ) : (
-                      <span className="tabular-nums text-aegis-gray">{guest.contact_number}</span>
+                      <span className="tabular-nums text-aegis-gray">{display}</span>
                     );
                   })()
                 ) : (
@@ -129,16 +136,19 @@ export default function GuestDetailModal({
                 )}
               </Row>
               <Row label="Email">
-                {guest.email ? (
-                  <a
-                    href={`mailto:${guest.email}`}
-                    className="text-aegis-navy hover:text-aegis-orange"
-                  >
-                    {guest.email}
-                  </a>
-                ) : (
-                  '—'
-                )}
+                {(() => {
+                  const lower = displayEmail(guest.email);
+                  return lower ? (
+                    <a
+                      href={`mailto:${lower}`}
+                      className="text-aegis-navy hover:text-aegis-orange"
+                    >
+                      {lower}
+                    </a>
+                  ) : (
+                    '—'
+                  );
+                })()}
               </Row>
               {!guest.table_number && <Row label="Table">—</Row>}
               {guest.notes && (
@@ -267,7 +277,7 @@ function EditForm({ guest, onDone }: { guest: EventGuest; onDone: () => void }) 
       <input type="hidden" name="guest_id" value={guest.guest_id} />
       <GuestFormFields initial={guest} />
       <FormError message={state.error} />
-      <FormActions onCancel={onDone} />
+      <FormActions onCancel={onDone} submitLabel="Update" />
     </form>
   );
 }

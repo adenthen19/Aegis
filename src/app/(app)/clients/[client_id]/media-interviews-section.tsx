@@ -10,6 +10,7 @@ import {
   type InterviewStatus,
   type MediaInterview,
 } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import {
   createMediaInterviewAction,
   deleteMediaInterviewAction,
@@ -66,10 +67,13 @@ function outletLabel(
   if (row.media_id) {
     const c = mediaContacts.find((m) => m.media_id === row.media_id);
     if (c) {
-      return c.company_name ? `${c.full_name} · ${c.company_name}` : c.full_name;
+      const name = displayName(c.full_name);
+      return c.company_name
+        ? `${name} · ${displayCompany(c.company_name)}`
+        : name;
     }
   }
-  return row.publication_name ?? '—';
+  return row.publication_name ? displayCompany(row.publication_name) : '—';
 }
 
 export default function MediaInterviewsSection({
@@ -182,9 +186,9 @@ function InterviewRow({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-aegis-gray-500">
             <span className="tabular-nums">{formatDateTime(row.interview_date)}</span>
-            {row.reporter_name && <span>· {row.reporter_name}</span>}
+            {row.reporter_name && <span>· {displayName(row.reporter_name)}</span>}
             {row.spokesperson_name && (
-              <span>· Spokesperson: {row.spokesperson_name}</span>
+              <span>· Spokesperson: {displayName(row.spokesperson_name)}</span>
             )}
             {row.expected_publish_date && (
               <span>· Expect publish: {formatDate(row.expected_publish_date)}</span>
@@ -367,7 +371,7 @@ function EditInterviewModal({
           coverageOptions={coverageOptions}
         />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

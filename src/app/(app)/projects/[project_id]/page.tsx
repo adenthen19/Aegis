@@ -5,6 +5,7 @@ import {
   Breadcrumbs, DetailHeader, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
 import type { Project, ProjectStatus } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import ProjectRowActions from '../row-actions';
 
 const STATUS_STYLES: Record<ProjectStatus, string> = {
@@ -50,18 +51,18 @@ export default async function ProjectDetailPage({
     <div>
       <Breadcrumbs items={[
         { href: '/projects', label: 'Projects' },
-        { label: project.deliverable_name },
+        { label: displayName(project.deliverable_name) },
       ]} />
 
       <DetailHeader
-        title={project.deliverable_name}
+        title={displayName(project.deliverable_name)}
         subtitle={
           project.clients?.corporate_name ? (
             <Link
               href={`/clients/${project.clients.client_id}`}
               className="text-aegis-navy hover:text-aegis-orange"
             >
-              {project.clients.corporate_name}
+              {displayCompany(project.clients.corporate_name)}
             </Link>
           ) : undefined
         }
@@ -84,14 +85,14 @@ export default async function ProjectDetailPage({
 
       <Section title="Details">
         <FieldGrid>
-          <Field label="Deliverable">{project.deliverable_name}</Field>
+          <Field label="Deliverable">{displayName(project.deliverable_name)}</Field>
           <Field label="Client">
             {project.clients?.corporate_name ? (
               <Link
                 href={`/clients/${project.clients.client_id}`}
                 className="text-aegis-navy hover:text-aegis-orange"
               >
-                {project.clients.corporate_name}
+                {displayCompany(project.clients.corporate_name)}
               </Link>
             ) : (
               <span className="text-aegis-gray-300">—</span>

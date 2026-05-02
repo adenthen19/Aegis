@@ -1,6 +1,12 @@
 import ExcelJS from 'exceljs';
 import { createClient } from '@/lib/supabase/server';
 import type { EventGuest, EventGuestCheckin } from '@/lib/types';
+import {
+  displayCompany,
+  displayEmail,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
 
 type AuditRow = {
   performed_at: string;
@@ -139,12 +145,12 @@ export async function GET(
   titleRow.height = 26;
 
   summary.addRow([]);
-  const eventNameRow = summary.addRow(['Event', event.name as string]);
+  const eventNameRow = summary.addRow(['Event', displayName(event.name as string)]);
   eventNameRow.getCell(1).font = { bold: true, color: { argb: COLORS.gray400 } };
   eventNameRow.getCell(2).font = { bold: true, size: 13, color: { argb: COLORS.navy } };
 
   if (clientLabel) {
-    const r = summary.addRow(['Client', clientLabel]);
+    const r = summary.addRow(['Client', displayCompany(clientLabel)]);
     r.getCell(1).font = { bold: true, color: { argb: COLORS.gray400 } };
   }
   const dateRow = summary.addRow(['Date & time', fmtDate(event.event_date as string)]);
@@ -205,7 +211,8 @@ export async function GET(
 
   const companyMap = new Map<string, { total: number; checkedIn: number }>();
   for (const g of rows) {
-    const key = (g.company?.trim() || 'Independent / unknown').slice(0, 80);
+    const display = g.company ? displayCompany(g.company) : 'Independent / unknown';
+    const key = display.slice(0, 80);
     const slot = companyMap.get(key) ?? { total: 0, checkedIn: 0 };
     slot.total += 1;
     if (g.checked_in) slot.checkedIn += 1;
@@ -267,11 +274,11 @@ export async function GET(
 
   for (const g of sorted) {
     const row = sheet.addRow({
-      full_name: g.full_name,
-      title: g.title ?? '',
-      company: g.company ?? '',
-      email: g.email ?? '',
-      contact_number: g.contact_number ?? '',
+      full_name: displayName(g.full_name),
+      title: g.title ? displayName(g.title) : '',
+      company: g.company ? displayCompany(g.company) : '',
+      email: displayEmail(g.email),
+      contact_number: g.contact_number ? displayPhone(g.contact_number) : '',
       table_number: g.table_number ?? '',
       status: g.checked_in ? 'Checked in' : 'Pending',
       checked_in_at: g.checked_in_at
@@ -341,8 +348,8 @@ export async function GET(
           second: '2-digit',
           hour12: false,
         }),
-        guest: row.guest_name ?? '—',
-        company: row.guest_company ?? '',
+        guest: row.guest_name ? displayName(row.guest_name) : '—',
+        company: row.guest_company ? displayCompany(row.guest_company) : '',
         action: row.action === 'checkin' ? 'Checked in' : 'Undo',
         by: row.performed_by_label ?? '—',
         source:

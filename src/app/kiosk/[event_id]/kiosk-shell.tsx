@@ -6,6 +6,11 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { EventGuest } from '@/lib/types';
 import {
+  displayCompany,
+  displayName,
+  displayPhone,
+} from '@/lib/display-format';
+import {
   kioskCheckInAction,
   kioskUndoCheckInAction,
   type KioskCheckInResult,
@@ -351,8 +356,8 @@ export default function KioskShell({
       // re-fire the action. (Server will confirm if we did fire it anyway.)
       flashToast({
         kind: 'success',
-        name: guest.full_name,
-        company: guest.company,
+        name: displayName(guest.full_name),
+        company: guest.company ? displayCompany(guest.company) : null,
         table: guest.table_number,
         already: true,
       });
@@ -382,8 +387,8 @@ export default function KioskShell({
       rememberLastChecked(result.guest.guest_id);
       flashToast({
         kind: 'success',
-        name: result.guest.full_name,
-        company: result.guest.company,
+        name: displayName(result.guest.full_name),
+        company: result.guest.company ? displayCompany(result.guest.company) : null,
         table: result.guest.table_number,
         already: result.already,
       });
@@ -443,11 +448,11 @@ export default function KioskShell({
                 )}
               </p>
               <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
-                {eventName}
+                {displayName(eventName)}
               </h1>
               <p className="truncate text-[12px] text-aegis-gray-500 sm:text-sm">
                 {[
-                  clientLabel,
+                  clientLabel ? displayCompany(clientLabel) : null,
                   new Date(eventDate).toLocaleString(undefined, {
                     dateStyle: 'medium',
                     timeStyle: 'short',
@@ -620,7 +625,7 @@ export default function KioskShell({
                       className="rounded-2xl border border-aegis-gray-100 bg-white"
                     >
                       <p className="border-b border-aegis-gray-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500 sm:px-5">
-                        {grp.company}
+                        {displayCompany(grp.company)}
                       </p>
                       <ul className="divide-y divide-aegis-gray-100">
                         {grp.colleagues.map((g) => (
@@ -808,16 +813,21 @@ function GuestCard({
       >
         <div className="min-w-0 flex-1">
           <p className={`${nameClasses} text-aegis-navy`}>
-            {highlight(guest.full_name, classified)}
+            {highlight(displayName(guest.full_name), classified)}
           </p>
           <p className={`${subClasses} mt-0.5 text-aegis-gray-500`}>
-            {[guest.title, guest.company].filter(Boolean).join(' · ') || '—'}
+            {[
+              guest.title ? displayName(guest.title) : null,
+              guest.company ? displayCompany(guest.company) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
             {guest.contact_number && (
               <>
                 {' · '}
                 {classified.isPhone
-                  ? highlight(guest.contact_number, classified)
-                  : guest.contact_number}
+                  ? highlight(displayPhone(guest.contact_number), classified)
+                  : displayPhone(guest.contact_number)}
               </>
             )}
           </p>

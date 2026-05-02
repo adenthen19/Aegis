@@ -70,3 +70,46 @@ body {
 .aegis-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(97, 181, 217, 0.6);
 }
+
+/* Sidebar / nav link pending spinner.
+   The slot reserves a 3.5×3.5 box so the layout never shifts. The dot
+   inside fades in only after a 120 ms delay — fast prefetched routes
+   never get a flash, slower ones get a clear spinner.
+   Used by `<LinkPendingSpinner />` (see components/link-pending-spinner.tsx). */
+.link-pending-dot {
+  opacity: 0;
+  visibility: hidden;
+  animation: aegis-spin 0.9s linear infinite;
+  animation-play-state: paused;
+}
+.link-pending-slot[data-pending="true"] .link-pending-dot {
+  visibility: visible;
+  animation-play-state: running;
+  animation-name: aegis-spin, aegis-fade-in;
+  animation-duration: 0.9s, 0.2s;
+  animation-delay: 0s, 0.12s;
+  animation-timing-function: linear, ease;
+  animation-iteration-count: infinite, 1;
+  animation-fill-mode: none, forwards;
+}
+
+@keyframes aegis-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes aegis-fade-in {
+  to {
+    opacity: 0.95;
+  }
+}
+
+/* Tactile press: a tiny scale-down on click for nav buttons / sidebar
+   items so the user gets instant feedback before the route transitions.
+   Applied via `aegis-press` utility class. */
+.aegis-press {
+  transition: transform 0.08s ease;
+}
+.aegis-press:active {
+  transform: scale(0.97);
+}

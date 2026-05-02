@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { UserRole } from '@/lib/types';
+import LinkPendingSpinner from '@/components/link-pending-spinner';
 import GlobalSearch from './global-search';
 
 type Item = { href: string; label: string; icon: React.ReactNode };
@@ -249,9 +250,10 @@ export default function SidebarNav({
                   )}
                   <Link
                     href={item.href}
+                    onClick={onNavigate}
                     title={collapsed ? item.label : undefined}
                     className={[
-                      'group flex items-center rounded-md text-sm transition-colors',
+                      'aegis-press group flex items-center rounded-md text-sm transition-colors',
                       collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
                       active
                         ? 'bg-aegis-navy-700/80 font-medium text-white'
@@ -270,7 +272,16 @@ export default function SidebarNav({
                     {collapsed ? (
                       <span className="sr-only">{item.label}</span>
                     ) : (
-                      item.label
+                      <>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        <LinkPendingSpinner
+                          className={
+                            active
+                              ? 'text-white'
+                              : 'text-aegis-blue-100/70 group-hover:text-white'
+                          }
+                        />
+                      </>
                     )}
                   </Link>
                 </li>

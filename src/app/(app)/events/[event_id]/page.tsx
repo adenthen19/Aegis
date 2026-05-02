@@ -15,6 +15,7 @@ import {
   type EventRow,
   type EventStatus,
 } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import EditEventButton from './edit-event-button';
 import EventStatusSelect from './event-status-select';
 import GuestList from './guest-list';
@@ -132,11 +133,11 @@ export default async function EventDetailPage({
       <Breadcrumbs
         items={[
           { href: '/events', label: 'Events' },
-          { label: event.name },
+          { label: displayName(event.name) },
         ]}
       />
       <DetailHeader
-        title={event.name}
+        title={displayName(event.name)}
         subtitle={
           event.clients ? (
             <>
@@ -145,12 +146,12 @@ export default async function EventDetailPage({
                 href={`/clients/${event.clients.client_id}`}
                 className="font-medium text-aegis-navy hover:text-aegis-orange"
               >
-                {event.clients.corporate_name}
+                {displayCompany(event.clients.corporate_name)}
               </Link>
             </>
           ) : event.adhoc_client_name ? (
             <>
-              For <span className="font-medium text-aegis-gray">{event.adhoc_client_name}</span>
+              For <span className="font-medium text-aegis-gray">{displayCompany(event.adhoc_client_name)}</span>
               <span className="ml-2 inline-flex rounded-full bg-aegis-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aegis-gray-500">
                 ad-hoc
               </span>

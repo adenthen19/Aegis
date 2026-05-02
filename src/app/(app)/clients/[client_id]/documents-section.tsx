@@ -422,7 +422,7 @@ function UploadFileForm({
       />
 
       <FormError message={state.error} />
-      <FormActions onCancel={onDone} />
+      <FormActions onCancel={onDone} submitLabel="Upload" pendingLabel="Uploading…" />
     </form>
   );
 }
@@ -483,7 +483,7 @@ function LinkExternalForm({
       />
 
       <FormError message={state.error} />
-      <FormActions onCancel={onDone} />
+      <FormActions onCancel={onDone} submitLabel="Save link" />
     </form>
   );
 }

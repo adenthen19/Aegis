@@ -52,7 +52,7 @@ export default function EditMeeting({
           profiles={profiles}
         />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

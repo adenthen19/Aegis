@@ -28,7 +28,7 @@ export default function EditProject({
       <form action={action} className="space-y-4">
         <ProjectFormFields initial={row} clients={clients} />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

@@ -5,6 +5,7 @@ import {
   Breadcrumbs, DetailHeader, EmptyMini, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
 import type { ActionItem, Meeting, Profile } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 import MeetingRowActions from '../row-actions';
 import ActionItemToggle from '../action-item-toggle';
 
@@ -17,7 +18,8 @@ type MeetingWithRefs = Meeting & {
 
 function profileLabel(p: Profile | null | undefined): string {
   if (!p) return 'Unassigned';
-  return p.display_name || p.email;
+  const friendly = displayName(p.display_name ?? '');
+  return friendly || p.email.toLowerCase();
 }
 
 export default async function MeetingDetailPage({
@@ -60,7 +62,14 @@ export default async function MeetingDetailPage({
     dateStyle: 'full', timeStyle: 'short',
   });
   const isInternal = meeting.meeting_type === 'internal';
-  const linked = [meeting.clients?.corporate_name, meeting.analysts?.institution_name]
+  const linked = [
+    meeting.clients?.corporate_name
+      ? displayCompany(meeting.clients.corporate_name)
+      : null,
+    meeting.analysts?.institution_name
+      ? displayCompany(meeting.analysts.institution_name)
+      : null,
+  ]
     .filter(Boolean)
     .join(' × ');
 
@@ -113,7 +122,7 @@ export default async function MeetingDetailPage({
                     href={`/clients/${meeting.clients.client_id}`}
                     className="text-aegis-navy hover:text-aegis-orange"
                   >
-                    {meeting.clients.corporate_name}
+                    {displayCompany(meeting.clients.corporate_name)}
                   </Link>
                 ) : (
                   <span className="text-aegis-gray-300">—</span>
@@ -125,7 +134,7 @@ export default async function MeetingDetailPage({
                     href={`/analysts/${meeting.analysts.investor_id}`}
                     className="text-aegis-navy hover:text-aegis-orange"
                   >
-                    {meeting.analysts.institution_name}
+                    {displayCompany(meeting.analysts.institution_name)}
                   </Link>
                 ) : (
                   <span className="text-aegis-gray-300">—</span>

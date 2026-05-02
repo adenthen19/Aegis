@@ -37,7 +37,7 @@ export default function EditUser({
       <form action={action} className="space-y-4">
         <UserFormFields initial={row} isEdit isSelf={isSelf} />
         <FormError message={state.error} />
-        <FormActions onCancel={onClose} />
+        <FormActions onCancel={onClose} submitLabel="Update" />
       </form>
     </Modal>
   );

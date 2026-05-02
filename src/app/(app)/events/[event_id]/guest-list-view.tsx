@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { EventGuest } from '@/lib/types';
+import { displayCompany, displayName } from '@/lib/display-format';
 
 type SortKey = 'default' | 'table' | 'name';
 
@@ -109,9 +110,15 @@ export default function GuestListView({
                     : 'hover:bg-aegis-navy-50/40',
                 ].join(' ')}
               >
-                <td className="px-5 py-3.5 font-medium text-aegis-navy">{g.full_name}</td>
-                <td className="px-5 py-3.5 text-aegis-gray">{g.title || '—'}</td>
-                <td className="px-5 py-3.5 text-aegis-gray">{g.company || '—'}</td>
+                <td className="px-5 py-3.5 font-medium text-aegis-navy">
+                  {displayName(g.full_name)}
+                </td>
+                <td className="px-5 py-3.5 text-aegis-gray">
+                  {g.title ? displayName(g.title) : '—'}
+                </td>
+                <td className="px-5 py-3.5 text-aegis-gray">
+                  {g.company ? displayCompany(g.company) : '—'}
+                </td>
                 <td className="px-5 py-3.5">
                   <TableBadge value={g.table_number} />
                 </td>
@@ -136,9 +143,16 @@ export default function GuestListView({
               ].join(' ')}
             >
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-aegis-navy">{g.full_name}</p>
+                <p className="text-sm font-medium text-aegis-navy">
+                  {displayName(g.full_name)}
+                </p>
                 <p className="text-[11px] text-aegis-gray-500">
-                  {[g.title, g.company].filter(Boolean).join(' · ') || '—'}
+                  {[
+                    g.title ? displayName(g.title) : null,
+                    g.company ? displayCompany(g.company) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || '—'}
                 </p>
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import { Section, EmptyMini } from '@/components/detail-shell';
+import { displayCompany, displayName } from '@/lib/display-format';
 
 const PER_GROUP_LIMIT = 8;
 
@@ -164,7 +165,7 @@ export default async function SearchPage({
                       href={`/clients/${c.client_id}`}
                       className="text-sm font-medium text-aegis-navy hover:text-aegis-orange"
                     >
-                      {c.corporate_name}
+                      {displayCompany(c.corporate_name)}
                     </Link>
                     {c.ticker_code && (
                       <span className="ml-2 text-[11px] text-aegis-gray-500">
@@ -186,7 +187,7 @@ export default async function SearchPage({
                   <li key={s.stakeholder_id} className="py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium text-aegis-navy">
-                        {s.full_name}
+                        {displayName(s.full_name)}
                       </span>
                       <span className="text-[11px] text-aegis-gray-500">{s.role}</span>
                     </div>
@@ -195,11 +196,11 @@ export default async function SearchPage({
                         href={`/clients/${s.clients.client_id}`}
                         className="text-[11px] text-aegis-gray-500 hover:text-aegis-navy"
                       >
-                        {s.clients.corporate_name}
+                        {displayCompany(s.clients.corporate_name)}
                       </Link>
                     )}
                     {s.email && (
-                      <span className="ml-2 text-[11px] text-aegis-gray-300">{s.email}</span>
+                      <span className="ml-2 text-[11px] text-aegis-gray-300">{s.email.toLowerCase()}</span>
                     )}
                   </li>
                 ))}
@@ -218,11 +219,13 @@ export default async function SearchPage({
                       href={`/analysts/${a.investor_id}`}
                       className="text-sm font-medium text-aegis-navy hover:text-aegis-orange"
                     >
-                      {a.full_name ?? a.institution_name}
+                      {a.full_name
+                        ? displayName(a.full_name)
+                        : displayCompany(a.institution_name)}
                     </Link>
                     {a.full_name && (
                       <span className="ml-2 text-[11px] text-aegis-gray-500">
-                        {a.institution_name}
+                        {displayCompany(a.institution_name)}
                       </span>
                     )}
                   </li>
@@ -242,11 +245,11 @@ export default async function SearchPage({
                       href={`/media/${m.media_id}`}
                       className="text-sm font-medium text-aegis-navy hover:text-aegis-orange"
                     >
-                      {m.full_name}
+                      {displayName(m.full_name)}
                     </Link>
                     {m.company_name && (
                       <span className="ml-2 text-[11px] text-aegis-gray-500">
-                        {m.company_name}
+                        {displayCompany(m.company_name)}
                       </span>
                     )}
                   </li>
@@ -271,12 +274,12 @@ export default async function SearchPage({
                       })}
                       {m.clients?.corporate_name && (
                         <span className="ml-2 text-[11px] text-aegis-gray-500">
-                          {m.clients.corporate_name}
+                          {displayCompany(m.clients.corporate_name)}
                         </span>
                       )}
                       {m.analysts?.institution_name && (
                         <span className="ml-2 text-[11px] text-aegis-gray-500">
-                          {m.analysts.institution_name}
+                          {displayCompany(m.analysts.institution_name)}
                         </span>
                       )}
                     </Link>
@@ -314,7 +317,9 @@ export default async function SearchPage({
                       </span>
                     </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[11px] text-aegis-gray-500">
-                      {p.clients?.corporate_name && <span>{p.clients.corporate_name}</span>}
+                      {p.clients?.corporate_name && (
+                        <span>{displayCompany(p.clients.corporate_name)}</span>
+                      )}
                       {p.release_date && (
                         <span className="tabular-nums">
                           {new Date(p.release_date).toLocaleDateString(undefined, {
