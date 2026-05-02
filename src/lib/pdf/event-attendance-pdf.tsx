@@ -13,15 +13,6 @@ import {
 } from '@react-pdf/renderer';
 import type { EventGuest } from '@/lib/types';
 
-export type CheckinAuditEntry = {
-  performed_at: string;
-  guest_name: string | null;
-  guest_company: string | null;
-  performed_by_label: string | null;
-  action: 'checkin' | 'undo';
-  source: 'kiosk' | 'admin' | 'sheet';
-};
-
 // ─────────────────────────────────────────────────────────────────────────
 // Aegis brand palette — pulled from globals.css so the PDF matches the app.
 // ─────────────────────────────────────────────────────────────────────────
@@ -275,14 +266,6 @@ const COMPANY_COLS = {
   pct: 1.2,
 } as const;
 
-const AUDIT_COLS = {
-  time: 1.4,
-  guest: 2.4,
-  action: 1.0,
-  by: 2.0,
-  source: 0.8,
-} as const;
-
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', {
     weekday: 'long',
@@ -315,7 +298,6 @@ export type EventAttendancePdfProps = {
     clientLabel: string | null;
   };
   guests: EventGuest[];
-  audit: CheckinAuditEntry[];
   generatedAt: string;
   generatedBy: string;
   logo?: Buffer | null;
@@ -325,7 +307,6 @@ export type EventAttendancePdfProps = {
 export function EventAttendancePdf({
   event,
   guests,
-  audit,
   generatedAt,
   generatedBy,
   logo,

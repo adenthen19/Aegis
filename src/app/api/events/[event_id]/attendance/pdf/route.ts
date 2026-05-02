@@ -2,11 +2,8 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase/server';
-import {
-  EventAttendancePdf,
-  type CheckinAuditEntry,
-} from '@/lib/pdf/event-attendance-pdf';
-import type { EventGuest, EventGuestCheckin } from '@/lib/types';
+import { EventAttendancePdf } from '@/lib/pdf/event-attendance-pdf';
+import type { EventGuest } from '@/lib/types';
 
 // React-PDF needs Node APIs (fs, stream, fonts) — keep this off the Edge.
 export const runtime = 'nodejs';
@@ -81,37 +78,9 @@ export async function GET(
     .eq('event_id', event_id);
   if (guestsErr) return new Response(`Database error: ${guestsErr.message}`, { status: 500 });
 
-  // Audit log — full history, sorted oldest → newest in the report so the
-  // client can read it as a timeline. We include every entry; for very long
-  // events the table just spills onto more pages.
-  const { data: auditRaw } = await supabase
-    .from('event_guest_checkins')
-    .select(
-      'performed_at, action, source,'
-        + ' event_guests ( full_name, company ),'
-        + ' profiles:performed_by_user_id ( display_name, email )',
-    )
-    .eq('event_id', event_id)
-    .order('performed_at', { ascending: true });
-
-  const audit: CheckinAuditEntry[] = (
-    (auditRaw ?? []) as unknown as Array<
-      Pick<EventGuestCheckin, 'performed_at' | 'action' | 'source'> & {
-        event_guests: { full_name: string; company: string | null } | null;
-        profiles: { display_name: string | null; email: string } | null;
-      }
-    >
-  ).map((row) => ({
-    performed_at: row.performed_at,
-    action: row.action,
-    source: row.source,
-    guest_name: row.event_guests?.full_name ?? null,
-    guest_company: row.event_guests?.company ?? null,
-    performed_by_label:
-      row.profiles?.display_name?.trim() ||
-      row.profiles?.email ||
-      null,
-  }));
+  // The audit log isn't rendered in the client-facing PDF anymore — that
+  // detail lives in the Excel export and the in-app Report tab. Skipping
+  // the audit fetch keeps this route tighter and faster.
 
   const clientRow = (
     event as unknown as {
@@ -148,7 +117,6 @@ export async function GET(
         clientLabel,
       },
       guests: (guests ?? []) as EventGuest[],
-      audit,
       generatedAt,
       generatedBy: user.email ?? 'Aegis',
       logo,
