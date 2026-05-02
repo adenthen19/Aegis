@@ -178,6 +178,54 @@ export async function writeRangeReplacing(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Apply BOOLEAN data validation to a column range — turns plain TRUE/FALSE
+// values into clickable checkboxes that toggle on tap. Mobile-friendly,
+// no typing needed for ushers running attendance off the sheet.
+// ─────────────────────────────────────────────────────────────────────────
+
+export async function applyCheckboxValidation(
+  spreadsheetId: string,
+  tabTitle: string,
+  columnIndex: number, // 0-based
+  startRowIndex: number, // 0-based, inclusive
+  endRowIndex: number, // 0-based, exclusive
+  accessToken: string,
+): Promise<void> {
+  if (endRowIndex <= startRowIndex) return;
+  const meta = await getSpreadsheetMeta(spreadsheetId, accessToken);
+  const tab = meta.tabs.find((t) => t.title === tabTitle);
+  if (!tab) return;
+
+  await googleFetch(
+    `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+    {
+      accessToken,
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [
+          {
+            setDataValidation: {
+              range: {
+                sheetId: tab.sheetId,
+                startRowIndex,
+                endRowIndex,
+                startColumnIndex: columnIndex,
+                endColumnIndex: columnIndex + 1,
+              },
+              rule: {
+                condition: { type: 'BOOLEAN' },
+                strict: true,
+                showCustomUi: true,
+              },
+            },
+          },
+        ],
+      }),
+    },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Format the header row (bold, navy fill, white text) + freeze it. Cosmetic
 // but it's what makes a freshly-pushed sheet feel "designed" instead of
 // "raw dump".

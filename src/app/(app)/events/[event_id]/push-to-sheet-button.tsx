@@ -227,10 +227,11 @@ function BindForm({
           is created (or replaced).
         </li>
         <li>
-          Once bound, kiosks for this event poll every 15 s — edits to the
-          sheet&apos;s <span className="font-medium text-aegis-navy">Status</span> column flow
-          back into Aegis as <span className="font-medium text-aegis-navy">Sheet</span>{' '}
-          source check-ins.
+          The <span className="font-medium text-aegis-navy">Checked in</span>{' '}
+          column renders as tap-to-toggle checkboxes — no typing for ushers.
+          Edits flow back into Aegis within ~15 s as{' '}
+          <span className="font-medium text-aegis-navy">Sheet</span> source
+          check-ins.
         </li>
         <li>Other tabs in the sheet are untouched.</li>
       </ul>

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getValidAccessToken } from '@/lib/google/oauth';
 import {
+  applyCheckboxValidation,
   ensureTab,
   parseSpreadsheetId,
   readRange,
@@ -63,12 +64,12 @@ const GUEST_HEADER = [
   'Email',
   'Contact number',
   'Table',
-  'Status',
+  'Checked in',
   'Checked in at',
 ] as const;
 
-// Column index of "Status" in the guest table (0-indexed) — used by the
-// pull side to find the right cell when comparing.
+// Column index of "Checked in" in the guest table (0-indexed) — used by
+// the pull side to find the right cell when comparing.
 const STATUS_COL = 6;
 
 function sortGuests(guests: EventGuest[]): EventGuest[] {
@@ -84,7 +85,7 @@ function sortGuests(guests: EventGuest[]): EventGuest[] {
 function buildSheetRows(
   event: EventForSheet,
   guests: EventGuest[],
-): (string | number | null)[][] {
+): (string | number | boolean | null)[][] {
   const sorted = sortGuests(guests);
   const total = sorted.length;
   const checkedIn = sorted.filter((g) => g.checked_in).length;
@@ -107,14 +108,17 @@ function buildSheetRows(
     ['', ''],
   ];
 
-  const data: (string | number | null)[][] = sorted.map((g) => [
+  // Status cell is a boolean — combined with the BOOLEAN data validation
+  // applied after writing, this renders as a tap-to-toggle checkbox in the
+  // sheet. Ushers tick → TRUE → next sync flips Aegis to checked-in.
+  const data: (string | number | boolean | null)[][] = sorted.map((g) => [
     g.full_name,
     g.title ?? '',
     g.company ?? '',
     g.email ?? '',
     g.contact_number ?? '',
     g.table_number ?? '',
-    g.checked_in ? 'Checked in' : 'Pending',
+    g.checked_in,
     g.checked_in_at ? new Date(g.checked_in_at).toLocaleString('en-GB') : '',
   ]);
 
@@ -140,6 +144,24 @@ async function pushAegisToSheet(
     accessToken,
   );
   await styleHeaderRow(spreadsheetId, TAB_NAME, GUEST_HEADER.length, accessToken);
+
+  // Apply BOOLEAN validation to the Status column for the data rows so the
+  // cells render as tap-to-toggle checkboxes. The data rows live below the
+  // summary block + header row; row indexes here are 0-based for the API.
+  const guestCount = guests.length;
+  if (guestCount > 0) {
+    const headerRowIndex = SUMMARY_ROW_COUNT; // 0-based — header row sits at this index
+    const dataStart = headerRowIndex + 1;
+    await applyCheckboxValidation(
+      spreadsheetId,
+      TAB_NAME,
+      STATUS_COL,
+      dataStart,
+      dataStart + guestCount,
+      accessToken,
+    );
+  }
+
   return { rowsWritten: rows.length };
 }
 
@@ -184,27 +206,37 @@ async function pullSheetToAegis(args: {
   const dataStart = SUMMARY_ROW_COUNT + 1;
   const dataRows = sheetRows.slice(dataStart);
 
-  // Build a map of sheet status by guest match-key.
-  const sheetStatusByKey = new Map<string, 'Checked in' | 'Pending'>();
+  // Build a map of sheet check-in state by guest match-key. We accept
+  // multiple representations so the sheet stays forgiving:
+  //   • Checkbox cells (current default): "TRUE" / "FALSE" via FORMATTED_VALUE
+  //   • Legacy text we used to write: "Checked in" / "Pending"
+  //   • Anything else: ignored — the row is treated as "no opinion" so a
+  //     half-edited cell can't accidentally un-check someone.
+  const sheetStatusByKey = new Map<string, boolean>();
   for (const row of dataRows) {
     const full_name = (row[0] ?? '').trim();
     if (!full_name) continue;
     const company = (row[2] ?? '').trim() || null;
     const email = (row[3] ?? '').trim() || null;
-    const status = (row[STATUS_COL] ?? '').trim();
-    if (status !== 'Checked in' && status !== 'Pending') continue;
-    sheetStatusByKey.set(matchKey({ full_name, email, company }), status);
+    const raw = (row[STATUS_COL] ?? '').trim();
+    let checkedIn: boolean | null = null;
+    if (raw === 'TRUE' || raw === 'true' || raw === 'Checked in') {
+      checkedIn = true;
+    } else if (raw === 'FALSE' || raw === 'false' || raw === 'Pending') {
+      checkedIn = false;
+    }
+    if (checkedIn === null) continue;
+    sheetStatusByKey.set(matchKey({ full_name, email, company }), checkedIn);
   }
 
   // Diff vs Aegis. Collect guest_ids that need to flip.
   const toCheckIn: string[] = [];
   const toUndo: string[] = [];
   for (const g of guests) {
-    const sheetStatus = sheetStatusByKey.get(
+    const sheetCheckedIn = sheetStatusByKey.get(
       matchKey({ full_name: g.full_name, email: g.email, company: g.company }),
     );
-    if (!sheetStatus) continue;
-    const sheetCheckedIn = sheetStatus === 'Checked in';
+    if (sheetCheckedIn === undefined) continue;
     if (sheetCheckedIn === g.checked_in) continue;
     if (sheetCheckedIn) toCheckIn.push(g.guest_id);
     else toUndo.push(g.guest_id);
