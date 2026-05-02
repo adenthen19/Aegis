@@ -119,6 +119,31 @@ export async function ensureTab(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Read — pull all rows from a tab. Returns the values as a 2D array of
+// strings (Sheets API returns formatted values). Trailing empty rows are
+// dropped to keep diffing cheap.
+// ─────────────────────────────────────────────────────────────────────────
+
+export async function readRange(
+  spreadsheetId: string,
+  range: string, // e.g. "Aegis Attendance"  → reads the whole tab
+  accessToken: string,
+): Promise<string[][]> {
+  const res = await googleFetch(
+    `${SHEETS_API}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE&majorDimension=ROWS`,
+    { accessToken },
+  );
+  const body = (await res.json()) as { values?: unknown[][] };
+  const rows = (body.values ?? []) as string[][];
+  // Strip wholly-empty trailing rows so a sheet with 200 blank rows below
+  // the data doesn't blow up the diff loop.
+  while (rows.length > 0 && rows[rows.length - 1].every((c) => !c)) {
+    rows.pop();
+  }
+  return rows;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Write — clears an A1 range, then dumps `rows` into the top-left cell.
 // We use USER_ENTERED so plain strings like "2026-05-12" become real dates,
 // numbers stay numeric, and "=A1+B1" formulas work — same forgiveness a

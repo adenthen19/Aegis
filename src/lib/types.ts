@@ -594,7 +594,7 @@ export type EventGuest = {
 };
 
 export type EventCheckinAction = 'checkin' | 'undo';
-export type EventCheckinSource = 'kiosk' | 'admin';
+export type EventCheckinSource = 'kiosk' | 'admin' | 'sheet';
 
 export const EVENT_CHECKIN_ACTION_LABEL: Record<EventCheckinAction, string> = {
   checkin: 'Checked in',
@@ -604,6 +604,7 @@ export const EVENT_CHECKIN_ACTION_LABEL: Record<EventCheckinAction, string> = {
 export const EVENT_CHECKIN_SOURCE_LABEL: Record<EventCheckinSource, string> = {
   kiosk: 'Kiosk',
   admin: 'Admin',
+  sheet: 'Sheet',
 };
 
 export type EventGuestCheckin = {

@@ -21,7 +21,9 @@ export default async function KioskPage({
   const [eventRes, guestsRes] = await Promise.all([
     supabase
       .from('events')
-      .select('*, clients ( client_id, corporate_name, logo_url )')
+      .select(
+        '*, clients ( client_id, corporate_name, logo_url )',
+      )
       .eq('event_id', event_id)
       .maybeSingle(),
     supabase
@@ -39,6 +41,7 @@ export default async function KioskPage({
       corporate_name: string;
       logo_url: string | null;
     } | null;
+    google_sheet_id: string | null;
   };
   const guests = (guestsRes.data ?? []) as EventGuest[];
 
@@ -55,6 +58,7 @@ export default async function KioskPage({
       clientLogoUrl={clientLogoUrl}
       location={event.location}
       guests={guests}
+      googleSheetId={event.google_sheet_id ?? null}
     />
   );
 }

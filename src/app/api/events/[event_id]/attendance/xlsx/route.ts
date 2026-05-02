@@ -5,7 +5,7 @@ import type { EventGuest, EventGuestCheckin } from '@/lib/types';
 type AuditRow = {
   performed_at: string;
   action: 'checkin' | 'undo';
-  source: 'kiosk' | 'admin';
+  source: 'kiosk' | 'admin' | 'sheet';
   guest_name: string | null;
   guest_company: string | null;
   performed_by_label: string | null;
@@ -345,7 +345,12 @@ export async function GET(
         company: row.guest_company ?? '',
         action: row.action === 'checkin' ? 'Checked in' : 'Undo',
         by: row.performed_by_label ?? '—',
-        source: row.source === 'kiosk' ? 'Kiosk' : 'Admin',
+        source:
+          row.source === 'kiosk'
+            ? 'Kiosk'
+            : row.source === 'sheet'
+              ? 'Sheet'
+              : 'Admin',
       });
       r.getCell('guest').font = { bold: true, color: { argb: COLORS.navy } };
       if (row.action === 'checkin') {
@@ -355,7 +360,12 @@ export async function GET(
       }
       r.getCell('source').font = {
         color: {
-          argb: row.source === 'kiosk' ? COLORS.orange : COLORS.navy,
+          argb:
+            row.source === 'kiosk'
+              ? COLORS.orange
+              : row.source === 'sheet'
+                ? COLORS.emerald
+                : COLORS.navy,
         },
         bold: true,
       };

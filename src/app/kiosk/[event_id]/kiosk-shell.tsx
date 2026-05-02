@@ -172,6 +172,7 @@ export default function KioskShell({
   clientLogoUrl,
   location,
   guests,
+  googleSheetId,
 }: {
   eventId: string;
   eventName: string;
@@ -180,6 +181,7 @@ export default function KioskShell({
   clientLogoUrl: string | null;
   location: string | null;
   guests: EventGuest[];
+  googleSheetId: string | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -187,6 +189,10 @@ export default function KioskShell({
   const [toast, setToast] = useState<ToastState>({ kind: 'idle' });
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [liveConnected, setLiveConnected] = useState(false);
+  const [sheetSyncStatus, setSheetSyncStatus] = useState<
+    'idle' | 'syncing' | 'ok' | 'error'
+  >('idle');
+  const [lastSheetSyncAt, setLastSheetSyncAt] = useState<number | null>(null);
 
   // Optimistic check-in IDs so the UI flips instantly while the server
   // catches up. Cleared whenever new guest data arrives via revalidation.
@@ -241,6 +247,60 @@ export default function KioskShell({
       supabase.removeChannel(channel);
     };
   }, [eventId, router]);
+
+  // ─── Google Sheet two-way sync (poll every 15s while a sheet is bound) ──
+  // Each tick:
+  //   1. Read the sheet, diff against Aegis, apply any sheet edits.
+  //   2. Write Aegis state back so the sheet stays canonical.
+  //   3. If the pull found changes, router.refresh() so the kiosk picks
+  //      them up (the realtime channel also fires from the DB write, so
+  //      typically this is a no-op).
+  useEffect(() => {
+    if (!googleSheetId) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function tick() {
+      if (cancelled) return;
+      setSheetSyncStatus((s) => (s === 'syncing' ? s : 'syncing'));
+      try {
+        const res = await fetch(
+          `/api/events/${eventId}/sheets/sync`,
+          { method: 'POST' },
+        );
+        if (cancelled) return;
+        const json = (await res.json()) as
+          | { ok: true; pulled_count: number }
+          | { ok: false; error: string };
+        if (!json.ok) {
+          setSheetSyncStatus('error');
+        } else {
+          setSheetSyncStatus('ok');
+          setLastSheetSyncAt(Date.now());
+          if (json.pulled_count > 0) {
+            // Realtime usually beats us here, but in case the sheet edit
+            // landed in a quiet moment we trigger a refresh too.
+            router.refresh();
+          }
+        }
+      } catch {
+        if (!cancelled) setSheetSyncStatus('error');
+      } finally {
+        if (!cancelled) {
+          timer = setTimeout(tick, 15_000);
+        }
+      }
+    }
+
+    // Kick off immediately, then every 15s.
+    tick();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [eventId, googleSheetId, router]);
 
   useEffect(() => {
     return () => {
@@ -372,9 +432,15 @@ export default function KioskShell({
               </div>
             )}
             <div className="min-w-0">
-              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
+              <p className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
                 Check-in kiosk
                 <LiveBadge connected={liveConnected} />
+                {googleSheetId && (
+                  <SheetSyncBadge
+                    status={sheetSyncStatus}
+                    lastAt={lastSheetSyncAt}
+                  />
+                )}
               </p>
               <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
                 {eventName}
@@ -612,6 +678,52 @@ export default function KioskShell({
         />
       )}
     </div>
+  );
+}
+
+function SheetSyncBadge({
+  status,
+  lastAt,
+}: {
+  status: 'idle' | 'syncing' | 'ok' | 'error';
+  lastAt: number | null;
+}) {
+  // Compact, low-noise indicator that the sheet is round-tripping. Hovering
+  // shows the last sync time; the dot pulses while a tick is mid-flight,
+  // turns red on error, green when the latest tick succeeded.
+  const tone =
+    status === 'error'
+      ? 'bg-red-50 text-red-700 ring-red-200'
+      : status === 'syncing'
+        ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
+        : status === 'ok'
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+          : 'bg-aegis-gray-50 text-aegis-gray-500 ring-aegis-gray-200';
+  const dot =
+    status === 'error'
+      ? 'bg-red-500'
+      : status === 'syncing'
+        ? 'animate-pulse bg-aegis-blue'
+        : status === 'ok'
+          ? 'bg-emerald-500'
+          : 'bg-aegis-gray-300';
+  const title =
+    status === 'error'
+      ? 'Sheet sync failed — check your Google connection.'
+      : lastAt
+        ? `Last synced at ${new Date(lastAt).toLocaleTimeString()}`
+        : 'Two-way sync with the bound Google Sheet.';
+  return (
+    <span
+      className={[
+        'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] ring-1 ring-inset',
+        tone,
+      ].join(' ')}
+      title={title}
+    >
+      <span className={['h-1.5 w-1.5 rounded-full', dot].join(' ')} aria-hidden />
+      Sheet
+    </span>
   );
 }
 

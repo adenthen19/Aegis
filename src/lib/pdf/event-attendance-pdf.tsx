@@ -19,7 +19,7 @@ export type CheckinAuditEntry = {
   guest_company: string | null;
   performed_by_label: string | null;
   action: 'checkin' | 'undo';
-  source: 'kiosk' | 'admin';
+  source: 'kiosk' | 'admin' | 'sheet';
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -55,22 +55,34 @@ const styles = StyleSheet.create({
   },
   // ─── Header ──────────────────────────────────────────────────────────
   headerBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingBottom: 12,
+    paddingBottom: 10,
     borderBottomWidth: 2,
     borderBottomColor: COLORS.navy,
-    marginBottom: 16,
+    marginBottom: 14,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   brand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
+  // Logo aspect ratio is ~1.45:1 (wider than tall) — give it a wider box
+  // and use objectFit: 'contain' so the original aspect is preserved.
   logo: {
-    width: 28,
-    height: 28,
+    width: 36,
+    height: 24,
+    objectFit: 'contain',
+  },
+  // Per-client logo on the right of the header — same contain trick.
+  headerClientLogo: {
+    width: 44,
+    height: 24,
+    objectFit: 'contain',
+    marginLeft: 8,
   },
   brandName: {
     fontSize: 11,
@@ -79,61 +91,49 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   brandSub: {
-    fontSize: 7.5,
+    fontSize: 7,
     color: COLORS.gray400,
-    letterSpacing: 1.4,
+    letterSpacing: 1.3,
     textTransform: 'uppercase',
     marginTop: 1,
   },
   reportLabel: {
-    fontSize: 7.5,
+    fontSize: 7,
     color: COLORS.orange,
-    letterSpacing: 1.6,
+    letterSpacing: 1.4,
     textTransform: 'uppercase',
     fontFamily: 'Helvetica-Bold',
   },
   reportDate: {
-    fontSize: 8.5,
+    fontSize: 8,
     color: COLORS.gray600,
-    marginTop: 3,
+    marginTop: 2,
   },
-  // ─── Cover block ─────────────────────────────────────────────────────
-  cover: {
-    backgroundColor: COLORS.navyTint,
-    borderRadius: 8,
-    padding: 18,
-    marginBottom: 18,
+  // Event identity row sits below the brand bar but above the divider
+  // line, so it appears on every page.
+  headerEventRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 12,
   },
-  coverLogo: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#ffffff',
-    borderRadius: 6,
-    padding: 4,
-    objectFit: 'contain',
-  },
-  coverBody: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 22,
+  headerEventTitle: {
+    fontSize: 13,
     fontFamily: 'Helvetica-Bold',
     color: COLORS.navy,
     lineHeight: 1.2,
+    flexShrink: 1,
   },
-  eventClient: {
-    fontSize: 11,
-    color: COLORS.navyDark,
-    marginTop: 4,
-  },
-  eventMeta: {
+  headerEventClient: {
     fontSize: 9,
     color: COLORS.gray600,
-    marginTop: 8,
-    lineHeight: 1.4,
+    marginTop: 2,
+  },
+  headerEventMeta: {
+    fontSize: 8.5,
+    color: COLORS.gray400,
+    textAlign: 'right',
   },
   // ─── KPI row ─────────────────────────────────────────────────────────
   kpiRow: {
@@ -369,39 +369,44 @@ export function EventAttendancePdf({
     >
       <Page size="A4" style={styles.page} wrap>
         {/* ── Header bar ──────────────────────────────────────────── */}
+        {/* Repeats on every page (fixed). Top row = brand + report meta;
+            bottom row = event identity. The dedicated cover block has
+            been folded into here so the page-1 real estate goes
+            straight to the KPIs. */}
         <View style={styles.headerBar} fixed>
-          <View style={styles.brand}>
-            {logo && <Image src={logo} style={styles.logo} />}
-            <View>
-              <Text style={styles.brandName}>Aegis Communication</Text>
-              <Text style={styles.brandSub}>Event Attendance Report</Text>
+          <View style={styles.headerTop}>
+            <View style={styles.brand}>
+              {logo && <Image src={logo} style={styles.logo} />}
+              <View>
+                <Text style={styles.brandName}>
+                  Aegis Communication Sdn Bhd
+                </Text>
+                <Text style={styles.brandSub}>Event Attendance Report</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={styles.reportLabel}>Post-Event Report</Text>
+                <Text style={styles.reportDate}>Generated {generatedAt}</Text>
+              </View>
+              {clientLogo && (
+                <Image src={clientLogo} style={styles.headerClientLogo} />
+              )}
             </View>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.reportLabel}>Post-Event Report</Text>
-            <Text style={styles.reportDate}>Generated {generatedAt}</Text>
-          </View>
-        </View>
-
-        {/* ── Cover ───────────────────────────────────────────────── */}
-        <View style={styles.cover}>
-          {clientLogo && <Image src={clientLogo} style={styles.coverLogo} />}
-          <View style={styles.coverBody}>
-            <Text style={styles.eventTitle}>{event.name}</Text>
-            {event.clientLabel && (
-              <Text style={styles.eventClient}>For {event.clientLabel}</Text>
-            )}
-            <Text style={styles.eventMeta}>
+          <View style={styles.headerEventRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerEventTitle}>{event.name}</Text>
+              {event.clientLabel && (
+                <Text style={styles.headerEventClient}>
+                  For {event.clientLabel}
+                </Text>
+              )}
+            </View>
+            <Text style={styles.headerEventMeta}>
               {fmtDate(event.event_date)}
-              {event.location ? ` · ${event.location}` : ''}
+              {event.location ? `\n${event.location}` : ''}
             </Text>
-            {event.description && (
-              <Text style={[styles.eventMeta, { marginTop: 4 }]}>
-                {event.description.length > 240
-                  ? `${event.description.slice(0, 240)}…`
-                  : event.description}
-              </Text>
-            )}
           </View>
         </View>
 
@@ -648,88 +653,10 @@ export function EventAttendancePdf({
           )}
         </View>
 
-        {/* ── Audit log ───────────────────────────────────────────── */}
-        {audit.length > 0 && (
-          <>
-            <Text style={styles.sectionHeading} break>
-              Check-in activity log
-            </Text>
-            <View style={styles.table}>
-              <View style={styles.thead} fixed>
-                <Text style={[styles.th, { flex: AUDIT_COLS.time }]}>Time</Text>
-                <Text style={[styles.th, { flex: AUDIT_COLS.guest }]}>
-                  Guest
-                </Text>
-                <Text style={[styles.th, { flex: AUDIT_COLS.action }]}>
-                  Action
-                </Text>
-                <Text style={[styles.th, { flex: AUDIT_COLS.by }]}>By</Text>
-                <Text style={[styles.th, { flex: AUDIT_COLS.source }]}>
-                  Source
-                </Text>
-              </View>
-              {audit.map((entry, i) => (
-                <View
-                  key={`${entry.performed_at}-${i}`}
-                  style={[styles.tr, i % 2 === 1 ? styles.trAlt : {}]}
-                  wrap={false}
-                >
-                  <Text
-                    style={[
-                      styles.td,
-                      { flex: AUDIT_COLS.time, color: COLORS.gray600 },
-                    ]}
-                  >
-                    {fmtTime(entry.performed_at)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.td,
-                      {
-                        flex: AUDIT_COLS.guest,
-                        fontFamily: 'Helvetica-Bold',
-                        color: COLORS.navy,
-                      },
-                    ]}
-                  >
-                    {entry.guest_name ?? '—'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.td,
-                      {
-                        flex: AUDIT_COLS.action,
-                        color:
-                          entry.action === 'checkin'
-                            ? COLORS.emerald
-                            : COLORS.gray600,
-                      },
-                    ]}
-                  >
-                    {entry.action === 'checkin' ? 'Checked in' : 'Undo'}
-                  </Text>
-                  <Text style={[styles.td, { flex: AUDIT_COLS.by }]}>
-                    {entry.performed_by_label ?? '—'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.td,
-                      {
-                        flex: AUDIT_COLS.source,
-                        color:
-                          entry.source === 'kiosk'
-                            ? COLORS.orange
-                            : COLORS.navy,
-                      },
-                    ]}
-                  >
-                    {entry.source === 'kiosk' ? 'Kiosk' : 'Admin'}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
+        {/* The audit log used to render here, but the firm now keeps it
+            out of the client-facing PDF. The full activity is still in
+            the Excel export ("Activity Log" sheet) and the in-app Report
+            tab for internal review. */}
 
         {/* ── Footer ──────────────────────────────────────────────── */}
         <View style={styles.footer} fixed>
