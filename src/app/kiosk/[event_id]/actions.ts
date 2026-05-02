@@ -66,6 +66,17 @@ export async function kioskCheckInAction(
     .single();
   if (error) return { ok: false, error: error.message };
 
+  // Audit row — append-only history of who/when/source. We don't fail the
+  // check-in if the audit insert errors (the guest is already updated and
+  // the kiosk experience comes first), but we'd want this in logs in prod.
+  await supabase.from('event_guest_checkins').insert({
+    guest_id,
+    event_id,
+    action: 'checkin',
+    source: 'kiosk',
+    performed_by_user_id: user.id,
+  });
+
   revalidatePath(`/kiosk/${event_id}`);
   revalidatePath(`/events/${event_id}`);
 
@@ -102,6 +113,14 @@ export async function kioskUndoCheckInAction(
     .eq('guest_id', guest_id)
     .eq('event_id', event_id);
   if (error) return { ok: false, error: error.message };
+
+  await supabase.from('event_guest_checkins').insert({
+    guest_id,
+    event_id,
+    action: 'undo',
+    source: 'kiosk',
+    performed_by_user_id: user.id,
+  });
 
   revalidatePath(`/kiosk/${event_id}`);
   revalidatePath(`/events/${event_id}`);

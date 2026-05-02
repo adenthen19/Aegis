@@ -169,6 +169,7 @@ export default function KioskShell({
   eventName,
   eventDate,
   clientLabel,
+  clientLogoUrl,
   location,
   guests,
 }: {
@@ -176,6 +177,7 @@ export default function KioskShell({
   eventName: string;
   eventDate: string;
   clientLabel: string | null;
+  clientLogoUrl: string | null;
   location: string | null;
   guests: EventGuest[];
 }) {
@@ -355,26 +357,41 @@ export default function KioskShell({
       {/* ── Top bar ───────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 border-b border-aegis-gray-100 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
-          <div className="min-w-0">
-            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
-              Check-in kiosk
-              <LiveBadge connected={liveConnected} />
-            </p>
-            <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
-              {eventName}
-            </h1>
-            <p className="truncate text-[12px] text-aegis-gray-500 sm:text-sm">
-              {[
-                clientLabel,
-                new Date(eventDate).toLocaleString(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                }),
-                location,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </p>
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            {clientLogoUrl && (
+              <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-100 bg-white p-1 shadow-sm sm:h-14 sm:w-20">
+                {/* Plain <img> — kiosk loads from arbitrary Supabase Storage URLs and
+                    sometimes data: URLs, so next/image's domain allowlist would just
+                    get in the way here. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={clientLogoUrl}
+                  alt={clientLabel ?? 'Client logo'}
+                  className="max-h-full max-w-full object-contain"
+                />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-aegis-orange">
+                Check-in kiosk
+                <LiveBadge connected={liveConnected} />
+              </p>
+              <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
+                {eventName}
+              </h1>
+              <p className="truncate text-[12px] text-aegis-gray-500 sm:text-sm">
+                {[
+                  clientLabel,
+                  new Date(eventDate).toLocaleString(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  }),
+                  location,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            </div>
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <div className="rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-inset ring-emerald-200 sm:px-4">

@@ -11,12 +11,19 @@ import {
 import {
   EVENT_STATUS_LABEL,
   type EventGuest,
+  type EventGuestCheckin,
   type EventRow,
   type EventStatus,
 } from '@/lib/types';
 import EditEventButton from './edit-event-button';
 import EventStatusSelect from './event-status-select';
 import GuestList from './guest-list';
+
+export type CheckinFeedEntry = EventGuestCheckin & {
+  guest_name: string | null;
+  guest_company: string | null;
+  performed_by_label: string | null;
+};
 
 const STATUS_BADGE: Record<EventStatus, string> = {
   planned: 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200',
@@ -40,7 +47,7 @@ export default async function EventDetailPage({
   const { event_id } = await params;
   const supabase = await createClient();
 
-  const [eventRes, guestsRes, clientsRes] = await Promise.all([
+  const [eventRes, guestsRes, clientsRes, activityRes] = await Promise.all([
     supabase
       .from('events')
       .select('*, clients ( client_id, corporate_name )')
@@ -56,6 +63,19 @@ export default async function EventDetailPage({
       .from('clients')
       .select('client_id, corporate_name')
       .order('corporate_name', { ascending: true }),
+    // Last 50 check-in audit rows for this event, joined with the guest's
+    // name (so we don't have to look it up client-side) and the staff member's
+    // display name. Newest first — drives the "Recent activity" feed.
+    supabase
+      .from('event_guest_checkins')
+      .select(
+        'checkin_id, guest_id, event_id, action, source, performed_by_user_id, performed_at, notes,'
+          + ' event_guests ( full_name, company ),'
+          + ' profiles:performed_by_user_id ( display_name, email )',
+      )
+      .eq('event_id', event_id)
+      .order('performed_at', { ascending: false })
+      .limit(50),
   ]);
 
   if (!eventRes.data) notFound();
@@ -68,6 +88,30 @@ export default async function EventDetailPage({
     client_id: string;
     corporate_name: string;
   }[];
+
+  const activity: CheckinFeedEntry[] = (
+    (activityRes.data ?? []) as unknown as Array<
+      EventGuestCheckin & {
+        event_guests: { full_name: string; company: string | null } | null;
+        profiles: { display_name: string | null; email: string } | null;
+      }
+    >
+  ).map((row) => ({
+    checkin_id: row.checkin_id,
+    guest_id: row.guest_id,
+    event_id: row.event_id,
+    action: row.action,
+    source: row.source,
+    performed_by_user_id: row.performed_by_user_id,
+    performed_at: row.performed_at,
+    notes: row.notes,
+    guest_name: row.event_guests?.full_name ?? null,
+    guest_company: row.event_guests?.company ?? null,
+    performed_by_label:
+      row.profiles?.display_name?.trim() ||
+      row.profiles?.email ||
+      null,
+  }));
 
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -151,7 +195,12 @@ export default async function EventDetailPage({
         )}
       </Section>
 
-      <GuestList eventId={event.event_id} eventName={event.name} guests={guests} />
+      <GuestList
+        eventId={event.event_id}
+        eventName={event.name}
+        guests={guests}
+        activity={activity}
+      />
     </div>
   );
 }

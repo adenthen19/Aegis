@@ -16,6 +16,7 @@ import GuestDetailModal from './guest-detail-modal';
 import GuestListView from './guest-list-view';
 import GuestSearchCheckin from './guest-search-checkin';
 import GuestReport from './guest-report';
+import type { CheckinFeedEntry } from './page';
 import type { EventGuest } from '@/lib/types';
 
 const initialState: ActionState = { ok: false, error: null };
@@ -26,10 +27,12 @@ export default function GuestList({
   eventId,
   eventName,
   guests,
+  activity,
 }: {
   eventId: string;
   eventName: string;
   guests: EventGuest[];
+  activity: CheckinFeedEntry[];
 }) {
   const [tab, setTab] = useState<Tab>('list');
   const [addOpen, setAddOpen] = useState(false);
@@ -138,7 +141,12 @@ export default function GuestList({
         />
       )}
       {tab === 'report' && (
-        <GuestReport eventId={eventId} eventName={eventName} guests={guests} />
+        <GuestReport
+          eventId={eventId}
+          eventName={eventName}
+          guests={guests}
+          activity={activity}
+        />
       )}
 
       <NewGuestModal

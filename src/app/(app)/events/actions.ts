@@ -271,16 +271,36 @@ export async function toggleGuestCheckInAction(
   if (!user) return { ok: false, error: 'You must be signed in.' };
   if (!guest_id) return { ok: false, error: 'Missing guest id.' };
 
+  // Read previous state so the audit row only fires on a real flip — toggling
+  // the same value twice (idempotent UPDATE) shouldn't pollute the activity feed.
+  const { data: prev } = await supabase
+    .from('event_guests')
+    .select('checked_in, event_id')
+    .eq('guest_id', guest_id)
+    .maybeSingle();
+  if (!prev) return { ok: false, error: 'Guest not found.' };
+  const wasIn = prev.checked_in as boolean;
+  const eventId = prev.event_id as string;
+
   // checked_in_at is set/cleared by the BEFORE trigger; we only flip the flag.
-  const { data: row, error } = await supabase
+  const { error } = await supabase
     .from('event_guests')
     .update({ checked_in: next })
-    .eq('guest_id', guest_id)
-    .select('event_id')
-    .single();
+    .eq('guest_id', guest_id);
   if (error) return { ok: false, error: error.message };
 
-  if (row?.event_id) revalidatePath(`/events/${row.event_id as string}`);
+  if (wasIn !== next) {
+    await supabase.from('event_guest_checkins').insert({
+      guest_id,
+      event_id: eventId,
+      action: next ? 'checkin' : 'undo',
+      source: 'admin',
+      performed_by_user_id: user.id,
+    });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath(`/kiosk/${eventId}`);
   return { ok: true, error: null };
 }
 
@@ -293,13 +313,37 @@ export async function bulkSetCheckInAction(
   if (!user) return { ok: false, error: 'You must be signed in.' };
   if (!event_id) return { ok: false, error: 'Missing event id.' };
 
+  // Snapshot the guests whose state actually flips so we can write one
+  // audit row per real change (and not 200 noise rows when an event is
+  // already fully checked-out and the admin hits "Reset" again).
+  const { data: snapshot } = await supabase
+    .from('event_guests')
+    .select('guest_id, checked_in')
+    .eq('event_id', event_id)
+    .eq('checked_in', !next);
+  const flipping = (snapshot ?? []).map((g) => g.guest_id as string);
+
   const { error } = await supabase
     .from('event_guests')
     .update({ checked_in: next })
     .eq('event_id', event_id);
   if (error) return { ok: false, error: error.message };
 
+  if (flipping.length > 0) {
+    await supabase.from('event_guest_checkins').insert(
+      flipping.map((guest_id) => ({
+        guest_id,
+        event_id,
+        action: next ? 'checkin' : 'undo',
+        source: 'admin' as const,
+        performed_by_user_id: user.id,
+        notes: 'Bulk reset',
+      })),
+    );
+  }
+
   revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
   return { ok: true, error: null };
 }
 

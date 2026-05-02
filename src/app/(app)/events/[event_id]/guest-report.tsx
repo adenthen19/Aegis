@@ -1,10 +1,22 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { EventGuest } from '@/lib/types';
+import type { CheckinFeedEntry } from './page';
+import {
+  EVENT_CHECKIN_SOURCE_LABEL,
+  type EventGuest,
+} from '@/lib/types';
 
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '';
+function formatRelative(iso: string): string {
+  // Compact relative-time helper for the activity feed. Falls back to an
+  // absolute date once entries get older than a day so the feed never lies
+  // about freshness during a multi-session event.
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return 'just now';
+  const mins = Math.round(ms / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
   return new Date(iso).toLocaleString(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -15,10 +27,12 @@ export default function GuestReport({
   eventId,
   eventName,
   guests,
+  activity,
 }: {
   eventId: string;
   eventName: string;
   guests: EventGuest[];
+  activity: CheckinFeedEntry[];
 }) {
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -39,17 +53,6 @@ export default function GuestReport({
     return Array.from(map.entries())
       .map(([company, c]) => ({ company, ...c }))
       .sort((a, b) => b.total - a.total);
-  }, [guests]);
-
-  // Recent check-ins — last 10, newest first.
-  const recent = useMemo(() => {
-    return guests
-      .filter((g) => g.checked_in && g.checked_in_at)
-      .sort(
-        (a, b) =>
-          new Date(b.checked_in_at!).getTime() - new Date(a.checked_in_at!).getTime(),
-      )
-      .slice(0, 10);
   }, [guests]);
 
   return (
@@ -150,37 +153,121 @@ export default function GuestReport({
         </section>
 
         <section>
-          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
-            Recent check-ins
-          </h4>
-          {recent.length === 0 ? (
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+              Recent activity
+            </h4>
+            <span className="text-[10px] uppercase tracking-[0.08em] text-aegis-gray-400">
+              {activity.length} entr{activity.length === 1 ? 'y' : 'ies'}
+            </span>
+          </div>
+          {activity.length === 0 ? (
             <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
-              No one checked in yet.
+              No check-in activity yet — the audit feed shows kiosk and admin
+              actions as they happen.
             </p>
           ) : (
             <ul className="divide-y divide-aegis-gray-100 rounded-md border border-aegis-gray-100">
-              {recent.map((g) => (
-                <li key={g.guest_id} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-aegis-navy">
-                      {g.full_name}
+              {activity.slice(0, 25).map((entry) => (
+                <li
+                  key={entry.checkin_id}
+                  className="flex items-start gap-3 px-3 py-2.5"
+                >
+                  <ActivityIcon action={entry.action} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">
+                      <span className="font-medium text-aegis-navy">
+                        {entry.guest_name ?? 'Deleted guest'}
+                      </span>
+                      <span className="text-aegis-gray">
+                        {entry.action === 'checkin'
+                          ? ' checked in'
+                          : ' un-checked'}
+                      </span>
+                      {entry.performed_by_label && (
+                        <span className="text-aegis-gray">
+                          {' by '}
+                          <span className="font-medium text-aegis-gray-700">
+                            {entry.performed_by_label}
+                          </span>
+                        </span>
+                      )}
                     </p>
-                    {g.company && (
-                      <p className="truncate text-[11px] text-aegis-gray-500">
-                        {g.company}
-                      </p>
-                    )}
+                    <p className="truncate text-[11px] text-aegis-gray-500">
+                      {[
+                        entry.guest_company,
+                        formatRelative(entry.performed_at),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   </div>
-                  <span className="shrink-0 text-[11px] tabular-nums text-aegis-gray-500">
-                    {formatDateTime(g.checked_in_at)}
+                  <span
+                    className={[
+                      'inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ring-1 ring-inset',
+                      entry.source === 'kiosk'
+                        ? 'bg-aegis-orange-50 text-aegis-orange-600 ring-aegis-orange/30'
+                        : 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+                    ].join(' ')}
+                    title={`Source: ${EVENT_CHECKIN_SOURCE_LABEL[entry.source]}`}
+                  >
+                    {EVENT_CHECKIN_SOURCE_LABEL[entry.source]}
                   </span>
                 </li>
               ))}
+              {activity.length > 25 && (
+                <li className="px-3 py-2 text-center text-[11px] text-aegis-gray-400">
+                  + {activity.length - 25} earlier entries — download the
+                  PDF / Excel report for the full log.
+                </li>
+              )}
             </ul>
           )}
         </section>
       </div>
     </div>
+  );
+}
+
+function ActivityIcon({ action }: { action: 'checkin' | 'undo' }) {
+  if (action === 'checkin') {
+    return (
+      <span
+        className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+        aria-hidden
+      >
+        <svg
+          className="h-3.5 w-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M5 12l5 5 9-11" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span
+      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-aegis-gray-100 text-aegis-gray-500"
+      aria-hidden
+    >
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5" />
+      </svg>
+    </span>
   );
 }
 

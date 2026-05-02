@@ -593,3 +593,27 @@ export type EventGuest = {
   updated_at: string;
 };
 
+export type EventCheckinAction = 'checkin' | 'undo';
+export type EventCheckinSource = 'kiosk' | 'admin';
+
+export const EVENT_CHECKIN_ACTION_LABEL: Record<EventCheckinAction, string> = {
+  checkin: 'Checked in',
+  undo: 'Undo check-in',
+};
+
+export const EVENT_CHECKIN_SOURCE_LABEL: Record<EventCheckinSource, string> = {
+  kiosk: 'Kiosk',
+  admin: 'Admin',
+};
+
+export type EventGuestCheckin = {
+  checkin_id: string;
+  guest_id: string;
+  event_id: string;
+  action: EventCheckinAction;
+  source: EventCheckinSource;
+  performed_by_user_id: string | null;
+  performed_at: string;
+  notes: string | null;
+};
+

@@ -13,6 +13,15 @@ import {
 } from '@react-pdf/renderer';
 import type { EventGuest } from '@/lib/types';
 
+export type CheckinAuditEntry = {
+  performed_at: string;
+  guest_name: string | null;
+  guest_company: string | null;
+  performed_by_label: string | null;
+  action: 'checkin' | 'undo';
+  source: 'kiosk' | 'admin';
+};
+
 // ─────────────────────────────────────────────────────────────────────────
 // Aegis brand palette — pulled from globals.css so the PDF matches the app.
 // ─────────────────────────────────────────────────────────────────────────
@@ -94,6 +103,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 18,
     marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  coverLogo: {
+    width: 64,
+    height: 64,
+    backgroundColor: '#ffffff',
+    borderRadius: 6,
+    padding: 4,
+    objectFit: 'contain',
+  },
+  coverBody: {
+    flex: 1,
   },
   eventTitle: {
     fontSize: 22,
@@ -252,6 +275,14 @@ const COMPANY_COLS = {
   pct: 1.2,
 } as const;
 
+const AUDIT_COLS = {
+  time: 1.4,
+  guest: 2.4,
+  action: 1.0,
+  by: 2.0,
+  source: 0.8,
+} as const;
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', {
     weekday: 'long',
@@ -284,17 +315,21 @@ export type EventAttendancePdfProps = {
     clientLabel: string | null;
   };
   guests: EventGuest[];
+  audit: CheckinAuditEntry[];
   generatedAt: string;
   generatedBy: string;
   logo?: Buffer | null;
+  clientLogo?: Buffer | null;
 };
 
 export function EventAttendancePdf({
   event,
   guests,
+  audit,
   generatedAt,
   generatedBy,
   logo,
+  clientLogo,
 }: EventAttendancePdfProps) {
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -350,21 +385,24 @@ export function EventAttendancePdf({
 
         {/* ── Cover ───────────────────────────────────────────────── */}
         <View style={styles.cover}>
-          <Text style={styles.eventTitle}>{event.name}</Text>
-          {event.clientLabel && (
-            <Text style={styles.eventClient}>For {event.clientLabel}</Text>
-          )}
-          <Text style={styles.eventMeta}>
-            {fmtDate(event.event_date)}
-            {event.location ? ` · ${event.location}` : ''}
-          </Text>
-          {event.description && (
-            <Text style={[styles.eventMeta, { marginTop: 4 }]}>
-              {event.description.length > 240
-                ? `${event.description.slice(0, 240)}…`
-                : event.description}
+          {clientLogo && <Image src={clientLogo} style={styles.coverLogo} />}
+          <View style={styles.coverBody}>
+            <Text style={styles.eventTitle}>{event.name}</Text>
+            {event.clientLabel && (
+              <Text style={styles.eventClient}>For {event.clientLabel}</Text>
+            )}
+            <Text style={styles.eventMeta}>
+              {fmtDate(event.event_date)}
+              {event.location ? ` · ${event.location}` : ''}
             </Text>
-          )}
+            {event.description && (
+              <Text style={[styles.eventMeta, { marginTop: 4 }]}>
+                {event.description.length > 240
+                  ? `${event.description.slice(0, 240)}…`
+                  : event.description}
+              </Text>
+            )}
+          </View>
         </View>
 
         {/* ── KPI cards ───────────────────────────────────────────── */}
@@ -609,6 +647,89 @@ export function EventAttendancePdf({
             ))
           )}
         </View>
+
+        {/* ── Audit log ───────────────────────────────────────────── */}
+        {audit.length > 0 && (
+          <>
+            <Text style={styles.sectionHeading} break>
+              Check-in activity log
+            </Text>
+            <View style={styles.table}>
+              <View style={styles.thead} fixed>
+                <Text style={[styles.th, { flex: AUDIT_COLS.time }]}>Time</Text>
+                <Text style={[styles.th, { flex: AUDIT_COLS.guest }]}>
+                  Guest
+                </Text>
+                <Text style={[styles.th, { flex: AUDIT_COLS.action }]}>
+                  Action
+                </Text>
+                <Text style={[styles.th, { flex: AUDIT_COLS.by }]}>By</Text>
+                <Text style={[styles.th, { flex: AUDIT_COLS.source }]}>
+                  Source
+                </Text>
+              </View>
+              {audit.map((entry, i) => (
+                <View
+                  key={`${entry.performed_at}-${i}`}
+                  style={[styles.tr, i % 2 === 1 ? styles.trAlt : {}]}
+                  wrap={false}
+                >
+                  <Text
+                    style={[
+                      styles.td,
+                      { flex: AUDIT_COLS.time, color: COLORS.gray600 },
+                    ]}
+                  >
+                    {fmtTime(entry.performed_at)}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.td,
+                      {
+                        flex: AUDIT_COLS.guest,
+                        fontFamily: 'Helvetica-Bold',
+                        color: COLORS.navy,
+                      },
+                    ]}
+                  >
+                    {entry.guest_name ?? '—'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.td,
+                      {
+                        flex: AUDIT_COLS.action,
+                        color:
+                          entry.action === 'checkin'
+                            ? COLORS.emerald
+                            : COLORS.gray600,
+                      },
+                    ]}
+                  >
+                    {entry.action === 'checkin' ? 'Checked in' : 'Undo'}
+                  </Text>
+                  <Text style={[styles.td, { flex: AUDIT_COLS.by }]}>
+                    {entry.performed_by_label ?? '—'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.td,
+                      {
+                        flex: AUDIT_COLS.source,
+                        color:
+                          entry.source === 'kiosk'
+                            ? COLORS.orange
+                            : COLORS.navy,
+                      },
+                    ]}
+                  >
+                    {entry.source === 'kiosk' ? 'Kiosk' : 'Admin'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* ── Footer ──────────────────────────────────────────────── */}
         <View style={styles.footer} fixed>

@@ -2,8 +2,11 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase/server';
-import { EventAttendancePdf } from '@/lib/pdf/event-attendance-pdf';
-import type { EventGuest } from '@/lib/types';
+import {
+  EventAttendancePdf,
+  type CheckinAuditEntry,
+} from '@/lib/pdf/event-attendance-pdf';
+import type { EventGuest, EventGuestCheckin } from '@/lib/types';
 
 // React-PDF needs Node APIs (fs, stream, fonts) — keep this off the Edge.
 export const runtime = 'nodejs';
@@ -21,6 +24,25 @@ async function loadLogo(): Promise<Buffer | null> {
     cachedLogo = null;
   }
   return cachedLogo;
+}
+
+// Fetches the client logo from its Supabase Storage URL. Returns null on any
+// network / size / type problem so the PDF still renders without a client mark
+// rather than failing the whole report.
+async function fetchClientLogo(url: string | null): Promise<Buffer | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url, { cache: 'force-cache' });
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.startsWith('image/')) return null;
+    const ab = await res.arrayBuffer();
+    // Hard cap so a misconfigured logo can't blow up PDF memory.
+    if (ab.byteLength > 2 * 1024 * 1024) return null;
+    return Buffer.from(ab);
+  } catch {
+    return null;
+  }
 }
 
 function safeFilename(name: string): string {
@@ -46,7 +68,7 @@ export async function GET(
   const { data: event, error: eventErr } = await supabase
     .from('events')
     .select(
-      'event_id, name, event_date, location, description, adhoc_client_name, clients ( corporate_name )',
+      'event_id, name, event_date, location, description, adhoc_client_name, clients ( corporate_name, logo_url )',
     )
     .eq('event_id', event_id)
     .maybeSingle();
@@ -59,13 +81,48 @@ export async function GET(
     .eq('event_id', event_id);
   if (guestsErr) return new Response(`Database error: ${guestsErr.message}`, { status: 500 });
 
+  // Audit log — full history, sorted oldest → newest in the report so the
+  // client can read it as a timeline. We include every entry; for very long
+  // events the table just spills onto more pages.
+  const { data: auditRaw } = await supabase
+    .from('event_guest_checkins')
+    .select(
+      'performed_at, action, source,'
+        + ' event_guests ( full_name, company ),'
+        + ' profiles:performed_by_user_id ( display_name, email )',
+    )
+    .eq('event_id', event_id)
+    .order('performed_at', { ascending: true });
+
+  const audit: CheckinAuditEntry[] = (
+    (auditRaw ?? []) as unknown as Array<
+      Pick<EventGuestCheckin, 'performed_at' | 'action' | 'source'> & {
+        event_guests: { full_name: string; company: string | null } | null;
+        profiles: { display_name: string | null; email: string } | null;
+      }
+    >
+  ).map((row) => ({
+    performed_at: row.performed_at,
+    action: row.action,
+    source: row.source,
+    guest_name: row.event_guests?.full_name ?? null,
+    guest_company: row.event_guests?.company ?? null,
+    performed_by_label:
+      row.profiles?.display_name?.trim() ||
+      row.profiles?.email ||
+      null,
+  }));
+
+  const clientRow = (
+    event as unknown as {
+      clients: { corporate_name: string; logo_url: string | null } | null;
+    }
+  ).clients;
+
   const clientLabel =
-    (
-      (event as unknown as {
-        clients: { corporate_name: string } | null;
-      }).clients?.corporate_name
-    ) ??
+    clientRow?.corporate_name ??
     ((event.adhoc_client_name as string | null) ?? null);
+  const clientLogoUrl = clientRow?.logo_url ?? null;
 
   const generatedAt = new Date().toLocaleString('en-GB', {
     day: '2-digit',
@@ -76,7 +133,10 @@ export async function GET(
     hour12: false,
   });
 
-  const logo = await loadLogo();
+  const [logo, clientLogo] = await Promise.all([
+    loadLogo(),
+    fetchClientLogo(clientLogoUrl),
+  ]);
 
   const buffer = await renderToBuffer(
     EventAttendancePdf({
@@ -88,9 +148,11 @@ export async function GET(
         clientLabel,
       },
       guests: (guests ?? []) as EventGuest[],
+      audit,
       generatedAt,
       generatedBy: user.email ?? 'Aegis',
       logo,
+      clientLogo,
     }),
   );
 

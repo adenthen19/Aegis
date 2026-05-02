@@ -1,6 +1,15 @@
 import ExcelJS from 'exceljs';
 import { createClient } from '@/lib/supabase/server';
-import type { EventGuest } from '@/lib/types';
+import type { EventGuest, EventGuestCheckin } from '@/lib/types';
+
+type AuditRow = {
+  performed_at: string;
+  action: 'checkin' | 'undo';
+  source: 'kiosk' | 'admin';
+  guest_name: string | null;
+  guest_company: string | null;
+  performed_by_label: string | null;
+};
 
 export const runtime = 'nodejs';
 
@@ -65,6 +74,35 @@ export async function GET(
     .select('*')
     .eq('event_id', event_id);
   if (guestsErr) return new Response(`Database error: ${guestsErr.message}`, { status: 500 });
+
+  const { data: auditRaw } = await supabase
+    .from('event_guest_checkins')
+    .select(
+      'performed_at, action, source,'
+        + ' event_guests ( full_name, company ),'
+        + ' profiles:performed_by_user_id ( display_name, email )',
+    )
+    .eq('event_id', event_id)
+    .order('performed_at', { ascending: true });
+
+  const audit: AuditRow[] = (
+    (auditRaw ?? []) as unknown as Array<
+      Pick<EventGuestCheckin, 'performed_at' | 'action' | 'source'> & {
+        event_guests: { full_name: string; company: string | null } | null;
+        profiles: { display_name: string | null; email: string } | null;
+      }
+    >
+  ).map((row) => ({
+    performed_at: row.performed_at,
+    action: row.action,
+    source: row.source,
+    guest_name: row.event_guests?.full_name ?? null,
+    guest_company: row.event_guests?.company ?? null,
+    performed_by_label:
+      row.profiles?.display_name?.trim() ||
+      row.profiles?.email ||
+      null,
+  }));
 
   const rows = (guests ?? []) as EventGuest[];
   const total = rows.length;
@@ -270,6 +308,63 @@ export async function GET(
     from: { row: 1, column: 1 },
     to: { row: 1, column: sheet.columns.length },
   };
+
+  // Sheet 3 — Activity Log (only added when there's something to show, so a
+  // brand-new event doesn't ship with an empty audit sheet).
+  if (audit.length > 0) {
+    const log = wb.addWorksheet('Activity Log', {
+      views: [{ state: 'frozen', ySplit: 1 }],
+    });
+    log.columns = [
+      { header: 'Time', key: 'time', width: 22 },
+      { header: 'Guest', key: 'guest', width: 28 },
+      { header: 'Company', key: 'company', width: 26 },
+      { header: 'Action', key: 'action', width: 14 },
+      { header: 'By', key: 'by', width: 24 },
+      { header: 'Source', key: 'source', width: 12 },
+    ];
+    log.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: COLORS.white }, size: 10 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLORS.navy } };
+      cell.alignment = { horizontal: 'left', vertical: 'middle' };
+    });
+    log.getRow(1).height = 22;
+
+    for (const row of audit) {
+      const r = log.addRow({
+        time: new Date(row.performed_at).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }),
+        guest: row.guest_name ?? '—',
+        company: row.guest_company ?? '',
+        action: row.action === 'checkin' ? 'Checked in' : 'Undo',
+        by: row.performed_by_label ?? '—',
+        source: row.source === 'kiosk' ? 'Kiosk' : 'Admin',
+      });
+      r.getCell('guest').font = { bold: true, color: { argb: COLORS.navy } };
+      if (row.action === 'checkin') {
+        r.getCell('action').font = { bold: true, color: { argb: COLORS.emerald } };
+      } else {
+        r.getCell('action').font = { color: { argb: COLORS.gray400 } };
+      }
+      r.getCell('source').font = {
+        color: {
+          argb: row.source === 'kiosk' ? COLORS.orange : COLORS.navy,
+        },
+        bold: true,
+      };
+    }
+    log.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: 1, column: log.columns.length },
+    };
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   const stamp = new Date(event.event_date as string).toISOString().slice(0, 10);
