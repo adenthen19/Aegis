@@ -146,9 +146,11 @@ export default function DataTableSelectable<T>({
 
       {/* Desktop / tablet table */}
       <div className="hidden overflow-x-auto rounded-lg border border-aegis-gray-100 bg-white sm:block">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-aegis-gray-100 bg-aegis-gray-50/60">
+        <table className="aegis-table w-full text-left text-sm">
+          {/* Sticky header — same pattern as DataTable so NAME / INSTITUTION /
+              etc. stay visible when scrolling a long list. */}
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-aegis-gray-100 bg-aegis-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-aegis-gray-50/80">
               <th className="w-10 px-3 py-3">
                 <input
                   type="checkbox"

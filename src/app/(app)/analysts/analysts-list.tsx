@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import DataTableSelectable, {
   type BulkAction,
@@ -75,6 +76,9 @@ export default function AnalystsList({
     },
   ];
 
+  // Hide the Email column when nobody has one — saves a column of dashes.
+  const anyEmail = rows.some((r) => !!r.email);
+
   return (
     <DataTableSelectable<Analyst>
       rows={rows}
@@ -109,7 +113,7 @@ export default function AnalystsList({
           sortKey: 'analyst_type',
           cell: (r) => (
             <span className="whitespace-nowrap text-aegis-gray">
-              {r.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side'}
+              {r.analyst_type === 'buy_side' ? 'Buy' : 'Sell'}
             </span>
           ),
         },
@@ -119,47 +123,89 @@ export default function AnalystsList({
             if (!r.contact_number) {
               return <span className="text-aegis-gray-300">—</span>;
             }
-            const wa = whatsAppUrl(r.contact_number);
-            const display = displayPhone(r.contact_number);
-            if (!wa) {
-              return (
-                <span className="block whitespace-nowrap tabular-nums text-aegis-gray">
-                  {display}
-                </span>
-              );
-            }
-            return (
-              <a
-                href={wa}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block whitespace-nowrap tabular-nums text-aegis-gray hover:text-emerald-600"
-                title="Open WhatsApp chat"
-              >
-                {display}
-              </a>
-            );
+            return <ContactCell raw={r.contact_number} />;
           },
         },
-        {
-          header: 'Email',
-          sortKey: 'email',
-          cell: (r) => {
-            const lower = displayEmail(r.email);
-            return lower ? (
-              <a
-                href={`mailto:${lower}`}
-                className="text-aegis-navy hover:text-aegis-orange"
-              >
-                {lower}
-              </a>
-            ) : (
-              <span className="text-aegis-gray-300">—</span>
-            );
-          },
-        },
+        ...(anyEmail
+          ? [
+              {
+                header: 'Email',
+                sortKey: 'email',
+                cell: (r: Analyst) => {
+                  const lower = displayEmail(r.email);
+                  return lower ? (
+                    <a
+                      href={`mailto:${lower}`}
+                      className="text-aegis-navy hover:text-aegis-orange"
+                    >
+                      {lower}
+                    </a>
+                  ) : (
+                    <span className="text-aegis-gray-300">—</span>
+                  );
+                },
+              },
+            ]
+          : []),
         { header: '', cell: (r) => <AnalystRowActions row={r} /> },
       ]}
     />
+  );
+}
+
+// Compact phone cell with WhatsApp link + a copy-to-clipboard mini-button
+// that fades in on row hover. Stays out of the way otherwise so the table
+// keeps its clean look.
+function ContactCell({ raw }: { raw: string }) {
+  const wa = whatsAppUrl(raw);
+  const display = displayPhone(raw);
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(display).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  }
+
+  return (
+    <span className="group/contact inline-flex items-center gap-1.5 whitespace-nowrap tabular-nums">
+      {wa ? (
+        <a
+          href={wa}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-aegis-gray hover:text-emerald-600"
+          title="Open WhatsApp chat"
+        >
+          {display}
+        </a>
+      ) : (
+        <span className="text-aegis-gray">{display}</span>
+      )}
+      <button
+        type="button"
+        onClick={copy}
+        title={copied ? 'Copied!' : 'Copy number'}
+        aria-label="Copy number"
+        className={[
+          'inline-flex h-5 w-5 items-center justify-center rounded text-aegis-gray-300 transition-opacity hover:bg-aegis-gray-100 hover:text-aegis-navy',
+          // Hidden by default; fade in on row hover or when the button itself is focused.
+          'opacity-0 group-hover/contact:opacity-100 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-aegis-navy/20',
+          copied ? 'text-emerald-600 opacity-100' : '',
+        ].join(' ')}
+      >
+        {copied ? (
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M5 12l5 5 9-11" />
+          </svg>
+        ) : (
+          <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+          </svg>
+        )}
+      </button>
+    </span>
   );
 }

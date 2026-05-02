@@ -113,3 +113,16 @@ body {
 .aegis-press:active {
   transform: scale(0.97);
 }
+
+/* Compact density mode: tighter row + header padding on data tables.
+   Toggled by `<DensityToggle />` setting `data-density="compact"` on
+   the <html> element. Only opts in tables with `.aegis-table` so modal
+   tables / inline tables stay at their bespoke spacing. */
+[data-density="compact"] .aegis-table thead th {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}
+[data-density="compact"] .aegis-table tbody td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}

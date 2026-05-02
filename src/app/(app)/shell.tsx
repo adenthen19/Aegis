@@ -8,6 +8,7 @@ import SignOutButton from './sign-out-button';
 import OnboardingDialog from './onboarding-dialog';
 import ProfileDialog from './profile-dialog';
 import BirthdayGreeter, { type BirthdayProfile } from './birthday-greeter';
+import DensityToggle from '@/components/density-toggle';
 import { displayEmail, displayName as formatName } from '@/lib/display-format';
 
 const STORAGE_KEY = 'aegis-sidebar-collapsed';
@@ -256,30 +257,33 @@ export default function Shell({
               <SignOutButton />
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                title="Edit profile"
-                className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-white/5"
-              >
-                <span className="relative shrink-0">
-                  <UserAvatar size={36} avatarUrl={avatarUrl} initial={initial} />
-                  <span
-                    aria-hidden
-                    className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-aegis-navy bg-emerald-400"
-                  />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium text-white">
-                    {friendlyName}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setProfileOpen(true)}
+                  title="Edit profile"
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors hover:bg-white/5"
+                >
+                  <span className="relative shrink-0">
+                    <UserAvatar size={36} avatarUrl={avatarUrl} initial={initial} />
+                    <span
+                      aria-hidden
+                      className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-aegis-navy bg-emerald-400"
+                    />
                   </span>
-                  <span className="block truncate text-[10px] tracking-wide text-aegis-blue-100/50">
-                    {displayName ? niceEmail : 'Signed in'}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium text-white">
+                      {friendlyName}
+                    </span>
+                    <span className="block truncate text-[10px] tracking-wide text-aegis-blue-100/50">
+                      {displayName ? niceEmail : 'Signed in'}
+                    </span>
                   </span>
-                </span>
-              </button>
-              <SignOutButton />
+                </button>
+                <SignOutButton />
+              </div>
+              <DensityToggle className="w-full justify-center" />
             </div>
           )}
         </div>

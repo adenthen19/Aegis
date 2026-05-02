@@ -36,9 +36,12 @@ export default function DataTable<T>({
     <>
       {/* Desktop / tablet table */}
       <div className="hidden overflow-x-auto rounded-lg border border-aegis-gray-100 bg-white sm:block">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-aegis-gray-100 bg-aegis-gray-50/60">
+        <table className="aegis-table w-full text-left text-sm">
+          {/* Sticky header — keeps NAME / INSTITUTION / TYPE / etc. visible
+              when scrolling long lists. The cells use a solid background
+              so rows scrolling under the header don't show through. */}
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-aegis-gray-100 bg-aegis-gray-50/95 backdrop-blur supports-[backdrop-filter]:bg-aegis-gray-50/80">
               {columns.map((col, idx) => (
                 <th
                   key={`${col.header}-${idx}`}
