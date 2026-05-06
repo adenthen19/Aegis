@@ -16,7 +16,7 @@ import {
 
 export type ActionState = { ok: boolean; error: string | null };
 
-const ANALYST_TYPES: AnalystType[] = ['buy_side', 'sell_side'];
+const ANALYST_TYPES: AnalystType[] = ['buy_side', 'sell_side', 'kol'];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

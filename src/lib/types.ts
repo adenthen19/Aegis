@@ -17,7 +17,7 @@ export const IPO_STATUS_LABEL: Record<IpoStatus, string> = {
   stage_5_balloting: 'Stage 5 — Balloting',
   stage_6_listing: 'Stage 6 — Listing',
 };
-export type AnalystType = 'buy_side' | 'sell_side';
+export type AnalystType = 'buy_side' | 'sell_side' | 'kol';
 export type MeetingFormat = 'physical' | 'online';
 export type MeetingType = 'internal' | 'briefing';
 export type ActionItemStatus = 'open' | 'done';

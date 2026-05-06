@@ -1,0 +1,1 @@
+ALTER TYPE analyst_type ADD VALUE IF NOT EXISTS 'kol';

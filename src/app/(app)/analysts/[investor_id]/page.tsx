@@ -61,7 +61,7 @@ export default async function AnalystDetailPage({
         subtitle={
           [
             niceName ? niceInstitution : null,
-            analyst.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side',
+            analyst.analyst_type === 'buy_side' ? 'Buy-side' : analyst.analyst_type === 'sell_side' ? 'Sell-side' : 'KOL',
           ].filter(Boolean).join(' · ') || undefined
         }
         actions={<AnalystRowActions row={analyst} />}
@@ -74,7 +74,7 @@ export default async function AnalystDetailPage({
           </Field>
           <Field label="Institution">{niceInstitution}</Field>
           <Field label="Type">
-            {analyst.analyst_type === 'buy_side' ? 'Buy-side' : 'Sell-side'}
+            {analyst.analyst_type === 'buy_side' ? 'Buy-side' : analyst.analyst_type === 'sell_side' ? 'Sell-side' : 'KOL'}
           </Field>
           <Field label="Contact number">
             {analyst.contact_number ? (

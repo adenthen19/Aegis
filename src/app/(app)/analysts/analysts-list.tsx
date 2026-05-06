@@ -113,7 +113,7 @@ export default function AnalystsList({
           sortKey: 'analyst_type',
           cell: (r) => (
             <span className="whitespace-nowrap text-aegis-gray">
-              {r.analyst_type === 'buy_side' ? 'Buy' : 'Sell'}
+              {r.analyst_type === 'buy_side' ? 'Buy' : r.analyst_type === 'sell_side' ? 'Sell' : 'KOL'}
             </span>
           ),
         },

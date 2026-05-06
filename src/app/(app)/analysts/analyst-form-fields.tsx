@@ -34,6 +34,7 @@ export default function AnalystFormFields({ initial }: { initial?: Analyst }) {
         options={[
           { value: 'buy_side', label: 'Buy-side' },
           { value: 'sell_side', label: 'Sell-side' },
+          { value: 'kol', label: 'KOL' },
         ]}
       />
       <TextField

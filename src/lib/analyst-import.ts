@@ -1,6 +1,6 @@
 import type { AnalystType } from './types';
 
-export const ANALYST_TYPE_CODES: AnalystType[] = ['buy_side', 'sell_side'];
+export const ANALYST_TYPE_CODES: AnalystType[] = ['buy_side', 'sell_side', 'kol'];
 
 export const ANALYST_IMPORT_HEADERS = [
   'institution_name',
