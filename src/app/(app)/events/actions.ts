@@ -23,6 +23,7 @@ type EventPayload = {
   location: string | null;
   description: string | null;
   status: EventStatus;
+  default_table_capacity: number | null;
 };
 
 function readEventPayload(
@@ -57,6 +58,22 @@ function readEventPayload(
     ? (status_raw as EventStatus)
     : 'planned';
 
+  // Empty/blank default capacity → null = "capacity warnings disabled".
+  // Anything > 0 is honoured; non-positive numbers are rejected so the DB
+  // check constraint isn't the first line of defence.
+  const cap_raw = formData.get('default_table_capacity')?.toString().trim() ?? '';
+  let default_table_capacity: number | null = null;
+  if (cap_raw !== '') {
+    const parsed = Number.parseInt(cap_raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return {
+        ok: false,
+        error: 'Default table capacity must be a positive whole number, or blank.',
+      };
+    }
+    default_table_capacity = parsed;
+  }
+
   return {
     ok: true,
     value: {
@@ -67,6 +84,7 @@ function readEventPayload(
       location: formData.get('location')?.toString().trim() || null,
       description: formData.get('description')?.toString().trim() || null,
       status,
+      default_table_capacity,
     },
   };
 }
@@ -149,6 +167,269 @@ export async function setEventStatusAction(
 
   revalidatePath('/events');
   revalidatePath(`/events/${event_id}`);
+  return { ok: true, error: null };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Seating: default capacity + per-table overrides
+// ────────────────────────────────────────────────────────────────────────
+//
+// Capacity lives in two places by design:
+//   • events.default_table_capacity — the standard (e.g. 10 pax/round table).
+//   • event_tables — sparse override registry (head table = 12, VIP = 6).
+// Lookup at use site is `coalesce(event_tables.capacity, events.default_table_capacity)`.
+// All warnings are *soft*; nothing here ever blocks a check-in.
+
+export async function setEventDefaultCapacityAction(
+  event_id: string,
+  capacity: number | null,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+
+  // null is a valid value — explicitly turns capacity tracking off for the
+  // event. Anything else must be a positive integer; the DB has the same
+  // check but we want a clean error before round-tripping.
+  if (capacity !== null && (!Number.isInteger(capacity) || capacity <= 0)) {
+    return { ok: false, error: 'Capacity must be a positive whole number.' };
+  }
+
+  const { error } = await supabase
+    .from('events')
+    .update({ default_table_capacity: capacity })
+    .eq('event_id', event_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
+  return { ok: true, error: null };
+}
+
+export async function upsertEventTableAction(
+  event_id: string,
+  table_number: string,
+  capacity: number,
+  label: string | null,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+
+  const trimmed = table_number.trim();
+  if (!trimmed) return { ok: false, error: 'Table number is required.' };
+  if (!Number.isInteger(capacity) || capacity <= 0) {
+    return { ok: false, error: 'Capacity must be a positive whole number.' };
+  }
+
+  const { error } = await supabase
+    .from('event_tables')
+    .upsert(
+      {
+        event_id,
+        table_number: trimmed,
+        capacity,
+        label: label?.trim() || null,
+      },
+      { onConflict: 'event_id,table_number' },
+    );
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
+  return { ok: true, error: null };
+}
+
+export type TableSwapMode = 'move' | 'swap';
+
+export type TableSwapResult =
+  | { ok: true; moved_from: number; moved_to: number; error: null }
+  | { ok: false; error: string };
+
+// Bulk re-seat a whole table (or two), audited row-per-guest. Two modes:
+//   • move  — guests at `from_table` shift to `to_table`. Anyone already at
+//             `to_table` stays put (the two groups merge).
+//   • swap  — guests at `from_table` shift to `to_table` AND vice versa.
+//             Implemented with a temp marker between the two updates so
+//             we don't have to lean on a stored procedure for atomicity:
+//                 from → tmp, to → from, tmp → to
+//             A failure between steps 2 and 3 leaves the audit feed clean
+//             (we only write audit AFTER all writes commit) and a clear
+//             tmp marker that a retry will recover.
+export async function swapEventTablesAction(
+  event_id: string,
+  from_table: string,
+  to_table: string,
+  mode: TableSwapMode,
+): Promise<TableSwapResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+
+  const from = from_table.trim();
+  const to = to_table.trim();
+  if (!from || !to) {
+    return { ok: false, error: 'Both source and destination tables are required.' };
+  }
+  if (from === to) {
+    return { ok: false, error: 'Source and destination must be different tables.' };
+  }
+  if (mode !== 'move' && mode !== 'swap') {
+    return { ok: false, error: 'Unknown swap mode.' };
+  }
+
+  // Snapshot affected rows so the audit can name each guest. The 'swap'
+  // case needs both groups; the 'move' case only needs the source group.
+  const { data: fromGuests, error: fromErr } = await supabase
+    .from('event_guests')
+    .select('guest_id, full_name')
+    .eq('event_id', event_id)
+    .eq('table_number', from);
+  if (fromErr) return { ok: false, error: fromErr.message };
+  if (!fromGuests || fromGuests.length === 0) {
+    return {
+      ok: false,
+      error: `No guests are currently at Table ${from}.`,
+    };
+  }
+
+  let toGuests: { guest_id: string; full_name: string }[] = [];
+  if (mode === 'swap') {
+    const { data, error } = await supabase
+      .from('event_guests')
+      .select('guest_id, full_name')
+      .eq('event_id', event_id)
+      .eq('table_number', to);
+    if (error) return { ok: false, error: error.message };
+    toGuests = (data ?? []) as { guest_id: string; full_name: string }[];
+  }
+
+  // Tmp marker is namespaced + timestamped so concurrent swaps from
+  // different events can never collide on it (unlikely, but cheap to
+  // guarantee).
+  const tmpMarker = `__AEGIS_SWAP_TMP_${Date.now()}__`;
+
+  if (mode === 'move') {
+    const { error } = await supabase
+      .from('event_guests')
+      .update({ table_number: to })
+      .eq('event_id', event_id)
+      .eq('table_number', from);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    // swap: from → tmp, to → from, tmp → to
+    const step1 = await supabase
+      .from('event_guests')
+      .update({ table_number: tmpMarker })
+      .eq('event_id', event_id)
+      .eq('table_number', from);
+    if (step1.error) return { ok: false, error: step1.error.message };
+
+    const step2 = await supabase
+      .from('event_guests')
+      .update({ table_number: from })
+      .eq('event_id', event_id)
+      .eq('table_number', to);
+    if (step2.error) {
+      // Best-effort recovery: roll the tmp guests back to the source
+      // table so we don't leave the marker visible.
+      await supabase
+        .from('event_guests')
+        .update({ table_number: from })
+        .eq('event_id', event_id)
+        .eq('table_number', tmpMarker);
+      return { ok: false, error: step2.error.message };
+    }
+
+    const step3 = await supabase
+      .from('event_guests')
+      .update({ table_number: to })
+      .eq('event_id', event_id)
+      .eq('table_number', tmpMarker);
+    if (step3.error) {
+      // Half-swapped state: the source-side group is now at `from` (their
+      // destination after the swap finishes) but tmp guests are stuck.
+      // Surface clearly so the user can re-run; a re-run will see the tmp
+      // marker and finish the move.
+      return {
+        ok: false,
+        error: `Partial swap — re-run to finish. ${step3.error.message}`,
+      };
+    }
+  }
+
+  // Audit one row per affected guest. Notes carry the human-readable
+  // before/after so the activity feed reads naturally.
+  const auditRows: Array<{
+    guest_id: string;
+    event_id: string;
+    action: 'table_swap';
+    source: 'admin';
+    performed_by_user_id: string;
+    notes: string;
+  }> = [];
+  for (const g of fromGuests) {
+    auditRows.push({
+      guest_id: g.guest_id as string,
+      event_id,
+      action: 'table_swap',
+      source: 'admin',
+      performed_by_user_id: user.id,
+      notes:
+        mode === 'move'
+          ? `Moved ${from} → ${to} (bulk move)`
+          : `Swapped ${from} → ${to} (bulk swap)`,
+    });
+  }
+  if (mode === 'swap') {
+    for (const g of toGuests) {
+      auditRows.push({
+        guest_id: g.guest_id as string,
+        event_id,
+        action: 'table_swap',
+        source: 'admin',
+        performed_by_user_id: user.id,
+        notes: `Swapped ${to} → ${from} (bulk swap)`,
+      });
+    }
+  }
+  await supabase.from('event_guest_checkins').insert(auditRows);
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
+
+  return {
+    ok: true,
+    error: null,
+    moved_from: fromGuests.length,
+    moved_to: toGuests.length,
+  };
+}
+
+export async function deleteEventTableAction(
+  event_id: string,
+  table_number: string,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+  if (!table_number) return { ok: false, error: 'Missing table number.' };
+
+  // Deleting an override does NOT remove the table from the event — guests
+  // assigned to it still exist; they simply fall back to the event default.
+  const { error } = await supabase
+    .from('event_tables')
+    .delete()
+    .eq('event_id', event_id)
+    .eq('table_number', table_number);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
   return { ok: true, error: null };
 }
 

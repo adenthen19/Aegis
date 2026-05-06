@@ -1,6 +1,12 @@
 import ExcelJS from 'exceljs';
 import { createClient } from '@/lib/supabase/server';
-import type { EventGuest, EventGuestCheckin } from '@/lib/types';
+import {
+  EVENT_CHECKIN_ACTION_LABEL,
+  type EventCheckinAction,
+  type EventCheckinSource,
+  type EventGuest,
+  type EventGuestCheckin,
+} from '@/lib/types';
 import {
   displayCompany,
   displayEmail,
@@ -10,8 +16,8 @@ import {
 
 type AuditRow = {
   performed_at: string;
-  action: 'checkin' | 'undo';
-  source: 'kiosk' | 'admin' | 'sheet';
+  action: EventCheckinAction;
+  source: EventCheckinSource;
   guest_name: string | null;
   guest_company: string | null;
   performed_by_label: string | null;
@@ -350,7 +356,7 @@ export async function GET(
         }),
         guest: row.guest_name ? displayName(row.guest_name) : '—',
         company: row.guest_company ? displayCompany(row.guest_company) : '',
-        action: row.action === 'checkin' ? 'Checked in' : 'Undo',
+        action: EVENT_CHECKIN_ACTION_LABEL[row.action] ?? row.action,
         by: row.performed_by_label ?? '—',
         source:
           row.source === 'kiosk'
@@ -360,10 +366,15 @@ export async function GET(
               : 'Admin',
       });
       r.getCell('guest').font = { bold: true, color: { argb: COLORS.navy } };
+      // checkin = celebratory green; undo = muted; new floor actions
+      // (walkin_add, companion_add, table_swap, capacity_override) use
+      // navy so they stand out as "interesting but not a regular check-in".
       if (row.action === 'checkin') {
         r.getCell('action').font = { bold: true, color: { argb: COLORS.emerald } };
-      } else {
+      } else if (row.action === 'undo') {
         r.getCell('action').font = { color: { argb: COLORS.gray400 } };
+      } else {
+        r.getCell('action').font = { bold: true, color: { argb: COLORS.navy } };
       }
       r.getCell('source').font = {
         color: {

@@ -14,11 +14,13 @@ import {
   type EventGuestCheckin,
   type EventRow,
   type EventStatus,
+  type EventTable,
 } from '@/lib/types';
 import { displayCompany, displayName } from '@/lib/display-format';
 import EditEventButton from './edit-event-button';
 import EventStatusSelect from './event-status-select';
 import GuestList from './guest-list';
+import SeatingSection from './seating-section';
 
 export type CheckinFeedEntry = EventGuestCheckin & {
   guest_name: string | null;
@@ -50,7 +52,7 @@ export default async function EventDetailPage({
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [eventRes, guestsRes, clientsRes, activityRes, googleRes] = await Promise.all([
+  const [eventRes, guestsRes, clientsRes, activityRes, googleRes, tablesRes] = await Promise.all([
     supabase
       .from('events')
       .select('*, clients ( client_id, corporate_name )')
@@ -86,6 +88,10 @@ export default async function EventDetailPage({
           .eq('user_id', user.id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null } as const),
+    supabase
+      .from('event_tables')
+      .select('*')
+      .eq('event_id', event_id),
   ]);
 
   if (!eventRes.data) notFound();
@@ -124,6 +130,7 @@ export default async function EventDetailPage({
   }));
 
   const googleConnection = (googleRes.data as { google_email: string } | null) ?? null;
+  const tables = (tablesRes.data ?? []) as EventTable[];
 
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -206,6 +213,13 @@ export default async function EventDetailPage({
           </div>
         )}
       </Section>
+
+      <SeatingSection
+        eventId={event.event_id}
+        defaultCapacity={event.default_table_capacity ?? null}
+        tables={tables}
+        guests={guests}
+      />
 
       <GuestList
         eventId={event.event_id}

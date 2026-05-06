@@ -4,9 +4,20 @@ import { useMemo } from 'react';
 import type { CheckinFeedEntry } from './page';
 import {
   EVENT_CHECKIN_SOURCE_LABEL,
+  type EventCheckinAction,
   type EventGuest,
 } from '@/lib/types';
 import PushToSheetButton from './push-to-sheet-button';
+
+// Activity feed micro-copy. Slots into "<guest_name> <verb> by <user>".
+const ACTIVITY_VERB: Record<EventCheckinAction, string> = {
+  checkin: 'checked in',
+  undo: 'was un-checked',
+  walkin_add: 'was added as a walk-in',
+  companion_add: 'was added as a +1 companion',
+  table_swap: "'s table was changed",
+  capacity_override: ' was seated past capacity',
+};
 
 function formatRelative(iso: string): string {
   // Compact relative-time helper for the activity feed. Falls back to an
@@ -347,9 +358,8 @@ export default function GuestReport({
                         {entry.guest_name ?? 'Deleted guest'}
                       </span>
                       <span className="text-aegis-gray">
-                        {entry.action === 'checkin'
-                          ? ' checked in'
-                          : ' un-checked'}
+                        {' '}
+                        {ACTIVITY_VERB[entry.action] ?? entry.action}
                       </span>
                       {entry.performed_by_label && (
                         <span className="text-aegis-gray">
@@ -396,7 +406,12 @@ export default function GuestReport({
   );
 }
 
-function ActivityIcon({ action }: { action: 'checkin' | 'undo' }) {
+function ActivityIcon({ action }: { action: EventCheckinAction }) {
+  // Three visual buckets:
+  //   • checkin              → green check (the happy path)
+  //   • undo                 → grey rewind arrow (correction)
+  //   • new floor actions    → navy "edit/sparkle" so they read as "host
+  //                            adjustment" rather than ambient activity
   if (action === 'checkin') {
     return (
       <span
@@ -417,9 +432,30 @@ function ActivityIcon({ action }: { action: 'checkin' | 'undo' }) {
       </span>
     );
   }
+  if (action === 'undo') {
+    return (
+      <span
+        className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-aegis-gray-100 text-aegis-gray-500"
+        aria-hidden
+      >
+        <svg
+          className="h-3.5 w-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+      </span>
+    );
+  }
   return (
     <span
-      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-aegis-gray-100 text-aegis-gray-500"
+      className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-aegis-blue-50 text-aegis-navy"
       aria-hidden
     >
       <svg
@@ -431,8 +467,7 @@ function ActivityIcon({ action }: { action: 'checkin' | 'undo' }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-        <path d="M3 3v5h5" />
+        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
       </svg>
     </span>
   );

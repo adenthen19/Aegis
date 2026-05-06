@@ -525,8 +525,18 @@ export type EventRow = {
   location: string | null;
   description: string | null;
   status: EventStatus;
+  default_table_capacity: number | null;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventTable = {
+  event_id: string;
+  table_number: string;
+  capacity: number;
+  label: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -593,12 +603,22 @@ export type EventGuest = {
   updated_at: string;
 };
 
-export type EventCheckinAction = 'checkin' | 'undo';
+export type EventCheckinAction =
+  | 'checkin'
+  | 'undo'
+  | 'walkin_add'
+  | 'companion_add'
+  | 'table_swap'
+  | 'capacity_override';
 export type EventCheckinSource = 'kiosk' | 'admin' | 'sheet';
 
 export const EVENT_CHECKIN_ACTION_LABEL: Record<EventCheckinAction, string> = {
   checkin: 'Checked in',
   undo: 'Undo check-in',
+  walkin_add: 'Walk-in added',
+  companion_add: '+1 companion added',
+  table_swap: 'Table changed',
+  capacity_override: 'Capacity override',
 };
 
 export const EVENT_CHECKIN_SOURCE_LABEL: Record<EventCheckinSource, string> = {

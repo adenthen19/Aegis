@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { EventGuest } from '@/lib/types';
+import type { EventGuest, EventTable } from '@/lib/types';
 import {
   displayCompany,
   displayName,
@@ -15,6 +15,8 @@ import {
   kioskUndoCheckInAction,
   type KioskCheckInResult,
 } from './actions';
+import WalkInModal from './walk-in-modal';
+import CompanionModal from './companion-modal';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Search classifier — same UX as the in-app kiosk tab:
@@ -162,6 +164,11 @@ type ToastState =
   | { kind: 'idle' }
   | {
       kind: 'success';
+      // The id of the guest this toast is about. Carried so the toast can
+      // expose a "+1 companion" affordance regardless of whether this was a
+      // fresh check-in (lastCheckedId is set) or a re-tap (lastCheckedId
+      // stays untouched, but the companion path still makes sense).
+      guest_id: string;
       name: string;
       company: string | null;
       table: string | null;
@@ -243,6 +250,8 @@ export default function KioskShell({
   clientLogoUrl,
   location,
   guests,
+  tables,
+  defaultCapacity,
   googleSheetId,
 }: {
   eventId: string;
@@ -252,6 +261,8 @@ export default function KioskShell({
   clientLogoUrl: string | null;
   location: string | null;
   guests: EventGuest[];
+  tables: EventTable[];
+  defaultCapacity: number | null;
   googleSheetId: string | null;
 }) {
   const router = useRouter();
@@ -259,6 +270,11 @@ export default function KioskShell({
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<ToastState>({ kind: 'idle' });
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+  const [walkInOpen, setWalkInOpen] = useState(false);
+  // The host of an in-progress companion add. Null = modal closed.
+  // Stored as the full guest so the modal can read the host's table /
+  // company directly without a second lookup.
+  const [companionFor, setCompanionFor] = useState<EventGuest | null>(null);
   const [liveConnected, setLiveConnected] = useState(false);
   const [sheetSyncStatus, setSheetSyncStatus] = useState<
     'idle' | 'syncing' | 'ok' | 'error'
@@ -505,6 +521,7 @@ export default function KioskShell({
       // re-fire the action. (Server will confirm if we did fire it anyway.)
       flashToast({
         kind: 'success',
+        guest_id: guest.guest_id,
         name: displayName(guest.full_name),
         company: guest.company ? displayCompany(guest.company) : null,
         table: guest.table_number,
@@ -523,6 +540,7 @@ export default function KioskShell({
       rememberLastChecked(guest.guest_id);
       flashToast({
         kind: 'success',
+        guest_id: guest.guest_id,
         name: displayName(guest.full_name),
         company: guest.company ? displayCompany(guest.company) : null,
         table: guest.table_number,
@@ -890,11 +908,38 @@ export default function KioskShell({
         {classified.ready && (
           <div className="mt-5 space-y-6">
             {direct.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-aegis-gray-200 bg-white px-6 py-14 text-center">
+              <div className="rounded-2xl border border-dashed border-aegis-gray-200 bg-white px-6 py-12 text-center">
                 <p className="text-lg font-medium text-aegis-navy">No direct match.</p>
                 <p className="mt-1 text-sm text-aegis-gray-500">
                   Try a colleague&apos;s name, the company, or the contact number.
                 </p>
+                <div className="mt-5">
+                  <button
+                    type="button"
+                    onClick={() => setWalkInOpen(true)}
+                    disabled={!online}
+                    className="inline-flex items-center gap-2 rounded-lg bg-aegis-orange px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-aegis-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      aria-hidden
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Add walk-in
+                  </button>
+                  {!online && (
+                    <p className="mt-2 text-[11px] text-aegis-gray-500">
+                      Walk-ins require connectivity — they sync directly, not
+                      through the offline queue.
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
               <section>
@@ -973,6 +1018,21 @@ export default function KioskShell({
           already={toast.already}
           queued={toast.queued}
           onUndo={lastCheckedId ? undoLast : null}
+          onAddCompanion={
+            online
+              ? () => {
+                  // Toast carries the host's guest_id directly so this works
+                  // for re-taps on already-checked-in guests too — Undo and
+                  // +1 don't need to share a code path.
+                  const host = guests.find(
+                    (g) => g.guest_id === toast.guest_id,
+                  );
+                  if (!host) return;
+                  setCompanionFor(host);
+                  setToast({ kind: 'idle' });
+                }
+              : null
+          }
           onClose={() => setToast({ kind: 'idle' })}
         />
       )}
@@ -988,6 +1048,69 @@ export default function KioskShell({
         <ExitConfirm
           eventId={eventId}
           onCancel={() => setExitConfirmOpen(false)}
+        />
+      )}
+
+      {/* ── Walk-in modal ─────────────────────────────────────── */}
+      <WalkInModal
+        open={walkInOpen}
+        onClose={() => setWalkInOpen(false)}
+        eventId={eventId}
+        guests={guests}
+        tables={tables}
+        defaultCapacity={defaultCapacity}
+        prefillName={classified.text || ''}
+        onSuccess={(res) => {
+          // Mirror checkIn's success flow so the walk-in feels like a normal
+          // tap from the usher's perspective: same toast, same "wrong tap?"
+          // undo affordance, same input reset.
+          rememberLastChecked(res.guest.guest_id);
+          flashToast({
+            kind: 'success',
+            guest_id: res.guest.guest_id,
+            name: displayName(res.guest.full_name),
+            company: res.guest.company ? displayCompany(res.guest.company) : null,
+            table: res.guest.table_number,
+            already: false,
+            queued: false,
+          });
+          setQuery('');
+          setWalkInOpen(false);
+          inputRef.current?.focus();
+          router.refresh();
+        }}
+      />
+
+      {/* ── +1 companion modal ────────────────────────────────── */}
+      {companionFor && (
+        <CompanionModal
+          open={!!companionFor}
+          onClose={() => setCompanionFor(null)}
+          eventId={eventId}
+          host={companionFor}
+          guests={guests}
+          tables={tables}
+          defaultCapacity={defaultCapacity}
+          onSuccess={(res) => {
+            rememberLastChecked(res.guest.guest_id);
+            flashToast({
+              kind: 'success',
+              guest_id: res.guest.guest_id,
+              name: displayName(res.guest.full_name),
+              company: res.guest.company
+                ? displayCompany(res.guest.company)
+                : null,
+              table: res.guest.table_number,
+              already: false,
+              queued: false,
+            });
+            setCompanionFor(null);
+            setQuery('');
+            inputRef.current?.focus();
+            // host_moved_to is informational — the realtime channel + this
+            // refresh will pull the host's new table_number into view.
+            router.refresh();
+          }}
         />
       )}
     </div>
@@ -1265,6 +1388,7 @@ function ToastSuccess({
   already,
   queued,
   onUndo,
+  onAddCompanion,
   onClose,
 }: {
   name: string;
@@ -1273,6 +1397,10 @@ function ToastSuccess({
   already: boolean;
   queued: boolean;
   onUndo: (() => void) | null;
+  // When non-null, surfaces a "+1" affordance on the toast. We allow it in
+  // every variant including 'already' — a guest's +1 often arrives a beat
+  // after the host, and the usher may re-tap the host before realising.
+  onAddCompanion: (() => void) | null;
   onClose: () => void;
 }) {
   // Three visual variants:
@@ -1376,6 +1504,20 @@ function ToastSuccess({
                 className="rounded-md bg-white/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white hover:bg-white/25"
               >
                 Undo
+              </button>
+            )}
+            {onAddCompanion && (
+              <button
+                type="button"
+                onClick={onAddCompanion}
+                className={[
+                  'rounded-md px-2.5 py-1 text-xs font-semibold uppercase tracking-wide',
+                  variant === 'already'
+                    ? 'bg-aegis-navy text-white hover:bg-aegis-navy/90'
+                    : 'bg-white/15 text-white hover:bg-white/25',
+                ].join(' ')}
+              >
+                + Companion
               </button>
             )}
             <button

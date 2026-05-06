@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import type { EventGuest, EventRow } from '@/lib/types';
+import type { EventGuest, EventRow, EventTable } from '@/lib/types';
 import KioskShell from './kiosk-shell';
 
 export const metadata = {
@@ -18,7 +18,7 @@ export default async function KioskPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/login?next=/kiosk/${event_id}`);
 
-  const [eventRes, guestsRes] = await Promise.all([
+  const [eventRes, guestsRes, tablesRes] = await Promise.all([
     supabase
       .from('events')
       .select(
@@ -31,6 +31,10 @@ export default async function KioskPage({
       .select('*')
       .eq('event_id', event_id)
       .order('full_name', { ascending: true }),
+    supabase
+      .from('event_tables')
+      .select('*')
+      .eq('event_id', event_id),
   ]);
 
   if (!eventRes.data) notFound();
@@ -44,6 +48,7 @@ export default async function KioskPage({
     google_sheet_id: string | null;
   };
   const guests = (guestsRes.data ?? []) as EventGuest[];
+  const tables = (tablesRes.data ?? []) as EventTable[];
 
   const clientLabel =
     event.clients?.corporate_name ?? event.adhoc_client_name ?? null;
@@ -58,6 +63,8 @@ export default async function KioskPage({
       clientLogoUrl={clientLogoUrl}
       location={event.location}
       guests={guests}
+      tables={tables}
+      defaultCapacity={event.default_table_capacity ?? null}
       googleSheetId={event.google_sheet_id ?? null}
     />
   );

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   DateTimeField,
+  NumberField,
   SelectField,
   TextAreaField,
   TextField,
@@ -125,6 +126,20 @@ export default function EventFormFields({
           value: s,
           label: EVENT_STATUS_LABEL[s],
         }))}
+      />
+
+      <NumberField
+        name="default_table_capacity"
+        label="Default pax per table"
+        min={1}
+        max={50}
+        placeholder="e.g. 10"
+        defaultValue={
+          initial?.default_table_capacity != null
+            ? String(initial.default_table_capacity)
+            : undefined
+        }
+        hint="Leave blank to disable table-capacity warnings. Per-table overrides (head table, VIP, etc.) live in the event's seating section."
       />
 
       <TextAreaField
