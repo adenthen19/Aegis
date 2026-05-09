@@ -706,6 +706,25 @@ export async function kioskAddCompanionAction(
   const marker = `Walk-in +1 of ${host.full_name as string} (${host.guest_id as string})`;
   const composedNotes = userNote ? `${marker} · ${userNote}` : marker;
 
+  // Move the host FIRST when mode === move_both. If the host update
+  // fails, no companion row exists yet — far cleaner than the previous
+  // ordering, which inserted the companion first and could leave an
+  // audit-less orphan if the host UPDATE then errored.
+  if (movedHost) {
+    const newTable = payload.new_table!.trim();
+    const { error: hostUpdateErr } = await supabase
+      .from('event_guests')
+      .update({ table_number: newTable })
+      .eq('guest_id', host_guest_id)
+      .eq('event_id', event_id);
+    if (hostUpdateErr) {
+      return {
+        ok: false,
+        error: `Couldn't move the host's table: ${hostUpdateErr.message}`,
+      };
+    }
+  }
+
   const { data: inserted, error: insertErr } = await supabase
     .from('event_guests')
     .insert({
@@ -724,23 +743,17 @@ export async function kioskAddCompanionAction(
     })
     .select('guest_id, full_name, company, title, table_number, checked_in_at')
     .single();
-  if (insertErr) return { ok: false, error: insertErr.message };
-
-  // Move the host if mode === move_both AND it's a different table.
-  if (movedHost) {
-    const newTable = payload.new_table!.trim();
-    const { error: hostUpdateErr } = await supabase
-      .from('event_guests')
-      .update({ table_number: newTable })
-      .eq('guest_id', host_guest_id)
-      .eq('event_id', event_id);
-    if (hostUpdateErr) {
-      // Companion is already in; surface the partial failure but don't roll
-      // back — the usher can manually re-seat the host if the second write
-      // fails. Log it so the audit trail catches the mismatch.
-      console.error('kioskAddCompanionAction: host move failed', hostUpdateErr);
-      return { ok: false, error: `Companion added but moving host failed: ${hostUpdateErr.message}` };
+  if (insertErr) {
+    // If the host was already moved, surface that fact in the error.
+    // The host's seat is changed but the companion never landed — the
+    // usher can manually re-seat the host or retry the companion add.
+    if (movedHost) {
+      return {
+        ok: false,
+        error: `Host moved to ${payload.new_table!.trim()} but companion insert failed: ${insertErr.message}`,
+      };
     }
+    return { ok: false, error: insertErr.message };
   }
 
   // Audit feed:

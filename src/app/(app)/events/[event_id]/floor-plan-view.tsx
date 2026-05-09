@@ -266,6 +266,12 @@ export default function FloorPlanView({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState>({ kind: 'idle' });
+  // Suppress the synthetic click that follows a pointer-up after a drag.
+  // Without this, every drag-release on a table fires the canvas-root
+  // onClick → setPinnedTable(null), which immediately unpins whatever
+  // popover the host had opened. We set this flag in onPointerUp when a
+  // drag was active, then consume it in the click handler.
+  const didDragRef = useRef(false);
 
   // Convert a pointer event (in screen pixels) to canvas coordinates.
   // The canvas is CSS-scaled, so we have to divide by the current
@@ -290,6 +296,9 @@ export default function FloorPlanView({
   }
 
   // Drag handlers — wired at the canvas root and dispatched per item.
+  // setPointerCapture targets `currentTarget` (the element the listener
+  // is bound to) rather than `e.target`, which can be a child element
+  // that re-renders mid-drag and silently loses capture.
   function onPointerDownTable(
     e: React.PointerEvent,
     t: DraftTable,
@@ -303,7 +312,7 @@ export default function FloorPlanView({
       offsetX: pt.x - t.x,
       offsetY: pt.y - t.y,
     };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerDownMarker(
@@ -321,7 +330,7 @@ export default function FloorPlanView({
       offsetX: pt.x - m.x,
       offsetY: pt.y - m.y,
     };
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: React.PointerEvent) {
@@ -358,6 +367,13 @@ export default function FloorPlanView({
   }
 
   function onPointerUp() {
+    // If a drag was actually in progress, mark the next click as
+    // "post-drag" so the canvas-root onClick doesn't unpin the popover
+    // the user just opened. Touchscreens fire a synthetic click after
+    // pointerup, so we can't rely on stopPropagation in pointerdown.
+    if (dragRef.current.kind !== 'idle') {
+      didDragRef.current = true;
+    }
     dragRef.current = { kind: 'idle' };
   }
 
@@ -553,7 +569,16 @@ export default function FloorPlanView({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onClick={() => setPinnedTable(null)}
+        onClick={() => {
+          // Consume the post-drag synthetic click. Without this,
+          // releasing a drag anywhere on the canvas would immediately
+          // unpin the table popover the user just opened.
+          if (didDragRef.current) {
+            didDragRef.current = false;
+            return;
+          }
+          setPinnedTable(null);
+        }}
         className="relative w-full overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50/40"
         style={{
           aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,

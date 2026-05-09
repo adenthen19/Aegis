@@ -310,6 +310,27 @@ export async function swapEventTablesAction(
     return { ok: false, error: 'Unknown swap mode.' };
   }
 
+  // Refuse to start a new swap if a prior one left guests stranded under
+  // a tmp marker on this event. Auto-recovery is unsafe — we'd have to
+  // guess where stranded guests were headed, and the destination of a
+  // failed swap usually differs from the table the admin is now picking.
+  // We surface the stranded count so the admin can re-seat them via the
+  // existing per-guest edit UI before retrying.
+  const { data: stranded, error: strandedErr } = await supabase
+    .from('event_guests')
+    .select('guest_id')
+    .eq('event_id', event_id)
+    .like('table_number', '__AEGIS_SWAP_TMP\\_%');
+  if (strandedErr) return { ok: false, error: strandedErr.message };
+  if (stranded && stranded.length > 0) {
+    return {
+      ok: false,
+      error:
+        `A previous swap is incomplete (${stranded.length} guest${stranded.length === 1 ? '' : 's'} stranded under a temporary marker). ` +
+        'Re-seat them in the guest list before starting a new swap.',
+    };
+  }
+
   // Snapshot affected rows so the audit can name each guest. The 'swap'
   // case needs both groups; the 'move' case only needs the source group.
   const { data: fromGuests, error: fromErr } = await supabase
@@ -336,10 +357,18 @@ export async function swapEventTablesAction(
     toGuests = (data ?? []) as { guest_id: string; full_name: string }[];
   }
 
-  // Tmp marker is namespaced + timestamped so concurrent swaps from
-  // different events can never collide on it (unlikely, but cheap to
-  // guarantee).
-  const tmpMarker = `__AEGIS_SWAP_TMP_${Date.now()}__`;
+  // Tmp marker carries a short random suffix so two concurrent swaps
+  // (same event or otherwise) can never collide on the same marker
+  // value. The varchar(32) cap on event_guests.table_number is tight,
+  // so we use 8 hex chars from a UUID instead of full Date.now() —
+  // collision odds are ~1 in 4 billion which is fine.
+  const tmpSuffix = (typeof globalThis.crypto !== 'undefined'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}${Math.random()}`
+  )
+    .replace(/-/g, '')
+    .slice(0, 8);
+  const tmpMarker = `__AEGIS_SWAP_TMP_${tmpSuffix}__`;
 
   if (mode === 'move') {
     const { error } = await supabase
@@ -380,13 +409,23 @@ export async function swapEventTablesAction(
       .eq('table_number', tmpMarker);
     if (step3.error) {
       // Half-swapped state: the source-side group is now at `from` (their
-      // destination after the swap finishes) but tmp guests are stuck.
-      // Surface clearly so the user can re-run; a re-run will see the tmp
-      // marker and finish the move.
-      return {
-        ok: false,
-        error: `Partial swap — re-run to finish. ${step3.error.message}`,
-      };
+      // destination after the swap finishes) but the originally-source
+      // group is stuck at the tmp marker. Best-effort recovery: try to
+      // finish the move directly; if THAT also fails, surface the marker
+      // count so the admin can manually finish via the per-guest edit UI.
+      const recovery = await supabase
+        .from('event_guests')
+        .update({ table_number: to })
+        .eq('event_id', event_id)
+        .eq('table_number', tmpMarker);
+      if (recovery.error) {
+        return {
+          ok: false,
+          error:
+            `Partial swap — guests stranded under a temporary marker on this event. Re-seat them manually before retrying. (${step3.error.message})`,
+        };
+      }
+      // Recovery succeeded — fall through to the audit insert below.
     }
   }
 
