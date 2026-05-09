@@ -4,8 +4,15 @@ import { useState, useTransition } from 'react';
 import Modal from '@/components/ui/modal';
 import TablePicker from '@/components/seating/table-picker';
 import { buildTableRows } from '@/lib/seating';
-import type { EventGuest, EventTable } from '@/lib/types';
+import {
+  GUEST_TIER_LABEL,
+  type EventGuest,
+  type EventTable,
+  type GuestTier,
+} from '@/lib/types';
 import { kioskAddWalkInAction, type KioskWalkInResult } from './actions';
+
+const TIER_OPTIONS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
 
 // Walk-in: a guest with no prior record arrives at the door. We collect
 // the bare minimum (name + optional company / contact / table) and create
@@ -61,6 +68,7 @@ export default function WalkInModal({
   const [email, setEmail] = useState('');
   const [cmsrl, setCmsrl] = useState('');
   const [pressCard, setPressCard] = useState('');
+  const [tier, setTier] = useState<GuestTier>('standard');
   const [notes, setNotes] = useState('');
   const [tableNumber, setTableNumber] = useState<string | null>(null);
 
@@ -75,6 +83,7 @@ export default function WalkInModal({
     setEmail('');
     setCmsrl('');
     setPressCard('');
+    setTier('standard');
     setNotes('');
     setTableNumber(null);
   }
@@ -120,6 +129,7 @@ export default function WalkInModal({
         preferred_name: preferred.trim() || null,
         cmsrl_number: cmsrl.trim() || null,
         press_card_no: pressCard.trim() || null,
+        tier,
         capacity_override: capacityOverride,
       });
       if (!res.ok) {
@@ -265,6 +275,23 @@ export default function WalkInModal({
               className={inputClass}
             />
           </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="walkin_tier" className={labelClass}>
+              Audience tier
+            </label>
+            <select
+              id="walkin_tier"
+              value={tier}
+              onChange={(e) => setTier(e.target.value as GuestTier)}
+              className={inputClass}
+            >
+              {TIER_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {GUEST_TIER_LABEL[t]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div>
@@ -277,6 +304,7 @@ export default function WalkInModal({
             onChange={setTableNumber}
             minFree={1}
             allowUnassigned
+            guestTier={tier}
           />
         </div>
 

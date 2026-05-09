@@ -1,13 +1,30 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { EventGuest, EventTable } from '@/lib/types';
+import {
+  TABLE_SECTION_LABEL,
+  tierMatchesSection,
+  type EventGuest,
+  type EventTable,
+  type GuestTier,
+  type TableSection,
+} from '@/lib/types';
 import {
   buildTableRows,
   CAPACITY_TONE_CLASS,
   capacityTone,
   type TableRow,
 } from '@/lib/seating';
+
+// Same chip palette as in seating-section so the picker visually matches
+// what the admin sees when configuring tables.
+const SECTION_CHIP_CLASS: Record<TableSection, string | null> = {
+  vip: 'bg-aegis-gold-50 text-aegis-orange-600 ring-aegis-gold/40',
+  analyst: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+  kol: 'bg-violet-50 text-violet-700 ring-violet-200',
+  media: 'bg-rose-50 text-rose-700 ring-rose-200',
+  mixed: null,
+};
 
 // Reusable picker for the three check-in floor flows:
 //   • walk-in (no registration)        → minFree = 1, allowUnassigned = true
@@ -36,6 +53,10 @@ type Props = {
   allowUnassigned?: boolean;
   /** Optional empty-state hint when no tables match. */
   emptyHint?: string;
+  /** Tier of the guest being seated. When set, we surface a section-mismatch
+   *  warning on rows whose section doesn't match (e.g. seating an analyst
+   *  at a media table). Soft only — the row stays selectable. */
+  guestTier?: GuestTier;
 };
 
 type PickerRow = TableRow & {
@@ -59,6 +80,7 @@ export default function TablePicker({
   excludeTable,
   allowUnassigned = true,
   emptyHint,
+  guestTier,
 }: Props) {
   const rows = useMemo<PickerRow[]>(() => {
     const base = buildTableRows(guests, tables, defaultCapacity);
@@ -126,6 +148,16 @@ export default function TablePicker({
                     <span className="rounded bg-aegis-gold-50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-gold/40">
                       Table {r.table_number}
                     </span>
+                    {SECTION_CHIP_CLASS[r.section] && (
+                      <span
+                        className={[
+                          'rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ring-1 ring-inset',
+                          SECTION_CHIP_CLASS[r.section] as string,
+                        ].join(' ')}
+                      >
+                        {TABLE_SECTION_LABEL[r.section]}
+                      </span>
+                    )}
                     {r.label && (
                       <span className="text-xs font-normal text-aegis-gray-500">
                         {r.label}
@@ -134,6 +166,14 @@ export default function TablePicker({
                     {r.override && (
                       <span className="rounded-full bg-aegis-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
                         Override
+                      </span>
+                    )}
+                    {/* Section mismatch — soft amber warning. Only shows
+                        when the caller passed a tier and it doesn't match
+                        this row's section (and section isn't 'mixed'). */}
+                    {guestTier && !tierMatchesSection(guestTier, r.section) && (
+                      <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700 ring-1 ring-inset ring-amber-300">
+                        Section mismatch
                       </span>
                     )}
                   </p>

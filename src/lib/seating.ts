@@ -4,13 +4,17 @@
 // Pure data manipulation: no React, no Supabase. Both consumers fetch their
 // own copies of guests + overrides and pass them in.
 
-import type { EventGuest, EventTable } from '@/lib/types';
+import type { EventGuest, EventTable, TableSection } from '@/lib/types';
 
 export type TableRow = {
   table_number: string;
   /** null when neither the event default nor an override is set */
   capacity: number | null;
   label: string | null;
+  /** Audience this table is reserved for. Falls back to 'mixed' when no
+   *  override row exists (i.e. the table was inferred from a guest's
+   *  table_number assignment). */
+  section: TableSection;
   /** true if this row is a row in event_tables (i.e. has a custom limit/label) */
   override: boolean;
   used: number;
@@ -46,6 +50,7 @@ export function buildTableRows(
       table_number: t,
       capacity: ov?.capacity ?? defaultCapacity,
       label: ov?.label ?? null,
+      section: ov?.section ?? 'mixed',
       override: !!ov,
       used: usage.get(t) ?? 0,
     });

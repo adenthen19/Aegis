@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { EventGuest, EventTable, UserRole } from '@/lib/types';
+import {
+  GUEST_TIER_CHIP_CLASS,
+  GUEST_TIER_LABEL,
+  type EventGuest,
+  type EventTable,
+  type UserRole,
+} from '@/lib/types';
 import {
   displayCompany,
   displayName,
@@ -125,6 +131,61 @@ function highlight(value: string, q: Classified): React.ReactNode {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Fuzzy match — bigram Jaccard similarity for the typo case.
+//
+// Substring matching catches the easy stuff (partial first-name, partial
+// firm). It misses real-world typos that the kiosk sees a lot:
+//   • "Tang" typed for "Tan"          (1-char insertion)
+//   • "Lim Wei Liang" / "Wei-Liang Lim"  (word-order swap)
+//   • "Sara"  typed for "Sarah"       (1-char drop)
+//   • "Jeune" typed for "Jeanne"      (vowel substitution)
+//
+// Bigrams (overlapping pairs of chars) handle word-order and small edits
+// well at almost no cost. Score is Jaccard = |A∩B| / |A∪B| over the bigram
+// sets — symmetric, length-normalised, in [0, 1]. Threshold 0.30 catches
+// the cases above without too much noise. Best-of(name, preferred_name,
+// company) lets a guest surface via any of the three.
+//
+// We only run the fuzzy pass when the substring search returns NOTHING —
+// it's a fallback, not a competitor. Cap at 8 results to keep the UI tidy.
+// ─────────────────────────────────────────────────────────────────────────
+
+const FUZZY_THRESHOLD = 0.3;
+const FUZZY_LIMIT = 8;
+
+function bigramSet(raw: string): Set<string> {
+  const norm = raw.trim().toLowerCase();
+  const out = new Set<string>();
+  if (norm.length < 2) {
+    if (norm.length === 1) out.add(norm);
+    return out;
+  }
+  for (let i = 0; i < norm.length - 1; i++) {
+    out.add(norm.slice(i, i + 2));
+  }
+  return out;
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter += 1;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+function fuzzyScore(guest: EventGuest, query: Set<string>): number {
+  const candidates = [guest.full_name, guest.preferred_name, guest.company]
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  let best = 0;
+  for (const c of candidates) {
+    const score = jaccard(query, bigramSet(c));
+    if (score > best) best = score;
+  }
+  return best;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Result grouping — direct matches + same-company colleagues so a typo on
 // "sq" still surfaces Jason / Cherise / Jeanne / Aden from the same firm.
 // ─────────────────────────────────────────────────────────────────────────
@@ -132,13 +193,15 @@ function highlight(value: string, q: Classified): React.ReactNode {
 type SearchResult = {
   direct: EventGuest[];
   colleagueGroups: { company: string; colleagues: EventGuest[] }[];
+  /** Bigram-based fallback when direct returns nothing. Empty otherwise. */
+  fuzzy: EventGuest[];
 };
 
 function searchGuests(
   guests: EventGuest[],
   classified: Classified,
 ): SearchResult {
-  if (!classified.ready) return { direct: [], colleagueGroups: [] };
+  if (!classified.ready) return { direct: [], colleagueGroups: [], fuzzy: [] };
 
   const direct = guests.filter((g) => matches(g, classified)).slice(0, 50);
   const matchedIds = new Set(direct.map((g) => g.guest_id));
@@ -165,7 +228,23 @@ function searchGuests(
     if (colleagues.length > 0) groups.push({ company: display, colleagues });
   }
 
-  return { direct, colleagueGroups: groups };
+  // Fuzzy fallback: only when nothing else matched. Phone queries skip —
+  // bigram on digits is meaningless and we already do substring on phone.
+  let fuzzy: EventGuest[] = [];
+  if (direct.length === 0 && groups.length === 0 && !classified.isPhone) {
+    const qSet = bigramSet(classified.text);
+    if (qSet.size > 0) {
+      const scored: { g: EventGuest; s: number }[] = [];
+      for (const g of guests) {
+        const s = fuzzyScore(g, qSet);
+        if (s >= FUZZY_THRESHOLD) scored.push({ g, s });
+      }
+      scored.sort((a, b) => b.s - a.s);
+      fuzzy = scored.slice(0, FUZZY_LIMIT).map((x) => x.g);
+    }
+  }
+
+  return { direct, colleagueGroups: groups, fuzzy };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -513,7 +592,7 @@ export default function KioskShell({
   );
 
   const classified = useMemo(() => classifyQuery(query), [query]);
-  const { direct, colleagueGroups } = useMemo(
+  const { direct, colleagueGroups, fuzzy } = useMemo(
     () => searchGuests(guests, classified),
     [guests, classified],
   );
@@ -945,11 +1024,39 @@ export default function KioskShell({
         {/* ── Results ─────────────────────────────────────────── */}
         {classified.ready && (
           <div className="mt-5 space-y-6">
+            {direct.length === 0 && fuzzy.length > 0 && (
+              <section>
+                <SectionHeader>
+                  Possible matches{' '}
+                  <span className="text-aegis-gray-400">
+                    · likely typo in the search
+                  </span>
+                </SectionHeader>
+                <ul className="grid gap-3">
+                  {fuzzy.map((g) => (
+                    <GuestCard
+                      key={g.guest_id}
+                      guest={g}
+                      classified={classified}
+                      checkedIn={isCheckedIn(g)}
+                      pending={pending}
+                      onPick={checkIn}
+                      tone="primary"
+                    />
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {direct.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-aegis-gray-200 bg-white px-6 py-12 text-center">
-                <p className="text-lg font-medium text-aegis-navy">No direct match.</p>
+                <p className="text-lg font-medium text-aegis-navy">
+                  {fuzzy.length > 0 ? 'Not who you meant?' : 'No direct match.'}
+                </p>
                 <p className="mt-1 text-sm text-aegis-gray-500">
-                  Try a colleague&apos;s name, the company, or the contact number.
+                  {fuzzy.length > 0
+                    ? 'Pick from the matches above, or register a new attendee.'
+                    : "Try a colleague's name, the company, or the contact number."}
                 </p>
                 <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
                   <button
@@ -1506,6 +1613,19 @@ function GuestCard({
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {/* Tier chip — colour-coded so VIPs / analysts / KOLs / media
+              are distinguishable at a glance. Suppressed for 'standard'
+              to avoid visual noise on every default row. */}
+          {GUEST_TIER_CHIP_CLASS[guest.tier] && (
+            <span
+              className={[
+                'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset',
+                GUEST_TIER_CHIP_CLASS[guest.tier] as string,
+              ].join(' ')}
+            >
+              {GUEST_TIER_LABEL[guest.tier]}
+            </span>
+          )}
           {guest.table_number && (
             <span
               className={[

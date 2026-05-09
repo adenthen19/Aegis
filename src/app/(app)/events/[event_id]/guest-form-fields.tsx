@@ -1,7 +1,9 @@
 'use client';
 
-import { TextAreaField, TextField } from '@/components/ui/form';
-import type { EventGuest } from '@/lib/types';
+import { SelectField, TextAreaField, TextField } from '@/components/ui/form';
+import { GUEST_TIER_LABEL, type EventGuest, type GuestTier } from '@/lib/types';
+
+const TIER_OPTIONS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
 
 export default function GuestFormFields({ initial }: { initial?: EventGuest }) {
   return (
@@ -37,6 +39,13 @@ export default function GuestFormFields({ initial }: { initial?: EventGuest }) {
         type="email"
         placeholder="name@example.com"
         defaultValue={initial?.email ?? undefined}
+      />
+      <SelectField
+        name="tier"
+        label="Audience tier"
+        defaultValue={initial?.tier ?? 'standard'}
+        options={TIER_OPTIONS.map((t) => ({ value: t, label: GUEST_TIER_LABEL[t] }))}
+        hint="Drives kiosk colour-coding and seating-section warnings."
       />
       <TextField
         name="table_number"

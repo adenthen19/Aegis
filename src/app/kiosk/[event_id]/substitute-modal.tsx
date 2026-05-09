@@ -3,11 +3,17 @@
 import { useMemo, useState, useTransition } from 'react';
 import Modal from '@/components/ui/modal';
 import { displayCompany, displayName } from '@/lib/display-format';
-import type { EventGuest } from '@/lib/types';
+import {
+  GUEST_TIER_LABEL,
+  type EventGuest,
+  type GuestTier,
+} from '@/lib/types';
 import {
   kioskRegisterSubstituteAction,
   type KioskSubstituteResult,
 } from './actions';
+
+const TIER_OPTIONS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
 
 // Substitute-on-arrival: the named invitee did not show, but a colleague
 // from the same firm did. Rather than logging a generic walk-in (which
@@ -68,6 +74,11 @@ export default function SubstituteModal({
   const [email, setEmail] = useState('');
   const [cmsrl, setCmsrl] = useState('');
   const [pressCard, setPressCard] = useState('');
+  // Tier inherits the original invitee's tier by default. The override
+  // is null until the usher explicitly picks a different value — that
+  // way picking a different original re-defaults cleanly without the
+  // setState-in-effect anti-pattern.
+  const [tierOverride, setTierOverride] = useState<GuestTier | null>(null);
   const [notes, setNotes] = useState('');
 
   // Show only invitees who have NOT already checked in — substituting an
@@ -98,6 +109,21 @@ export default function SubstituteModal({
 
   const original = guests.find((g) => g.guest_id === originalGuestId) ?? null;
 
+  // Resolved tier: explicit override wins, else inherit from the original,
+  // else fall back to 'standard'. Computed on every render so picking a
+  // new original re-defaults without an effect.
+  const tier: GuestTier = tierOverride ?? original?.tier ?? 'standard';
+
+  // Wrap the original-picker click so changing the original clears any
+  // explicit tier override the usher had in mind for the previous
+  // selection. Otherwise an analyst tier picked for invitee A would
+  // sticky onto invitee B (a media reporter), which is exactly the
+  // wrong behaviour.
+  function pickOriginal(id: string) {
+    setOriginalGuestId(id);
+    setTierOverride(null);
+  }
+
   function reset() {
     setError(null);
     setOriginalGuestId('');
@@ -110,6 +136,7 @@ export default function SubstituteModal({
     setEmail('');
     setCmsrl('');
     setPressCard('');
+    setTierOverride(null);
     setNotes('');
   }
 
@@ -143,6 +170,7 @@ export default function SubstituteModal({
         preferred_name: preferred.trim() || null,
         cmsrl_number: cmsrl.trim() || null,
         press_card_no: pressCard.trim() || null,
+        tier,
         notes: notes.trim() || null,
       });
       if (!res.ok) {
@@ -196,7 +224,7 @@ export default function SubstituteModal({
                   <li key={g.guest_id}>
                     <button
                       type="button"
-                      onClick={() => setOriginalGuestId(g.guest_id)}
+                      onClick={() => pickOriginal(g.guest_id)}
                       className={[
                         'flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors',
                         selected
@@ -355,6 +383,30 @@ export default function SubstituteModal({
               placeholder="For accredited media"
               className={inputClass}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="sub_tier" className={labelClass}>
+              Audience tier
+            </label>
+            <select
+              id="sub_tier"
+              value={tier}
+              onChange={(e) => setTierOverride(e.target.value as GuestTier)}
+              className={inputClass}
+            >
+              {TIER_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {GUEST_TIER_LABEL[t]}
+                </option>
+              ))}
+            </select>
+            {original && tierOverride === null && (
+              <p className="mt-1 text-[11px] text-aegis-gray-500">
+                Defaulted to <strong>{GUEST_TIER_LABEL[original.tier]}</strong>{' '}
+                (original&apos;s tier). Change only if the substitute is
+                genuinely a different role.
+              </p>
+            )}
           </div>
         </div>
 

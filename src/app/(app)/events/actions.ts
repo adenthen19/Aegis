@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type { EventStatus } from '@/lib/types';
+import type { EventStatus, GuestTier, TableSection } from '@/lib/types';
 import {
   IMPORT_INITIAL,
   parseCsv,
@@ -14,6 +14,20 @@ import { EVENT_GUEST_IMPORT_HEADERS } from '@/lib/event-import';
 export type ActionState = { ok: boolean; error: string | null };
 
 const STATUSES: EventStatus[] = ['planned', 'ongoing', 'completed', 'cancelled'];
+const TIERS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
+const SECTIONS: TableSection[] = ['vip', 'analyst', 'kol', 'media', 'mixed'];
+
+function normaliseTier(value: unknown): GuestTier {
+  return typeof value === 'string' && TIERS.includes(value as GuestTier)
+    ? (value as GuestTier)
+    : 'standard';
+}
+
+function normaliseSection(value: unknown): TableSection {
+  return typeof value === 'string' && SECTIONS.includes(value as TableSection)
+    ? (value as TableSection)
+    : 'mixed';
+}
 
 type EventPayload = {
   client_id: string | null;
@@ -220,6 +234,7 @@ export async function upsertEventTableAction(
   table_number: string,
   capacity: number,
   label: string | null,
+  section: TableSection = 'mixed',
 ): Promise<ActionState> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -240,6 +255,7 @@ export async function upsertEventTableAction(
         table_number: trimmed,
         capacity,
         label: label?.trim() || null,
+        section: normaliseSection(section),
       },
       { onConflict: 'event_id,table_number' },
     );
@@ -453,6 +469,7 @@ type GuestPayload = {
   email: string | null;
   table_number: string | null;
   notes: string | null;
+  tier: GuestTier;
 };
 
 function readGuestPayload(
@@ -476,6 +493,7 @@ function readGuestPayload(
       email,
       table_number: formData.get('table_number')?.toString().trim() || null,
       notes: formData.get('notes')?.toString().trim() || null,
+      tier: normaliseTier(formData.get('tier')),
     },
   };
 }
@@ -661,6 +679,10 @@ function buildGuestImportPayload(
       email,
       table_number: record.table_number?.trim() || null,
       notes: record.notes?.trim() || null,
+      // CSV column 'tier' is optional. Anything unrecognised silently
+      // falls back to 'standard' rather than failing the row — keeps
+      // existing import workflows unbroken.
+      tier: normaliseTier(record.tier?.trim().toLowerCase()),
     },
   };
 }

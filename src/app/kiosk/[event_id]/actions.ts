@@ -3,6 +3,15 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { assertDirectorOrAdmin } from '@/lib/auth';
+import type { GuestTier } from '@/lib/types';
+
+const VALID_TIERS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
+
+function normaliseTier(value: unknown): GuestTier {
+  return typeof value === 'string' && VALID_TIERS.includes(value as GuestTier)
+    ? (value as GuestTier)
+    : 'standard';
+}
 
 export type KioskCheckInResult =
   | {
@@ -117,6 +126,8 @@ export type KioskWalkInPayload = {
   /** CMSRL number for analysts; press card number for media. Either may be set. */
   cmsrl_number?: string | null;
   press_card_no?: string | null;
+  /** Audience tier — drives kiosk colour and seating-section matching. Defaults to 'standard'. */
+  tier?: GuestTier | null;
   /** True iff the usher acknowledged seating past capacity. */
   capacity_override: boolean;
 };
@@ -188,6 +199,7 @@ export async function kioskAddWalkInAction(
       preferred_name: payload.preferred_name?.trim() || null,
       cmsrl_number: payload.cmsrl_number?.trim() || null,
       press_card_no: payload.press_card_no?.trim() || null,
+      tier: normaliseTier(payload.tier ?? 'standard'),
       // Pending approval: don't check them in yet.
       checked_in: !requiresApproval,
       walkin_status: requiresApproval ? 'pending' : 'approved',
@@ -392,6 +404,9 @@ export type KioskSubstitutePayload = {
   preferred_name: string | null;
   cmsrl_number: string | null;
   press_card_no: string | null;
+  /** Tier for the substitute. Defaults to the original's tier on the
+   *  client side; server falls back to 'standard' if missing. */
+  tier?: GuestTier | null;
   notes: string | null;
 };
 
@@ -434,7 +449,7 @@ export async function kioskRegisterSubstituteAction(
   const [origRes, evRes] = await Promise.all([
     supabase
       .from('event_guests')
-      .select('guest_id, full_name, company, table_number')
+      .select('guest_id, full_name, company, table_number, tier')
       .eq('guest_id', payload.original_guest_id)
       .eq('event_id', event_id)
       .maybeSingle(),
@@ -454,6 +469,7 @@ export async function kioskRegisterSubstituteAction(
     full_name: string;
     company: string | null;
     table_number: string | null;
+    tier: GuestTier;
   };
   const requiresApproval = !!evRes.data.requires_walkin_approval;
 
@@ -485,6 +501,10 @@ export async function kioskRegisterSubstituteAction(
       preferred_name: payload.preferred_name?.trim() || null,
       cmsrl_number: payload.cmsrl_number?.trim() || null,
       press_card_no: payload.press_card_no?.trim() || null,
+      // Tier defaults to the original's tier — same firm, same audience
+      // bucket on virtually every Malaysian IPO event. Client may override
+      // when the substitute really is a different role (rare).
+      tier: normaliseTier(payload.tier ?? original.tier ?? 'standard'),
       substitute_for_guest_id: original.guest_id,
       notes: composedNotes,
       checked_in: !requiresApproval,

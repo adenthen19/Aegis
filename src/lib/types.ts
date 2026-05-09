@@ -565,6 +565,9 @@ export type EventTable = {
   table_number: string;
   capacity: number;
   label: string | null;
+  // Audience this table is reserved for (migration 0035). 'mixed' is the
+  // default and acts as a wildcard for tier matching.
+  section: TableSection;
   created_at: string;
   updated_at: string;
 };
@@ -620,6 +623,52 @@ export const WALKIN_STATUS_LABEL: Record<WalkinStatus, string> = {
   approved: 'Approved',
 };
 
+// Audience tier. Drives kiosk colour-coding, default seating section,
+// and the reconciliation breakdown on the post-event report. (migration 0035)
+export type GuestTier = 'vip' | 'analyst' | 'kol' | 'media' | 'standard';
+
+export const GUEST_TIER_LABEL: Record<GuestTier, string> = {
+  vip: 'VIP',
+  analyst: 'Analyst',
+  kol: 'KOL',
+  media: 'Media',
+  standard: 'Standard',
+};
+
+// Tier → Tailwind chip palette. Standard returns null because we don't
+// surface a chip for it (would be visual noise on every default row).
+export const GUEST_TIER_CHIP_CLASS: Record<GuestTier, string | null> = {
+  vip: 'bg-aegis-gold-50 text-aegis-orange-600 ring-aegis-gold/40',
+  analyst: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+  kol: 'bg-violet-50 text-violet-700 ring-violet-200',
+  media: 'bg-rose-50 text-rose-700 ring-rose-200',
+  standard: null,
+};
+
+// Audience this table is reserved for. 'mixed' is the catch-all default
+// for tables seating a blend.
+export type TableSection = 'vip' | 'analyst' | 'kol' | 'media' | 'mixed';
+
+export const TABLE_SECTION_LABEL: Record<TableSection, string> = {
+  vip: 'VIP section',
+  analyst: 'Analyst section',
+  kol: 'KOL section',
+  media: 'Media section',
+  mixed: 'Mixed / open',
+};
+
+// Returns true iff seating a guest of `tier` at a table of `section`
+// is a "match" — soft warning is suppressed. 'standard' tier and
+// 'mixed' section both pass for any pairing (they're the catch-alls).
+export function tierMatchesSection(
+  tier: GuestTier,
+  section: TableSection,
+): boolean {
+  if (tier === 'standard') return true;
+  if (section === 'mixed') return true;
+  return tier === section;
+}
+
 export type EventGuest = {
   guest_id: string;
   event_id: string;
@@ -650,6 +699,10 @@ export type EventGuest = {
   // 'approved' = supervisor approved (or auto when the event doesn't
   // require approval).
   walkin_status: WalkinStatus | null;
+  // Audience tier (migration 0035). Drives colour-coding on the kiosk
+  // and section-matching warnings in the table picker. Defaults to
+  // 'standard' for legacy rows.
+  tier: GuestTier;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;

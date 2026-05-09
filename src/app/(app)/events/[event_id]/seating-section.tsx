@@ -2,9 +2,14 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import Modal from '@/components/ui/modal';
-import { FormError, NumberField, TextField } from '@/components/ui/form';
+import { FormError, NumberField, SelectField, TextField } from '@/components/ui/form';
 import { Section } from '@/components/detail-shell';
-import type { EventGuest, EventTable } from '@/lib/types';
+import {
+  TABLE_SECTION_LABEL,
+  type EventGuest,
+  type EventTable,
+  type TableSection,
+} from '@/lib/types';
 import {
   buildTableRows,
   CAPACITY_TONE_CLASS,
@@ -17,6 +22,20 @@ import {
   upsertEventTableAction,
 } from '../actions';
 import SwapTablesModal from './swap-tables-modal';
+
+const SECTION_OPTIONS: TableSection[] = ['vip', 'analyst', 'kol', 'media', 'mixed'];
+
+// Tailwind chip classes for each section. Mirrors the guest-tier palette
+// so the eye associates "blue table" with "blue analyst chip" etc. We
+// suppress the chip for 'mixed' to keep the list readable for events
+// that don't bother with sectioning.
+const SECTION_CHIP_CLASS: Record<TableSection, string | null> = {
+  vip: 'bg-aegis-gold-50 text-aegis-orange-600 ring-aegis-gold/40',
+  analyst: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
+  kol: 'bg-violet-50 text-violet-700 ring-violet-200',
+  media: 'bg-rose-50 text-rose-700 ring-rose-200',
+  mixed: null,
+};
 
 export default function SeatingSection({
   eventId,
@@ -171,6 +190,16 @@ export default function SeatingSection({
                       <span className="rounded bg-aegis-gold-50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-gold/40">
                         Table {r.table_number}
                       </span>
+                      {SECTION_CHIP_CLASS[r.section] && (
+                        <span
+                          className={[
+                            'rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ring-1 ring-inset',
+                            SECTION_CHIP_CLASS[r.section] as string,
+                          ].join(' ')}
+                        >
+                          {TABLE_SECTION_LABEL[r.section]}
+                        </span>
+                      )}
                       {r.label && (
                         <span className="text-xs font-normal text-aegis-gray-500">
                           {r.label}
@@ -401,8 +430,9 @@ function TableEditorModal({
           table_number: editing.row.table_number,
           capacity: editing.row.capacity ?? '',
           label: editing.row.label ?? '',
+          section: editing.row.section,
         }
-      : { table_number: '', capacity: '', label: '' };
+      : { table_number: '', capacity: '', label: '', section: 'mixed' as TableSection };
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -420,6 +450,12 @@ function TableEditorModal({
       return;
     }
     const label = formData.get('label')?.toString().trim() || null;
+    const sectionRaw = formData.get('section')?.toString();
+    const section: TableSection = SECTION_OPTIONS.includes(
+      sectionRaw as TableSection,
+    )
+      ? (sectionRaw as TableSection)
+      : 'mixed';
 
     startTransition(async () => {
       const res = await upsertEventTableAction(
@@ -427,6 +463,7 @@ function TableEditorModal({
         tableNumber,
         capacity,
         label,
+        section,
       );
       if (!res.ok) {
         setError(res.error ?? 'Failed to save.');
@@ -464,6 +501,16 @@ function TableEditorModal({
           placeholder="e.g. 12"
           defaultValue={initial.capacity ? String(initial.capacity) : undefined}
           hint="Pax this table can seat for THIS event."
+        />
+        <SelectField
+          name="section"
+          label="Section"
+          defaultValue={initial.section}
+          options={SECTION_OPTIONS.map((s) => ({
+            value: s,
+            label: TABLE_SECTION_LABEL[s],
+          }))}
+          hint="Which audience this table is reserved for. Kiosk soft-warns when a guest's tier doesn't match — usher can override."
         />
         <TextField
           name="label"
