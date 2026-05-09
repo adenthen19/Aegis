@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
 
 const inputClass =
@@ -108,22 +109,78 @@ export function SelectField({
   );
 }
 
+// Convert a `<input type="datetime-local">` value (e.g. "2026-05-09T14:30")
+// to a full UTC ISO. `new Date(local)` parses in the BROWSER's timezone,
+// so .toISOString() emits the correct UTC instant — Postgres timestamptz
+// then interprets it correctly. Without this, the bare local string is
+// stored as if it were UTC and every read shifts by the user's offset
+// (8h late for Malaysia, etc.).
+function localDateTimeToIso(local: string): string {
+  if (!local) return '';
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
 export function DateTimeField({
   name, label, required, hint, defaultValue, type = 'datetime-local',
 }: BaseProps & { type?: 'date' | 'datetime-local' }) {
+  // Date-only inputs (type="date") map to a Postgres `date` column with
+  // no timezone interpretation, so the legacy uncontrolled input is
+  // fine. The bug is specific to datetime-local + timestamptz.
+  if (type === 'date') {
+    return (
+      <div>
+        <label htmlFor={name} className={labelClass}>
+          {label} {required && <Required />}
+        </label>
+        <input
+          id={name}
+          name={name}
+          type="date"
+          required={required}
+          defaultValue={defaultValue}
+          className={inputClass}
+        />
+        {hint && <Hint>{hint}</Hint>}
+      </div>
+    );
+  }
+
+  // datetime-local path: render a controlled visible input (no `name`,
+  // so it doesn't reach the form action) plus a hidden mirror that
+  // submits the converted UTC ISO. The hidden input keeps the original
+  // `name` so existing server actions don't change.
+  return (
+    <DateTimeLocalField
+      name={name}
+      label={label}
+      required={required}
+      hint={hint}
+      defaultValue={defaultValue}
+    />
+  );
+}
+
+function DateTimeLocalField({
+  name, label, required, hint, defaultValue,
+}: BaseProps) {
+  const [local, setLocal] = useState<string>(defaultValue ?? '');
+  const iso = localDateTimeToIso(local);
   return (
     <div>
-      <label htmlFor={name} className={labelClass}>
+      <label htmlFor={`${name}_local`} className={labelClass}>
         {label} {required && <Required />}
       </label>
       <input
-        id={name}
-        name={name}
-        type={type}
+        id={`${name}_local`}
+        type="datetime-local"
         required={required}
-        defaultValue={defaultValue}
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
         className={inputClass}
       />
+      <input type="hidden" name={name} value={iso} />
       {hint && <Hint>{hint}</Hint>}
     </div>
   );
