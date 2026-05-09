@@ -17,7 +17,7 @@ import GuestListView from './guest-list-view';
 import GuestSearchCheckin from './guest-search-checkin';
 import GuestReport from './guest-report';
 import type { CheckinFeedEntry } from './page';
-import type { EventGuest } from '@/lib/types';
+import type { EventGuest, EventTable } from '@/lib/types';
 
 const initialState: ActionState = { ok: false, error: null };
 
@@ -27,6 +27,8 @@ export default function GuestList({
   eventId,
   eventName,
   guests,
+  tables,
+  defaultCapacity,
   activity,
   googleSheetId,
   googleConnected,
@@ -35,6 +37,11 @@ export default function GuestList({
   eventId: string;
   eventName: string;
   guests: EventGuest[];
+  // Seating data — feeds the visual TablePicker on Add / Edit guest.
+  // Optional so the GuestList still works when called from a context
+  // that doesn't pre-fetch seating (the Overview page passes them).
+  tables: EventTable[];
+  defaultCapacity: number | null;
   activity: CheckinFeedEntry[];
   googleSheetId: string | null;
   googleConnected: boolean;
@@ -162,6 +169,9 @@ export default function GuestList({
         open={addOpen}
         onClose={() => setAddOpen(false)}
         eventId={eventId}
+        guests={guests}
+        tables={tables}
+        defaultCapacity={defaultCapacity}
       />
 
       <ConfirmDialog
@@ -178,6 +188,9 @@ export default function GuestList({
         guest={selected}
         open={selected !== null}
         onClose={() => setSelectedId(null)}
+        guests={guests}
+        tables={tables}
+        defaultCapacity={defaultCapacity}
       />
     </section>
   );
@@ -214,10 +227,16 @@ function NewGuestModal({
   open,
   onClose,
   eventId,
+  guests,
+  tables,
+  defaultCapacity,
 }: {
   open: boolean;
   onClose: () => void;
   eventId: string;
+  guests: EventGuest[];
+  tables: EventTable[];
+  defaultCapacity: number | null;
 }) {
   const [state, action] = useActionState(createGuestAction, initialState);
 
@@ -229,7 +248,11 @@ function NewGuestModal({
     <Modal open={open} onClose={onClose} title="Add guest" description="Add one guest to the list.">
       <form action={action} className="space-y-4">
         <input type="hidden" name="event_id" value={eventId} />
-        <GuestFormFields />
+        <GuestFormFields
+          guests={guests}
+          tables={tables}
+          defaultCapacity={defaultCapacity}
+        />
         <FormError message={state.error} />
         <FormActions onCancel={onClose} />
       </form>

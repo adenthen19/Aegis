@@ -5,10 +5,13 @@ import Modal from '@/components/ui/modal';
 import { FormError, NumberField, SelectField, TextField } from '@/components/ui/form';
 import { Section } from '@/components/detail-shell';
 import {
+  GUEST_TIER_CHIP_CLASS,
+  GUEST_TIER_LABEL,
   TABLE_SECTION_LABEL,
   type EventGuest,
   type EventRoomMarker,
   type EventTable,
+  type GuestTier,
   type TableSection,
 } from '@/lib/types';
 import {
@@ -17,6 +20,7 @@ import {
   capacityTone,
   type TableRow,
 } from '@/lib/seating';
+import { displayCompany, displayName } from '@/lib/display-format';
 import {
   deleteEventTableAction,
   setEventDefaultCapacityAction,
@@ -25,21 +29,31 @@ import {
 import SwapTablesModal from './swap-tables-modal';
 import FloorPlanView from './floor-plan-view';
 
+// Render order for the section-grouped table list. Matches the typical
+// IPO room layout: VIPs front, analysts middle, KOL/media behind, mixed
+// catch-all last. Sections that have no tables are skipped.
+const SECTION_ORDER: TableSection[] = [
+  'vip',
+  'analyst',
+  'kol',
+  'media',
+  'mixed',
+];
+
+// Tier weight for sorting guests inside an expanded table — VIPs sit
+// at the top of the list, then analysts, then KOLs, then media,
+// standard last.
+const TIER_WEIGHT: Record<GuestTier, number> = {
+  vip: 0,
+  analyst: 1,
+  kol: 2,
+  media: 3,
+  standard: 4,
+};
+
 type SeatingView = 'list' | 'floor';
 
 const SECTION_OPTIONS: TableSection[] = ['vip', 'analyst', 'kol', 'media', 'mixed'];
-
-// Tailwind chip classes for each section. Mirrors the guest-tier palette
-// so the eye associates "blue table" with "blue analyst chip" etc. We
-// suppress the chip for 'mixed' to keep the list readable for events
-// that don't bother with sectioning.
-const SECTION_CHIP_CLASS: Record<TableSection, string | null> = {
-  vip: 'bg-aegis-gold-50 text-aegis-orange-600 ring-aegis-gold/40',
-  analyst: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
-  kol: 'bg-violet-50 text-violet-700 ring-violet-200',
-  media: 'bg-rose-50 text-rose-700 ring-rose-200',
-  mixed: null,
-};
 
 export default function SeatingSection({
   eventId,
@@ -227,8 +241,7 @@ export default function SeatingSection({
             defaultCapacity={defaultCapacity}
             markers={markers}
           />
-        ) : /* ── Per-table list ─────────────────────────────────── */
-        rows.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-aegis-gray-200 px-4 py-8 text-center">
             <p className="text-sm text-aegis-gray-500">
               No tables yet. Add overrides for non-standard tables (head table,
@@ -237,73 +250,12 @@ export default function SeatingSection({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-aegis-gray-100 overflow-hidden rounded-lg border border-aegis-gray-100">
-            {rows.map((r) => {
-              const tone = capacityTone(r.used, r.capacity);
-              return (
-                <li
-                  key={r.table_number}
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 text-sm font-medium text-aegis-navy">
-                      <span className="rounded bg-aegis-gold-50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-gold/40">
-                        Table {r.table_number}
-                      </span>
-                      {SECTION_CHIP_CLASS[r.section] && (
-                        <span
-                          className={[
-                            'rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ring-1 ring-inset',
-                            SECTION_CHIP_CLASS[r.section] as string,
-                          ].join(' ')}
-                        >
-                          {TABLE_SECTION_LABEL[r.section]}
-                        </span>
-                      )}
-                      {r.label && (
-                        <span className="text-xs font-normal text-aegis-gray-500">
-                          {r.label}
-                        </span>
-                      )}
-                      {r.override && (
-                        <span className="rounded-full bg-aegis-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
-                          Override
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <span
-                    className={[
-                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ring-1 ring-inset',
-                      CAPACITY_TONE_CLASS[tone],
-                    ].join(' ')}
-                  >
-                    {r.used}
-                    <span className="opacity-60">/</span>
-                    {r.capacity ?? '∞'}
-                    {r.capacity != null && r.used > r.capacity && (
-                      <span className="ml-1 uppercase tracking-wide">over</span>
-                    )}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setEditing({ mode: 'edit', row: r })}
-                      className="inline-flex items-center rounded-md border border-aegis-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-aegis-navy hover:bg-aegis-gray-50"
-                    >
-                      {r.override ? 'Edit' : 'Set capacity'}
-                    </button>
-                    {r.override && (
-                      <DeleteOverrideButton
-                        eventId={eventId}
-                        tableNumber={r.table_number}
-                      />
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <TableListGrouped
+            eventId={eventId}
+            rows={rows}
+            guests={guests}
+            onEdit={(row) => setEditing({ mode: 'edit', row })}
+          />
         )}
 
         <p className="text-[11px] text-aegis-gray-300">
@@ -627,5 +579,284 @@ function TableEditorModal({
         </div>
       </form>
     </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Section-grouped table list with expandable rows.
+//
+// Rebuilt from a flat list to give the seating workspace a clearer
+// scan: tables cluster under their audience section (VIP / Analyst /
+// KOL / Media / Mixed), and each row can expand to show the seated
+// guests inline so the host doesn't have to flip to the guest tab to
+// see who's at table 5.
+// ─────────────────────────────────────────────────────────────────────
+
+// Solid section accent used for the section header dot — saturated
+// version of the chip palette, mirrors the floor-plan stripe colour.
+const SECTION_DOT_CLASS: Record<TableSection, string> = {
+  vip: 'bg-aegis-orange',
+  analyst: 'bg-aegis-blue',
+  kol: 'bg-violet-500',
+  media: 'bg-rose-500',
+  mixed: 'bg-aegis-gray-300',
+};
+
+function TableListGrouped({
+  eventId,
+  rows,
+  guests,
+  onEdit,
+}: {
+  eventId: string;
+  rows: TableRow[];
+  guests: EventGuest[];
+  onEdit: (row: TableRow) => void;
+}) {
+  const guestsByTable = useMemo(() => {
+    const map = new Map<string, EventGuest[]>();
+    for (const g of guests) {
+      const t = g.table_number?.trim();
+      if (!t) continue;
+      const list = map.get(t);
+      if (list) list.push(g);
+      else map.set(t, [g]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        if (a.checked_in !== b.checked_in) return a.checked_in ? -1 : 1;
+        const tw = TIER_WEIGHT[a.tier] - TIER_WEIGHT[b.tier];
+        if (tw !== 0) return tw;
+        return a.full_name.localeCompare(b.full_name);
+      });
+    }
+    return map;
+  }, [guests]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<TableSection, TableRow[]>();
+    for (const r of rows) {
+      const arr = map.get(r.section) ?? [];
+      arr.push(r);
+      map.set(r.section, arr);
+    }
+    return SECTION_ORDER.filter((s) => (map.get(s) ?? []).length > 0).map(
+      (s) => ({ section: s, rows: map.get(s) ?? [] }),
+    );
+  }, [rows]);
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(tableNumber: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(tableNumber)) next.delete(tableNumber);
+      else next.add(tableNumber);
+      return next;
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      {grouped.map(({ section, rows: sectionRows }) => {
+        const totalSeated = sectionRows.reduce((acc, r) => acc + r.used, 0);
+        const totalCap = sectionRows.reduce(
+          (acc, r) => acc + (r.capacity ?? 0),
+          0,
+        );
+        return (
+          <section key={section}>
+            <div className="mb-2 flex items-baseline justify-between gap-2 px-1">
+              <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-aegis-gray-500">
+                <span
+                  className={[
+                    'inline-block h-2 w-2 rounded-full',
+                    SECTION_DOT_CLASS[section],
+                  ].join(' ')}
+                  aria-hidden
+                />
+                {TABLE_SECTION_LABEL[section]}
+                <span className="text-aegis-gray-300">
+                  · {sectionRows.length} table{sectionRows.length === 1 ? '' : 's'}
+                </span>
+              </h3>
+              <p className="text-[11px] tabular-nums text-aegis-gray-500">
+                {totalSeated}
+                <span className="opacity-60"> / </span>
+                {totalCap > 0 ? totalCap : '—'}
+              </p>
+            </div>
+            <ul className="divide-y divide-aegis-gray-100 overflow-hidden rounded-lg border border-aegis-gray-100 bg-white">
+              {sectionRows.map((r) => {
+                const seated = guestsByTable.get(r.table_number) ?? [];
+                const isOpen = expanded.has(r.table_number);
+                return (
+                  <TableListRow
+                    key={r.table_number}
+                    eventId={eventId}
+                    row={r}
+                    seated={seated}
+                    open={isOpen}
+                    onToggle={() => toggle(r.table_number)}
+                    onEdit={() => onEdit(r)}
+                  />
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function TableListRow({
+  eventId,
+  row,
+  seated,
+  open,
+  onToggle,
+  onEdit,
+}: {
+  eventId: string;
+  row: TableRow;
+  seated: EventGuest[];
+  open: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+}) {
+  const tone = capacityTone(row.used, row.capacity);
+  return (
+    <li>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <svg
+            className={[
+              'h-3.5 w-3.5 shrink-0 text-aegis-gray-400 transition-transform',
+              open ? 'rotate-90' : '',
+            ].join(' ')}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-aegis-navy">
+            <span className="rounded bg-aegis-gold-50 px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide text-aegis-orange-600 ring-1 ring-inset ring-aegis-gold/40">
+              Table {row.table_number}
+            </span>
+            {row.label && (
+              <span className="text-xs font-normal text-aegis-gray-500">
+                {row.label}
+              </span>
+            )}
+            {row.override && (
+              <span className="rounded-full bg-aegis-blue-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-aegis-navy ring-1 ring-inset ring-aegis-blue/30">
+                Override
+              </span>
+            )}
+          </p>
+        </button>
+
+        <span
+          className={[
+            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ring-1 ring-inset',
+            CAPACITY_TONE_CLASS[tone],
+          ].join(' ')}
+        >
+          {row.used}
+          <span className="opacity-60">/</span>
+          {row.capacity ?? '∞'}
+          {row.capacity != null && row.used > row.capacity && (
+            <span className="ml-1 uppercase tracking-wide">over</span>
+          )}
+        </span>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            className="inline-flex items-center rounded-md border border-aegis-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-aegis-navy hover:bg-aegis-gray-50"
+          >
+            {row.override ? 'Edit' : 'Set capacity'}
+          </button>
+          {row.override && (
+            <DeleteOverrideButton
+              eventId={eventId}
+              tableNumber={row.table_number}
+            />
+          )}
+        </div>
+      </div>
+
+      {open && (
+        <div className="border-t border-aegis-gray-100 bg-aegis-gray-50/40 px-4 py-3 sm:px-5">
+          {seated.length === 0 ? (
+            <p className="py-2 text-center text-[12px] italic text-aegis-gray-500">
+              No guests seated at this table yet.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {seated.map((g) => (
+                <li
+                  key={g.guest_id}
+                  className="flex items-start gap-2 text-[12px]"
+                >
+                  <span
+                    className={[
+                      'mt-1 inline-block h-2 w-2 shrink-0 rounded-full',
+                      g.checked_in
+                        ? 'bg-emerald-500'
+                        : 'bg-white ring-1 ring-aegis-gray-300',
+                    ].join(' ')}
+                    aria-label={g.checked_in ? 'Checked in' : 'Not checked in'}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-aegis-navy">
+                      {g.honorific && (
+                        <span className="mr-1 text-aegis-orange-600">
+                          {g.honorific}
+                        </span>
+                      )}
+                      {displayName(g.preferred_name ?? g.full_name)}
+                    </p>
+                    <p className="truncate text-[11px] text-aegis-gray-500">
+                      {[
+                        g.title ? displayName(g.title) : null,
+                        g.company ? displayCompany(g.company) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
+                    </p>
+                  </div>
+                  {GUEST_TIER_CHIP_CLASS[g.tier] && (
+                    <span
+                      className={[
+                        'mt-0.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ring-1 ring-inset',
+                        GUEST_TIER_CHIP_CLASS[g.tier] as string,
+                      ].join(' ')}
+                    >
+                      {GUEST_TIER_LABEL[g.tier]}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </li>
   );
 }

@@ -76,6 +76,27 @@ const SECTION_FILL: Record<TableSection, string> = {
   mixed: '#9CA3AF', // gray-400
 };
 
+// Faint tint for section zones (the rounded rectangles drawn behind
+// tables of the same section). Same hue as SECTION_FILL but at low
+// opacity so the rectangles read as "this area is the analyst block"
+// without competing with the tables themselves. 'mixed' has no zone —
+// the catch-all section doesn't deserve a visual cluster.
+const SECTION_ZONE_FILL: Record<TableSection, string | null> = {
+  vip: 'rgba(244, 184, 68, 0.10)',
+  analyst: 'rgba(92, 122, 169, 0.10)',
+  kol: 'rgba(139, 92, 246, 0.10)',
+  media: 'rgba(244, 63, 94, 0.10)',
+  mixed: null,
+};
+
+const SECTION_ZONE_BORDER: Record<TableSection, string | null> = {
+  vip: 'rgba(244, 184, 68, 0.45)',
+  analyst: 'rgba(92, 122, 169, 0.45)',
+  kol: 'rgba(139, 92, 246, 0.45)',
+  media: 'rgba(244, 63, 94, 0.45)',
+  mixed: null,
+};
+
 // Background tint per kind for the marker rectangles. Stage gets a
 // dark navy "spotlight" treatment so it dominates the canvas visually.
 const MARKER_FILL: Record<RoomMarkerKind, string> = {
@@ -201,6 +222,49 @@ export default function FloorPlanView({
   const tablesToShow = editing ? draftTables : initialTables;
   const markersToShow = editing ? draftMarkers : initialMarkers;
 
+  // Section zones — bounding rectangles around each section's tables,
+  // rendered behind the tables and markers as a quiet visual cluster.
+  // The 'mixed' section is skipped (catch-all; no semantic zone).
+  // Recomputed whenever the visible tables shift, including during
+  // drags so the zone follows the table you're moving.
+  const sectionZones = useMemo(() => {
+    const PAD = 50; // canvas units of padding around the zone bbox
+    const groups = new Map<TableSection, DraftTable[]>();
+    for (const t of tablesToShow) {
+      const s = t.row.section;
+      if (s === 'mixed') continue;
+      const arr = groups.get(s) ?? [];
+      arr.push(t);
+      groups.set(s, arr);
+    }
+    const zones: Array<{
+      section: TableSection;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }> = [];
+    for (const [section, group] of groups) {
+      if (group.length === 0) continue;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const t of group) {
+        if (t.x - TABLE_R / 2 < minX) minX = t.x - TABLE_R / 2;
+        if (t.y - TABLE_R / 2 < minY) minY = t.y - TABLE_R / 2;
+        if (t.x + TABLE_R / 2 > maxX) maxX = t.x + TABLE_R / 2;
+        if (t.y + TABLE_R / 2 > maxY) maxY = t.y + TABLE_R / 2;
+      }
+      const x = Math.max(0, minX - PAD);
+      const y = Math.max(0, minY - PAD);
+      const w = Math.min(CANVAS_W - x, maxX - minX + PAD * 2);
+      const h = Math.min(CANVAS_H - y, maxY - minY + PAD * 2);
+      zones.push({ section, x, y, w, h });
+    }
+    return zones;
+  }, [tablesToShow]);
+
   // Track a "dirty" flag so Save is enabled only when something
   // actually changed. Only meaningful while editing.
   const dirty = useMemo(() => {
@@ -272,6 +336,13 @@ export default function FloorPlanView({
   // popover the host had opened. We set this flag in onPointerUp when a
   // drag was active, then consume it in the click handler.
   const didDragRef = useRef(false);
+  // Active snap guides. While dragging a table, if its centre lines up
+  // with another table's centre (within SNAP_PROXIMITY canvas units),
+  // we hard-snap to that x/y AND surface a guide line so the host sees
+  // why the table just jumped. Cleared on pointer-up.
+  const [snapGuides, setSnapGuides] = useState<{ x: number | null; y: number | null }>(
+    { x: null, y: null },
+  );
 
   // Convert a pointer event (in screen pixels) to canvas coordinates.
   // The canvas is CSS-scaled, so we have to divide by the current
@@ -338,15 +409,41 @@ export default function FloorPlanView({
     if (drag.kind === 'idle') return;
     const pt = pointerToCanvas(e);
     if (drag.kind === 'table') {
-      const nextX = clamp(
+      let nextX = clamp(
         snap(pt.x - drag.offsetX),
         TABLE_R / 2,
         CANVAS_W - TABLE_R / 2,
       );
-      const nextY = clamp(
+      let nextY = clamp(
         snap(pt.y - drag.offsetY),
         TABLE_R / 2,
         CANVAS_H - TABLE_R / 2,
+      );
+
+      // Snap-to-neighbour: if the dragged table's centre is within
+      // SNAP_PROXIMITY of another table's centre on either axis, hard
+      // snap and surface a guide line so the host knows alignment is
+      // intentional. We check x and y independently — a row of tables
+      // can snap to the same y while keeping their own x.
+      const SNAP_PROXIMITY = 12; // canvas units
+      let guideX: number | null = null;
+      let guideY: number | null = null;
+      for (const other of draftTables) {
+        if (other.table_number === drag.table_number) continue;
+        if (Math.abs(other.x - nextX) <= SNAP_PROXIMITY) {
+          nextX = other.x;
+          guideX = other.x;
+        }
+        if (Math.abs(other.y - nextY) <= SNAP_PROXIMITY) {
+          nextY = other.y;
+          guideY = other.y;
+        }
+      }
+
+      // Avoid spamming setState when the guides haven't changed —
+      // snap state is per-axis, so unchanged values stay equal.
+      setSnapGuides((prev) =>
+        prev.x === guideX && prev.y === guideY ? prev : { x: guideX, y: guideY },
       );
       setDraftTables((prev) =>
         prev.map((t) =>
@@ -375,6 +472,8 @@ export default function FloorPlanView({
       didDragRef.current = true;
     }
     dragRef.current = { kind: 'idle' };
+    // Clear snap guides — they're a "while dragging" affordance.
+    setSnapGuides((prev) => (prev.x === null && prev.y === null ? prev : { x: null, y: null }));
   }
 
   // Add a marker at canvas centre — host then drags to position.
@@ -612,6 +711,63 @@ export default function FloorPlanView({
           // box. Children compute their style.left / style.top as
           // percentages of CANVAS_W / CANVAS_H so they auto-scale.
         >
+          {/* Section zones — tinted bounding rectangles drawn behind
+              tables of the same section so the eye reads "this is the
+              analyst block, this is the VIP block" without having to
+              colour-decode every disc. 'mixed' has no zone. Labels in
+              the corner identify the section. */}
+          {sectionZones.map((z) => {
+            const fill = SECTION_ZONE_FILL[z.section];
+            const border = SECTION_ZONE_BORDER[z.section];
+            if (!fill || !border) return null;
+            return (
+              <div
+                key={`zone-${z.section}`}
+                aria-hidden
+                className="pointer-events-none absolute rounded-2xl border-2 border-dashed"
+                style={{
+                  left: `${(z.x / CANVAS_W) * 100}%`,
+                  top: `${(z.y / CANVAS_H) * 100}%`,
+                  width: `${(z.w / CANVAS_W) * 100}%`,
+                  height: `${(z.h / CANVAS_H) * 100}%`,
+                  backgroundColor: fill,
+                  borderColor: border,
+                }}
+              >
+                <span
+                  className="absolute -top-3 left-3 inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] shadow-sm ring-1 ring-inset"
+                  style={{ color: SECTION_FILL[z.section], borderColor: border }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: SECTION_FILL[z.section] }}
+                    aria-hidden
+                  />
+                  {TABLE_SECTION_LABEL[z.section]}
+                </span>
+              </div>
+            );
+          })}
+
+          {/* Snap guide lines — visible only while dragging a table
+              that's aligned with another table's centre. The vertical
+              line spans the canvas at the snapped x; horizontal at
+              the snapped y. */}
+          {editing && snapGuides.x !== null && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute top-0 bottom-0 w-px bg-aegis-orange/70"
+              style={{ left: `${(snapGuides.x / CANVAS_W) * 100}%` }}
+            />
+          )}
+          {editing && snapGuides.y !== null && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-0 right-0 h-px bg-aegis-orange/70"
+              style={{ top: `${(snapGuides.y / CANVAS_H) * 100}%` }}
+            />
+          )}
+
           {/* Markers — rendered behind tables so a stage doesn't visually
               cover a VIP table dropped near it. */}
           {markersToShow.map((m) => (
@@ -834,25 +990,82 @@ function TableEl({
       </button>
 
       {!editing && active && (
-        <TablePopover row={table.row} guests={guests} />
+        <TablePopover
+          row={table.row}
+          guests={guests}
+          placement={popoverPlacement(table.x, table.y)}
+        />
       )}
     </div>
   );
 }
 
+// Decide where to place the popover relative to the table so it stays
+// inside the canvas and doesn't cover its neighbours. The popover is
+// roughly 288×280 in canvas units when the canvas is at native size.
+//
+//   • Vertical: render below by default. Flip to above when the table
+//     sits in the lower 40% of the canvas.
+//   • Horizontal: centred by default. Align left when the table is
+//     close to the left edge, align right when close to the right.
+//
+// The thresholds are conservative — they aim to avoid overlap on the
+// typical 1200×800 canvas without computing precise pixel bounds.
+type PopoverPlacement = {
+  vertical: 'below' | 'above';
+  horizontal: 'center' | 'left' | 'right';
+};
+
+function popoverPlacement(x: number, y: number): PopoverPlacement {
+  // Popover size estimates in canvas units (the popover is rendered
+  // outside the scaled box but its width is fixed at w-72 which is
+  // 288px CSS — ~24% of a 1200-unit canvas; 280px height is similar).
+  const POP_W = 288;
+  const POP_H = 320;
+
+  const vertical: 'below' | 'above' =
+    y + TABLE_R / 2 + POP_H > CANVAS_H ? 'above' : 'below';
+
+  let horizontal: 'center' | 'left' | 'right' = 'center';
+  if (x - POP_W / 2 < 12) horizontal = 'left';
+  else if (x + POP_W / 2 > CANVAS_W - 12) horizontal = 'right';
+
+  return { vertical, horizontal };
+}
+
 function TablePopover({
   row,
   guests,
+  placement,
 }: {
   row: TableRow;
   guests: EventGuest[];
+  placement: PopoverPlacement;
 }) {
+  // Compose Tailwind classes from the placement decision. Each axis is
+  // independent so corner placements (e.g. above-right, below-left)
+  // compose naturally.
+  const verticalClass =
+    placement.vertical === 'below'
+      ? 'top-full mt-3'
+      : 'bottom-full mb-3';
+  const horizontalClass =
+    placement.horizontal === 'center'
+      ? 'left-1/2 -translate-x-1/2'
+      : placement.horizontal === 'left'
+        ? 'left-0'
+        : 'right-0';
+
   return (
     <div
       role="dialog"
       aria-label={`Guests at table ${row.table_number}`}
       onClick={(e) => e.stopPropagation()}
-      className="absolute left-1/2 top-full z-30 mt-3 w-72 -translate-x-1/2 rounded-lg border border-aegis-gray-100 bg-white p-3 shadow-xl ring-1 ring-aegis-navy/5"
+      className={[
+        'absolute z-30 w-72 rounded-lg border border-aegis-gray-100 bg-white p-3 shadow-xl ring-1 ring-aegis-navy/5',
+        verticalClass,
+        horizontalClass,
+      ].join(' ')}
     >
       <div className="mb-2 flex items-baseline justify-between gap-2 border-b border-aegis-gray-100 pb-2">
         <div>

@@ -1,39 +1,24 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { Field, FieldGrid, Section } from '@/components/detail-shell';
 import {
-  Breadcrumbs,
-  DetailHeader,
-  Field,
-  FieldGrid,
-  Section,
-} from '@/components/detail-shell';
-import {
-  EVENT_STATUS_LABEL,
   type EventGuest,
   type EventGuestCheckin,
-  type EventRoomMarker,
   type EventRow,
-  type EventStatus,
   type EventTable,
 } from '@/lib/types';
-import { displayCompany, displayName } from '@/lib/display-format';
-import EditEventButton from './edit-event-button';
-import EventStatusSelect from './event-status-select';
 import GuestList from './guest-list';
-import SeatingSection from './seating-section';
+
+// Overview page: event metadata + guest list (with check-in tools).
+// The header/breadcrumb + Overview/Seating tab strip live in the
+// shared layout. Seating moved to /events/[event_id]/seating so the
+// table list and floor plan get a focused workspace separate from
+// day-of check-in operations.
 
 export type CheckinFeedEntry = EventGuestCheckin & {
   guest_name: string | null;
   guest_company: string | null;
   performed_by_label: string | null;
-};
-
-const STATUS_BADGE: Record<EventStatus, string> = {
-  planned: 'bg-aegis-gray-50 text-aegis-gray ring-aegis-gray-200',
-  ongoing: 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30',
-  completed: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  cancelled: 'bg-aegis-gray-50 text-aegis-gray-300 ring-aegis-gray-200 line-through',
 };
 
 function formatDateTime(iso: string): string {
@@ -43,7 +28,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default async function EventDetailPage({
+export default async function EventOverviewPage({
   params,
 }: {
   params: Promise<{ event_id: string }>;
@@ -53,10 +38,10 @@ export default async function EventDetailPage({
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [eventRes, guestsRes, clientsRes, activityRes, googleRes, tablesRes, markersRes] = await Promise.all([
+  const [eventRes, guestsRes, tablesRes, activityRes, googleRes] = await Promise.all([
     supabase
       .from('events')
-      .select('*, clients ( client_id, corporate_name )')
+      .select('*')
       .eq('event_id', event_id)
       .maybeSingle(),
     supabase
@@ -65,10 +50,14 @@ export default async function EventDetailPage({
       .eq('event_id', event_id)
       .order('checked_in', { ascending: true })
       .order('full_name', { ascending: true }),
+    // Tables feed the visual TablePicker on the Add / Edit guest
+    // modals — fetched here even though the seating sub-page has its
+    // own fetch, since /events/[id] (Overview) can't reach into the
+    // sub-route's data.
     supabase
-      .from('clients')
-      .select('client_id, corporate_name')
-      .order('corporate_name', { ascending: true }),
+      .from('event_tables')
+      .select('*')
+      .eq('event_id', event_id),
     // Last 50 check-in audit rows for this event, joined with the guest's
     // name (so we don't have to look it up client-side) and the staff member's
     // display name. Newest first — drives the "Recent activity" feed.
@@ -89,26 +78,13 @@ export default async function EventDetailPage({
           .eq('user_id', user.id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null } as const),
-    supabase
-      .from('event_tables')
-      .select('*')
-      .eq('event_id', event_id),
-    supabase
-      .from('event_room_markers')
-      .select('*')
-      .eq('event_id', event_id),
   ]);
 
   if (!eventRes.data) notFound();
 
-  const event = eventRes.data as EventRow & {
-    clients: { client_id: string; corporate_name: string } | null;
-  };
+  const event = eventRes.data as EventRow;
   const guests = (guestsRes.data ?? []) as EventGuest[];
-  const clients = (clientsRes.data ?? []) as {
-    client_id: string;
-    corporate_name: string;
-  }[];
+  const tables = (tablesRes.data ?? []) as EventTable[];
 
   const activity: CheckinFeedEntry[] = (
     (activityRes.data ?? []) as unknown as Array<
@@ -135,60 +111,12 @@ export default async function EventDetailPage({
   }));
 
   const googleConnection = (googleRes.data as { google_email: string } | null) ?? null;
-  const tables = (tablesRes.data ?? []) as EventTable[];
-  const markers = (markersRes.data ?? []) as EventRoomMarker[];
 
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
 
   return (
-    <div>
-      <Breadcrumbs
-        items={[
-          { href: '/events', label: 'Events' },
-          { label: displayName(event.name) },
-        ]}
-      />
-      <DetailHeader
-        title={displayName(event.name)}
-        subtitle={
-          event.clients ? (
-            <>
-              For{' '}
-              <Link
-                href={`/clients/${event.clients.client_id}`}
-                className="font-medium text-aegis-navy hover:text-aegis-orange"
-              >
-                {displayCompany(event.clients.corporate_name)}
-              </Link>
-            </>
-          ) : event.adhoc_client_name ? (
-            <>
-              For <span className="font-medium text-aegis-gray">{displayCompany(event.adhoc_client_name)}</span>
-              <span className="ml-2 inline-flex rounded-full bg-aegis-gray-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aegis-gray-500">
-                ad-hoc
-              </span>
-            </>
-          ) : null
-        }
-        badges={
-          <span
-            className={[
-              'inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide ring-1 ring-inset',
-              STATUS_BADGE[event.status],
-            ].join(' ')}
-          >
-            {EVENT_STATUS_LABEL[event.status]}
-          </span>
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <EventStatusSelect eventId={event.event_id} status={event.status} />
-            <EditEventButton row={event} clients={clients} />
-          </div>
-        }
-      />
-
+    <>
       <Section title="Event details">
         <FieldGrid>
           <Field label="Date & time">{formatDateTime(event.event_date)}</Field>
@@ -220,18 +148,12 @@ export default async function EventDetailPage({
         )}
       </Section>
 
-      <SeatingSection
-        eventId={event.event_id}
-        defaultCapacity={event.default_table_capacity ?? null}
-        tables={tables}
-        guests={guests}
-        markers={markers}
-      />
-
       <GuestList
         eventId={event.event_id}
         eventName={event.name}
         guests={guests}
+        tables={tables}
+        defaultCapacity={event.default_table_capacity ?? null}
         activity={activity}
         googleSheetId={
           (event as unknown as { google_sheet_id: string | null })
@@ -240,6 +162,6 @@ export default async function EventDetailPage({
         googleConnected={googleConnection !== null}
         googleEmail={googleConnection?.google_email ?? null}
       />
-    </div>
+    </>
   );
 }

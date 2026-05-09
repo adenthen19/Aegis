@@ -11,7 +11,7 @@ import {
   updateGuestAction,
   type ActionState,
 } from '../actions';
-import type { EventGuest } from '@/lib/types';
+import type { EventGuest, EventTable } from '@/lib/types';
 import { whatsAppUrl } from '@/lib/contact-helpers';
 import {
   displayCompany,
@@ -35,10 +35,19 @@ export default function GuestDetailModal({
   guest,
   open,
   onClose,
+  guests,
+  tables,
+  defaultCapacity,
 }: {
   guest: EventGuest | null;
   open: boolean;
   onClose: () => void;
+  // Seating data for the visual TablePicker on Edit. Optional so the
+  // modal still works in callers that don't pre-fetch (the embedded
+  // EditForm falls back to a free-text field).
+  guests: EventGuest[];
+  tables: EventTable[];
+  defaultCapacity: number | null;
 }) {
   const [editMode, setEditMode] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -80,7 +89,13 @@ export default function GuestDetailModal({
         }
       >
         {editMode ? (
-          <EditForm guest={guest} onDone={() => setEditMode(false)} />
+          <EditForm
+            guest={guest}
+            onDone={() => setEditMode(false)}
+            guests={guests}
+            tables={tables}
+            defaultCapacity={defaultCapacity}
+          />
         ) : (
           <div className="space-y-5">
             {guest.table_number && (
@@ -265,7 +280,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function EditForm({ guest, onDone }: { guest: EventGuest; onDone: () => void }) {
+function EditForm({
+  guest,
+  onDone,
+  guests,
+  tables,
+  defaultCapacity,
+}: {
+  guest: EventGuest;
+  onDone: () => void;
+  guests: EventGuest[];
+  tables: EventTable[];
+  defaultCapacity: number | null;
+}) {
   const [state, action] = useActionState(updateGuestAction, initialState);
 
   useEffect(() => {
@@ -275,7 +302,12 @@ function EditForm({ guest, onDone }: { guest: EventGuest; onDone: () => void }) 
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="guest_id" value={guest.guest_id} />
-      <GuestFormFields initial={guest} />
+      <GuestFormFields
+        initial={guest}
+        guests={guests}
+        tables={tables}
+        defaultCapacity={defaultCapacity}
+      />
       <FormError message={state.error} />
       <FormActions onCancel={onDone} submitLabel="Update" />
     </form>
