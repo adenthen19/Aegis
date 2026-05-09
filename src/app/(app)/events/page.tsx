@@ -11,6 +11,7 @@ import {
   type EventStatus,
 } from '@/lib/types';
 import { displayCompany, displayName } from '@/lib/display-format';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewEvent from './new-event';
 import EventRowActions from './row-actions';
 
@@ -59,9 +60,12 @@ export default async function EventsPage({
     .select('*, clients ( corporate_name )', { count: 'exact' });
 
   if (q) {
-    query = query.or(
-      `name.ilike.%${q}%,location.ilike.%${q}%,adhoc_client_name.ilike.%${q}%`,
-    );
+    const safe = sanitizeIlikeTerm(q);
+    if (safe) {
+      query = query.or(
+        `name.ilike.%${safe}%,location.ilike.%${safe}%,adhoc_client_name.ilike.%${safe}%`,
+      );
+    }
   }
   if (status) query = query.eq('status', status);
   query = query.order(sort, { ascending: dir === 'asc' });

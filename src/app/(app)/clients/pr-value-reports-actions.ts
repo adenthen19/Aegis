@@ -95,23 +95,34 @@ export async function updatePrValueReportAction(
   const report_id = formData.get('report_id')?.toString();
   if (!report_id) return { ok: false, error: 'Missing report id.' };
 
-  const client_id = formData.get('client_id')?.toString();
-  if (!client_id) return { ok: false, error: 'Missing client id.' };
-
   const title = formData.get('title')?.toString().trim();
   if (!title) return { ok: false, error: 'Title is required.' };
 
   const notes = formData.get('notes')?.toString().trim() || null;
+
+  // Read client_id from DB rather than the form so an attacker can't
+  // mis-revalidate by setting a different client_id in the hidden field.
+  // The update body itself only touches title/notes so a row rebind isn't
+  // possible here, but keeping the same shape across all client-scoped
+  // actions makes future refactors safer.
+  const { data: existing } = await supabase
+    .from('pr_value_reports')
+    .select('client_id')
+    .eq('report_id', report_id)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: 'Report not found.' };
+  const originalClientId = existing.client_id as string;
 
   // We don't recompute totals on edit — the snapshot is intentional. To get
   // fresh totals, generate a new report instead.
   const { error } = await supabase
     .from('pr_value_reports')
     .update({ title, notes })
-    .eq('report_id', report_id);
+    .eq('report_id', report_id)
+    .eq('client_id', originalClientId);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath(`/clients/${client_id}`);
+  revalidatePath(`/clients/${originalClientId}`);
   return { ok: true, error: null };
 }
 

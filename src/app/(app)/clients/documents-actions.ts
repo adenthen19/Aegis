@@ -233,21 +233,30 @@ export async function deleteDocumentAction(
     .maybeSingle();
   if (!row) return { ok: false, error: 'Document not found.' };
 
-  // For uploaded files, delete the storage object first so we don't orphan
-  // it if the row delete fails. For external links there's nothing to clean
-  // up beyond the row itself.
-  if (row.file_path) {
-    const { error: rmErr } = await supabase.storage
-      .from(BUCKET)
-      .remove([row.file_path as string]);
-    if (rmErr) return { ok: false, error: rmErr.message };
-  }
-
+  // Delete the row FIRST, then best-effort remove the storage object.
+  // Reverse of the previous order, which removed the file before the
+  // row delete: an FK / RLS / network failure on the row delete left
+  // the row pointing at a missing file, breaking downloads with no
+  // recovery path. The new order can leave an orphan file if storage
+  // removal fails — recoverable via a future sweep, far better than a
+  // dangling row.
   const { error: delErr } = await supabase
     .from('documents')
     .delete()
     .eq('document_id', document_id);
   if (delErr) return { ok: false, error: delErr.message };
+
+  if (row.file_path) {
+    const { error: rmErr } = await supabase.storage
+      .from(BUCKET)
+      .remove([row.file_path as string]);
+    if (rmErr) {
+      // Row is gone; storage cleanup failed. Log so a future janitor
+      // job can mop up. Don't fail the action — the user-visible
+      // delete succeeded.
+      console.error('deleteDocumentAction: storage cleanup failed', rmErr);
+    }
+  }
 
   revalidateAll(row.client_id as string | null);
   return { ok: true, error: null };

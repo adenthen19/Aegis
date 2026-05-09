@@ -486,7 +486,11 @@ export default function FloorPlanView({
             <button
               type="button"
               onClick={enterEdit}
-              className="inline-flex items-center gap-1.5 rounded-md border border-aegis-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-aegis-navy hover:bg-aegis-gray-50"
+              // Hide on phones — drag-to-position with a 14-px-wide
+              // table is unusable. The canvas remains scrollable in
+              // view mode so users can still inspect seating; edit
+              // is gated to lg+ where there's enough room to grab.
+              className="hidden items-center gap-1.5 rounded-md border border-aegis-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-aegis-navy hover:bg-aegis-gray-50 lg:inline-flex"
             >
               <svg
                 className="h-3.5 w-3.5"
@@ -557,40 +561,51 @@ export default function FloorPlanView({
         </p>
       ) : (
         <p className="text-[11px] text-aegis-gray-500">
-          Hover or tap a table to see who&apos;s seated there. Use{' '}
-          <span className="font-medium">Edit layout</span> to drag tables and
-          add stage / door / registration markers for this room.
+          Hover or tap a table to see who&apos;s seated there.{' '}
+          <span className="lg:hidden">
+            Scroll horizontally to see the rest of the room.
+          </span>
+          <span className="hidden lg:inline">
+            Use <span className="font-medium">Edit layout</span> to drag
+            tables and add stage / door / registration markers for this
+            room.
+          </span>
         </p>
       )}
 
-      {/* Canvas — CSS-scaled to fit; internal coords stay 1200×800 */}
-      <div
-        ref={containerRef}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onClick={() => {
-          // Consume the post-drag synthetic click. Without this,
-          // releasing a drag anywhere on the canvas would immediately
-          // unpin the table popover the user just opened.
-          if (didDragRef.current) {
-            didDragRef.current = false;
-            return;
-          }
-          setPinnedTable(null);
-        }}
-        className="relative w-full overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50/40"
-        style={{
-          aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,
-          // Light grid pattern in edit mode so the snap grid is visible.
-          backgroundImage: editing
-            ? 'radial-gradient(circle, rgba(15, 23, 42, 0.08) 1px, transparent 1px)'
-            : undefined,
-          backgroundSize: editing
-            ? `${(SNAP * 100) / CANVAS_W}% ${(SNAP * 100) / CANVAS_H}%`
-            : undefined,
-        }}
-      >
+      {/* Canvas — CSS-scaled to fit; internal coords stay 1200×800.
+          On small screens the inner element forces min-width 1200 so
+          tables stay tappable (≥ 48px); the outer wrapper scrolls
+          horizontally. On lg+ the canvas fills the container width
+          and the aspect ratio drives the height. */}
+      <div className="-mx-1 overflow-x-auto px-1 lg:mx-0 lg:overflow-x-visible lg:px-0">
+        <div
+          ref={containerRef}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onClick={() => {
+            // Consume the post-drag synthetic click. Without this,
+            // releasing a drag anywhere on the canvas would immediately
+            // unpin the table popover the user just opened.
+            if (didDragRef.current) {
+              didDragRef.current = false;
+              return;
+            }
+            setPinnedTable(null);
+          }}
+          className="relative w-[1200px] overflow-hidden rounded-lg border border-aegis-gray-100 bg-aegis-gray-50/40 lg:w-full"
+          style={{
+            aspectRatio: `${CANVAS_W} / ${CANVAS_H}`,
+            // Light grid pattern in edit mode so the snap grid is visible.
+            backgroundImage: editing
+              ? 'radial-gradient(circle, rgba(15, 23, 42, 0.08) 1px, transparent 1px)'
+              : undefined,
+            backgroundSize: editing
+              ? `${(SNAP * 100) / CANVAS_W}% ${(SNAP * 100) / CANVAS_H}%`
+              : undefined,
+          }}
+        >
         <div
           className="absolute inset-0"
           // Use a percent-based positioning system inside this scaled
@@ -626,6 +641,7 @@ export default function FloorPlanView({
             />
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

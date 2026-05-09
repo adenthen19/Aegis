@@ -7,6 +7,7 @@ import Pagination from '@/components/ui/pagination';
 import FilterTabs from '@/components/ui/filter-tabs';
 import type { ActionItem, Meeting } from '@/lib/types';
 import { displayCompany } from '@/lib/display-format';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewMeeting from './new-meeting';
 import MeetingRowActions from './row-actions';
 
@@ -42,7 +43,12 @@ export default async function MeetingsPage({
           '*, clients ( corporate_name ), analysts ( institution_name ), meeting_attendees ( user_id ), action_items ( * )',
           { count: 'exact' },
         );
-      if (q) query = query.or(`location.ilike.%${q}%,summary.ilike.%${q}%,other_remarks.ilike.%${q}%`);
+      if (q) {
+        const safe = sanitizeIlikeTerm(q);
+        if (safe) {
+          query = query.or(`location.ilike.%${safe}%,summary.ilike.%${safe}%,other_remarks.ilike.%${safe}%`);
+        }
+      }
       if (format === 'physical' || format === 'online') query = query.eq('meeting_format', format);
       if (type === 'internal' || type === 'briefing') query = query.eq('meeting_type', type);
       query = query.order(sort, { ascending: dir === 'asc' });

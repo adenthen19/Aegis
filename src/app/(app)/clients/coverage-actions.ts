@@ -250,21 +250,39 @@ export async function updateCoverageAction(
   const parsed = readPayload(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
+  // Pull client_id from the existing row so we refuse cross-client
+  // tampering. The hidden client_id form field can't be used to rebind
+  // a coverage row to a different client.
+  const { data: before } = await supabase
+    .from('media_coverage')
+    .select('client_id')
+    .eq('coverage_id', coverage_id)
+    .maybeSingle();
+  if (!before) return { ok: false, error: 'Coverage row not found.' };
+  const originalClientId = before.client_id as string;
+
+  // Strip client_id from the update payload.
+  const { client_id: _ignored, ...mutable } = parsed.value;
+  void _ignored;
+
   const { error } = await supabase
     .from('media_coverage')
-    .update(parsed.value)
-    .eq('coverage_id', coverage_id);
+    .update(mutable)
+    .eq('coverage_id', coverage_id)
+    .eq('client_id', originalClientId);
   if (error) return { ok: false, error: error.message };
 
+  // Clippings always attach under the row's true client_id, not whatever
+  // the form claimed.
   const clipErr = await attachClippingIfProvided(
     supabase,
     formData,
-    parsed.value.client_id,
+    originalClientId,
     coverage_id,
     parsed.value.press_release_id,
   );
   if (clipErr) {
-    revalidatePath(`/clients/${parsed.value.client_id}`);
+    revalidatePath(`/clients/${originalClientId}`);
     return { ok: false, error: `Coverage updated, but clipping failed: ${clipErr}` };
   }
 
@@ -273,7 +291,7 @@ export async function updateCoverageAction(
     await tryAutoScoreCoverage(supabase, coverage_id, parsed.value);
   }
 
-  revalidatePath(`/clients/${parsed.value.client_id}`);
+  revalidatePath(`/clients/${originalClientId}`);
   return { ok: true, error: null };
 }
 

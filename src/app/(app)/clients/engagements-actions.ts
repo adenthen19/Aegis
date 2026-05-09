@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { assertDirectorOrAdmin } from '@/lib/auth';
 import type {
   EngagementStatus,
   EngagementType,
@@ -128,14 +129,24 @@ export async function createEngagementAction(
   const parsed = readPayload(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  // If creating a new active engagement, complete any prior actives so we
-  // don't end up with two competing scoreboards.
+  // Insert the new engagement FIRST, then close prior actives if needed.
+  // Reverse order vs. before — if the insert fails (constraint, network,
+  // RLS), the existing actives are untouched. Otherwise a sweep-then-fail
+  // would leave the client with zero actives, which the dashboard treats
+  // as "engagement lapsed".
+  //
+  // Snapshot the prior actives before inserting so we can close exactly
+  // those rows by id afterwards. Closing by `(client_id, status='active')`
+  // would also catch the row we just inserted.
+  let priorActiveIds: string[] = [];
   if (parsed.value.status === 'active') {
-    await supabase
+    const { data: priorActives, error: priorErr } = await supabase
       .from('engagements')
-      .update({ status: 'completed' })
+      .select('engagement_id')
       .eq('client_id', parsed.value.client_id)
       .eq('status', 'active');
+    if (priorErr) return { ok: false, error: priorErr.message };
+    priorActiveIds = (priorActives ?? []).map((r) => r.engagement_id as string);
   }
 
   const { data: created, error } = await supabase
@@ -145,6 +156,22 @@ export async function createEngagementAction(
     .single();
   if (error || !created) {
     return { ok: false, error: error?.message ?? 'Failed to create engagement.' };
+  }
+
+  // Now close the priors. If this fails the client has TWO actives
+  // temporarily — we surface the error so the user can re-run; far
+  // better than the previous behaviour of zero actives on insert error.
+  if (priorActiveIds.length > 0) {
+    const { error: closeErr } = await supabase
+      .from('engagements')
+      .update({ status: 'completed' })
+      .in('engagement_id', priorActiveIds);
+    if (closeErr) {
+      // Log but don't roll back the insert — the new engagement is real
+      // and the host wants it. Surface a soft error so they know to
+      // close the priors manually if needed.
+      console.error('createEngagementAction: failed to close prior actives', closeErr);
+    }
   }
 
   await seedDeliverablesForEngagement(
@@ -259,10 +286,16 @@ export async function updateEngagementAction(
 export async function renewEngagementAction(
   engagement_id: string,
 ): Promise<ActionState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  // Renewing closes the prior engagement, creates a new active one, and
+  // re-seeds deliverables/regulatory items. That's a billing-relevant
+  // commitment — only directors and super_admins can do it. The seeders
+  // also use `auth.user.id` as the PIC for any pre-work todos, so we
+  // keep the user reference from the role guard.
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
   if (!engagement_id) return { ok: false, error: 'Missing engagement id.' };
+  const user = auth.user;
+  const supabase = await createClient();
 
   const { data: source, error: srcErr } = await supabase
     .from('engagements')
@@ -291,13 +324,22 @@ export async function renewEngagementAction(
     return d.toISOString().slice(0, 10);
   })();
 
-  // Close the prior engagement.
-  await supabase
-    .from('engagements')
-    .update({ status: 'completed' })
-    .eq('engagement_id', engagement_id);
-
   const tiers = (source.service_tier ?? []) as ServiceTier[];
+
+  // Snapshot ALL active engagements for this client (not just the
+  // source), so we can close them after the renewal insert lands. Two
+  // bugs were fused here previously:
+  //   1. Source-only close meant a parallel manual create of an active
+  //      could leave two actives after a renew.
+  //   2. Close-then-insert ordering left the client with zero actives
+  //      when the insert failed.
+  const { data: priorActives, error: priorErr } = await supabase
+    .from('engagements')
+    .select('engagement_id')
+    .eq('client_id', source.client_id as string)
+    .eq('status', 'active');
+  if (priorErr) return { ok: false, error: priorErr.message };
+  const priorActiveIds = (priorActives ?? []).map((r) => r.engagement_id as string);
 
   const { data: created, error: insErr } = await supabase
     .from('engagements')
@@ -318,6 +360,21 @@ export async function renewEngagementAction(
     .single();
   if (insErr || !created) {
     return { ok: false, error: insErr?.message ?? 'Failed to create renewed engagement.' };
+  }
+
+  // Close ALL prior actives now that the new row exists. If this fails
+  // the client has multiple actives temporarily; surfacing the error
+  // lets the user re-run a clean-up. Strictly better than the old
+  // close-source-only-then-insert which silently left lingering actives
+  // OR zero actives on insert failure.
+  if (priorActiveIds.length > 0) {
+    const { error: closeErr } = await supabase
+      .from('engagements')
+      .update({ status: 'completed' })
+      .in('engagement_id', priorActiveIds);
+    if (closeErr) {
+      console.error('renewEngagementAction: failed to close prior actives', closeErr);
+    }
   }
 
   // Pull FYE + corporate name once so the regulatory + pre-work seeders work.
@@ -360,10 +417,12 @@ export async function renewEngagementAction(
 export async function deleteEngagementAction(
   engagement_id: string,
 ): Promise<ActionState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  // Deletion cascades to deliverables / commitments / press releases
+  // attached to this engagement. Director / super_admin only.
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
   if (!engagement_id) return { ok: false, error: 'Missing engagement id.' };
+  const supabase = await createClient();
 
   const { data: row } = await supabase
     .from('engagements')

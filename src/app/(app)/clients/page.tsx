@@ -13,6 +13,7 @@ import {
   type ServiceTier,
 } from '@/lib/types';
 import { displayCompany } from '@/lib/display-format';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewClient from './new-client';
 import ClientRowActions from './row-actions';
 import ImportClients from './import-clients';
@@ -70,7 +71,12 @@ export default async function ClientsPage({
 
   let query = supabase.from('clients').select('*', { count: 'exact' });
   if (q) {
-    query = query.or(`corporate_name.ilike.%${q}%,ticker_code.ilike.%${q}%`);
+    // Strip PostgREST-special chars before interpolation — comma / paren /
+    // colon / star / etc. would otherwise be parsed as filter syntax.
+    const safe = sanitizeIlikeTerm(q);
+    if (safe) {
+      query = query.or(`corporate_name.ilike.%${safe}%,ticker_code.ilike.%${safe}%`);
+    }
   }
   if (mineClientIds !== null) {
     if (mineClientIds.length === 0) {

@@ -4,6 +4,7 @@ import { type SortState } from '@/components/data-table';
 import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import type { MediaContact } from '@/lib/types';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewMediaContact from './new-media-contact';
 import ExportMediaEmails from './export-emails';
 import ImportMedia from './import-media';
@@ -26,9 +27,12 @@ export default async function MediaPage({
   const supabase = await createClient();
   let query = supabase.from('media_contacts').select('*', { count: 'exact' });
   if (q) {
-    query = query.or(
-      `full_name.ilike.%${q}%,company_name.ilike.%${q}%,email.ilike.%${q}%,state.ilike.%${q}%`,
-    );
+    const safe = sanitizeIlikeTerm(q);
+    if (safe) {
+      query = query.or(
+        `full_name.ilike.%${safe}%,company_name.ilike.%${safe}%,email.ilike.%${safe}%,state.ilike.%${safe}%`,
+      );
+    }
   }
   query = query.order(sort, { ascending: dir === 'asc' });
   query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

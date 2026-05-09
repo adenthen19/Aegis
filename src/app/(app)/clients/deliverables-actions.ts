@@ -61,9 +61,13 @@ export async function bumpDeliverableCountAction(
     return { ok: false, error: 'Delta must be +1 or -1.' };
   }
 
+  // Validate the deliverable is recurring (only kind that has a counter)
+  // and snapshot the client_id for revalidatePath. We don't read the
+  // count itself — the RPC handles increment + status transition
+  // atomically, so the caller doesn't need the value.
   const { data: row, error: fetchErr } = await supabase
     .from('client_deliverables')
-    .select('client_id, kind, completed_count, target_count')
+    .select('client_id, kind')
     .eq('client_deliverable_id', client_deliverable_id)
     .maybeSingle();
   if (fetchErr) return { ok: false, error: fetchErr.message };
@@ -72,28 +76,15 @@ export async function bumpDeliverableCountAction(
     return { ok: false, error: 'Only recurring deliverables have a count.' };
   }
 
-  const next = Math.max(0, (row.completed_count as number) + delta);
-  const target = (row.target_count as number | null) ?? null;
-
-  const update: {
-    completed_count: number;
-    updated_at: string;
-    status?: DeliverableStatus;
-  } = {
-    completed_count: next,
-    updated_at: new Date().toISOString(),
-  };
-  if (target != null && next >= target) update.status = 'completed';
-  else if (next === 0) update.status = 'pending';
-  else update.status = 'in_progress';
-
-  const { error } = await supabase
-    .from('client_deliverables')
-    .update(update)
-    .eq('client_deliverable_id', client_deliverable_id);
+  // Atomic via RPC (migration 0037). Two concurrent +1 clicks no longer
+  // collapse into a single bump.
+  const { error } = await supabase.rpc('bump_deliverable_counter', {
+    p_deliverable_id: client_deliverable_id,
+    p_delta: delta,
+  });
   if (error) return { ok: false, error: error.message };
 
-  if (row.client_id) revalidatePath(`/clients/${row.client_id}`);
+  if (row.client_id) revalidatePath(`/clients/${row.client_id as string}`);
   return { ok: true, error: null };
 }
 

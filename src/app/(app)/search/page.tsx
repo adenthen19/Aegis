@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import { Section, EmptyMini } from '@/components/detail-shell';
 import { displayCompany, displayName } from '@/lib/display-format';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 
 const PER_GROUP_LIMIT = 8;
 
@@ -66,11 +67,26 @@ export default async function SearchPage({
   }
 
   const supabase = await createClient();
-  // PostgREST .or() escapes commas-in-values when wrapped in dotted notation.
-  // Wrapping the user term in `%${q}%` for ilike. The term is interpolated
-  // directly — Supabase parameterizes it on the wire — but we strip commas
-  // up front because the .or() syntax uses commas as separators.
-  const safe = q.replace(/[,]/g, ' ');
+  // Use the shared sanitizer so the global search applies the same
+  // PostgREST-escape rules as every per-table list page. Strips comma /
+  // paren / colon / star / etc. — anything that would otherwise be parsed
+  // as PostgREST filter syntax.
+  const safe = sanitizeIlikeTerm(q);
+  if (!safe) {
+    // The user typed only PostgREST-special characters. Treat the same
+    // as "too short" rather than running an unfiltered query.
+    return (
+      <div>
+        <PageHeader
+          title="Search"
+          description="Find clients, stakeholders, analysts, media contacts, meetings, and press releases."
+        />
+        <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-12 text-center text-sm text-aegis-gray-500">
+          Searches need at least one letter or digit.
+        </p>
+      </div>
+    );
+  }
 
   const [
     clientsRes,

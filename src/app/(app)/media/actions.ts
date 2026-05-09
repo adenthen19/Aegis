@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { assertDirectorOrAdmin } from '@/lib/auth';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import {
   IMPORT_INITIAL,
   parseCsv,
@@ -94,7 +96,7 @@ export async function exportMediaEmailsAction(
     .select('email')
     .not('email', 'is', null);
 
-  const term = q.trim();
+  const term = sanitizeIlikeTerm(q);
   if (term) {
     query = query.or(
       `full_name.ilike.%${term}%,company_name.ilike.%${term}%,email.ilike.%${term}%,state.ilike.%${term}%`,
@@ -131,11 +133,13 @@ export async function deleteMediaContactAction(media_id: string): Promise<Action
 export async function bulkDeleteMediaContactsAction(
   media_ids: string[],
 ): Promise<ActionState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  // Role-gate destructive bulk ops — same reasoning as bulk-delete
+  // analysts. Single-delete remains available to members.
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
   if (media_ids.length === 0) return { ok: false, error: 'No contacts selected.' };
 
+  const supabase = await createClient();
   const { error } = await supabase.from('media_contacts').delete().in('media_id', media_ids);
   if (error) return { ok: false, error: error.message };
 

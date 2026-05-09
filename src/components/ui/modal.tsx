@@ -40,7 +40,7 @@ export default function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-stretch justify-center sm:items-center">
       <div
         aria-hidden
         onClick={dismissible ? onClose : undefined}
@@ -51,7 +51,13 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative z-10 flex max-h-[90vh] w-full flex-col rounded-t-xl bg-white shadow-2xl sm:rounded-xl ${SIZE_CLASS[size]}`}
+        // On mobile: full-screen sheet (h-full + 100dvh ceiling so the
+        // iOS keyboard never hides the focused field). On sm+: centred
+        // dialog with the legacy 90vh cap and rounded corners.
+        // 100dvh tracks the visual viewport — when the keyboard opens,
+        // the available height shrinks and the inner overflow-y-auto
+        // form keeps the focused input visible.
+        className={`relative z-10 flex h-full max-h-[100dvh] w-full flex-col bg-white shadow-2xl sm:h-auto sm:max-h-[90vh] sm:rounded-xl ${SIZE_CLASS[size]}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-aegis-gray-100 px-5 py-4 sm:px-6">
           <div>

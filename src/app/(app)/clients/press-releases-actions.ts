@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type {
-  DeliverableStatus,
   PressReleaseStatus,
   PressReleaseType,
 } from '@/lib/types';
@@ -91,35 +90,14 @@ async function bumpCommitmentForDistribution(
   client_deliverable_id: string,
   delta: 1 | -1,
 ): Promise<void> {
-  const { data: row } = await supabase
-    .from('client_deliverables')
-    .select('completed_count, target_count, kind')
-    .eq('client_deliverable_id', client_deliverable_id)
-    .maybeSingle();
-  if (!row) return;
-
-  const current = (row.completed_count as number) ?? 0;
-  const next = Math.max(0, current + delta);
-  const target = (row.target_count as number | null) ?? null;
-  const update: {
-    completed_count: number;
-    updated_at: string;
-    status?: DeliverableStatus;
-  } = {
-    completed_count: next,
-    updated_at: new Date().toISOString(),
-  };
-  if (row.kind === 'recurring' && target != null && next >= target) {
-    update.status = 'completed';
-  } else if (next === 0) {
-    update.status = 'pending';
-  } else {
-    update.status = 'in_progress';
-  }
-  await supabase
-    .from('client_deliverables')
-    .update(update)
-    .eq('client_deliverable_id', client_deliverable_id);
+  // Atomic via RPC (migration 0037). The prior read-then-write pattern
+  // lost increments when two concurrent status flips raced (e.g. one PR
+  // marked distributed in the kiosk while a teammate set the same one
+  // distributed in the admin tab).
+  await supabase.rpc('bump_deliverable_counter', {
+    p_deliverable_id: client_deliverable_id,
+    p_delta: delta,
+  });
 }
 
 export async function createPressReleaseAction(
@@ -181,29 +159,41 @@ export async function updatePressReleaseAction(
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
   // Capture pre-update state to keep the commitment counter consistent.
+  // We also pull client_id so we can refuse cross-client tampering: a
+  // user with edit rights to the press release can't rebind it to a
+  // different client by tampering with the hidden form field.
   const { data: before } = await supabase
     .from('press_releases')
-    .select('status, distributed_at, client_deliverable_id')
+    .select('client_id, status, distributed_at, client_deliverable_id')
     .eq('press_release_id', press_release_id)
     .maybeSingle();
+  if (!before) return { ok: false, error: 'Press release not found.' };
 
-  const wasDistributed = before?.status === 'distributed';
+  const originalClientId = before.client_id as string;
+
+  const wasDistributed = before.status === 'distributed';
   const isNowDistributed = parsed.value.status === 'distributed';
   const distributed_at = isNowDistributed
-    ? ((before?.distributed_at as string | null) ?? new Date().toISOString())
+    ? ((before.distributed_at as string | null) ?? new Date().toISOString())
     : null;
+
+  // Strip client_id from the update payload — it's set at create time and
+  // must not be mutated through this action. Same reason as above.
+  const { client_id: _ignored, ...mutable } = parsed.value;
+  void _ignored;
 
   const { error } = await supabase
     .from('press_releases')
-    .update({ ...parsed.value, distributed_at })
-    .eq('press_release_id', press_release_id);
+    .update({ ...mutable, distributed_at })
+    .eq('press_release_id', press_release_id)
+    .eq('client_id', originalClientId);
   if (error) return { ok: false, error: error.message };
 
   // Counter sync. Only bump if a commitment is linked. Use the *new* link
   // from the payload, falling back to the pre-update one.
   const linked_id =
     parsed.value.client_deliverable_id ??
-    (before?.client_deliverable_id as string | null) ??
+    (before.client_deliverable_id as string | null) ??
     null;
   if (linked_id) {
     if (!wasDistributed && isNowDistributed) {
@@ -213,7 +203,7 @@ export async function updatePressReleaseAction(
     }
   }
 
-  revalidatePath(`/clients/${parsed.value.client_id}`);
+  revalidatePath(`/clients/${originalClientId}`);
   return { ok: true, error: null };
 }
 

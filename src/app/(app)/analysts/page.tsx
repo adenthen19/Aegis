@@ -4,6 +4,7 @@ import { type SortState } from '@/components/data-table';
 import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import type { Analyst } from '@/lib/types';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewAnalyst from './new-analyst';
 import ExportAnalystEmails from './export-emails';
 import ImportAnalysts from './import-analysts';
@@ -26,9 +27,12 @@ export default async function AnalystsPage({
   const supabase = await createClient();
   let query = supabase.from('analysts').select('*', { count: 'exact' });
   if (q) {
-    query = query.or(
-      `full_name.ilike.%${q}%,institution_name.ilike.%${q}%,email.ilike.%${q}%`,
-    );
+    const safe = sanitizeIlikeTerm(q);
+    if (safe) {
+      query = query.or(
+        `full_name.ilike.%${safe}%,institution_name.ilike.%${safe}%,email.ilike.%${safe}%`,
+      );
+    }
   }
   query = query.order(sort, { ascending: dir === 'asc' });
   query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);

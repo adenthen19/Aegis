@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type {
-  DeliverableStatus,
   InterviewFormat,
   InterviewStatus,
 } from '@/lib/types';
@@ -99,41 +98,16 @@ function readPayload(
 
 // Counter sync — a completed interview bumps the linked recurring "media
 // interviews" commitment so the engagement's on-track view stays accurate.
-// Mirrors the pattern used by press releases + deliverable schedule.
+// Atomic via RPC (migration 0037) so concurrent flips don't lose count.
 async function bumpCommitment(
   supabase: Awaited<ReturnType<typeof createClient>>,
   client_deliverable_id: string,
   delta: 1 | -1,
 ): Promise<void> {
-  const { data: row } = await supabase
-    .from('client_deliverables')
-    .select('completed_count, target_count, kind')
-    .eq('client_deliverable_id', client_deliverable_id)
-    .maybeSingle();
-  if (!row) return;
-
-  const current = (row.completed_count as number) ?? 0;
-  const next = Math.max(0, current + delta);
-  const target = (row.target_count as number | null) ?? null;
-  const update: {
-    completed_count: number;
-    updated_at: string;
-    status?: DeliverableStatus;
-  } = {
-    completed_count: next,
-    updated_at: new Date().toISOString(),
-  };
-  if (row.kind === 'recurring' && target != null && next >= target) {
-    update.status = 'completed';
-  } else if (next === 0) {
-    update.status = 'pending';
-  } else {
-    update.status = 'in_progress';
-  }
-  await supabase
-    .from('client_deliverables')
-    .update(update)
-    .eq('client_deliverable_id', client_deliverable_id);
+  await supabase.rpc('bump_deliverable_counter', {
+    p_deliverable_id: client_deliverable_id,
+    p_delta: delta,
+  });
 }
 
 export async function createMediaInterviewAction(
@@ -185,25 +159,35 @@ export async function updateMediaInterviewAction(
   const parsed = readPayload(formData);
   if (!parsed.ok) return { ok: false, error: parsed.error };
 
+  // Pull client_id from the existing row so we refuse cross-client
+  // tampering — a user can't rebind the interview to a different
+  // client by tampering with the hidden form field.
   const { data: before } = await supabase
     .from('media_interviews')
-    .select('status, client_deliverable_id')
+    .select('client_id, status, client_deliverable_id')
     .eq('interview_id', interview_id)
     .maybeSingle();
+  if (!before) return { ok: false, error: 'Interview not found.' };
+  const originalClientId = before.client_id as string;
+
+  // Strip client_id from the update payload.
+  const { client_id: _ignored, ...mutable } = parsed.value;
+  void _ignored;
 
   const { error } = await supabase
     .from('media_interviews')
-    .update(parsed.value)
-    .eq('interview_id', interview_id);
+    .update(mutable)
+    .eq('interview_id', interview_id)
+    .eq('client_id', originalClientId);
   if (error) return { ok: false, error: error.message };
 
   // Counter sync. Use the new link from the payload, falling back to before.
   const linked_id =
     parsed.value.client_deliverable_id ??
-    (before?.client_deliverable_id as string | null) ??
+    (before.client_deliverable_id as string | null) ??
     null;
   if (linked_id) {
-    const wasCompleted = before?.status === 'completed';
+    const wasCompleted = before.status === 'completed';
     const isNowCompleted = parsed.value.status === 'completed';
     if (!wasCompleted && isNowCompleted) {
       await bumpCommitment(supabase, linked_id, 1);
@@ -212,7 +196,7 @@ export async function updateMediaInterviewAction(
     }
   }
 
-  revalidatePath(`/clients/${parsed.value.client_id}`);
+  revalidatePath(`/clients/${originalClientId}`);
   revalidatePath('/media-interviews');
   return { ok: true, error: null };
 }

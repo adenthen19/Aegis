@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type {
   DeliverableKind,
-  DeliverableStatus,
   ScheduleStatus,
   ServiceTier,
 } from '@/lib/types';
@@ -82,38 +81,14 @@ async function applyCounterDelta(
   client_deliverable_id: string,
   delta: -1 | 1,
 ): Promise<{ error: string | null }> {
-  const { data: row, error: fetchErr } = await supabase
-    .from('client_deliverables')
-    .select('completed_count, target_count, kind')
-    .eq('client_deliverable_id', client_deliverable_id)
-    .maybeSingle();
-  if (fetchErr) return { error: fetchErr.message };
-  if (!row) return { error: null };
-
-  const current = (row.completed_count as number) ?? 0;
-  const next = Math.max(0, current + delta);
-  const target = (row.target_count as number | null) ?? null;
-
-  const update: {
-    completed_count: number;
-    updated_at: string;
-    status?: DeliverableStatus;
-  } = {
-    completed_count: next,
-    updated_at: new Date().toISOString(),
-  };
-  if (row.kind === 'recurring' && target != null && next >= target) {
-    update.status = 'completed';
-  } else if (next === 0) {
-    update.status = 'pending';
-  } else {
-    update.status = 'in_progress';
-  }
-
-  const { error } = await supabase
-    .from('client_deliverables')
-    .update(update)
-    .eq('client_deliverable_id', client_deliverable_id);
+  // Atomic increment via RPC — the prior read-then-write pattern lost
+  // increments when two concurrent status flips raced. The RPC's UPDATE
+  // computes next + status from the row's locked columns inside the DB.
+  // (migration 0037)
+  const { error } = await supabase.rpc('bump_deliverable_counter', {
+    p_deliverable_id: client_deliverable_id,
+    p_delta: delta,
+  });
   return { error: error?.message ?? null };
 }
 

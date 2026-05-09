@@ -880,10 +880,13 @@ export default function KioskShell({
     <div className="flex min-h-screen flex-col bg-aegis-gray-50/40">
       {/* ── Top bar ───────────────────────────────────────────── */}
       <header className="sticky top-0 z-20 border-b border-aegis-gray-100 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+        {/* Compact on phones — flex-row with smaller gaps so the search box
+            stays above the fold on iPhone SE. The expanded sm: variant is
+            unchanged. */}
+        <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-2 px-3 py-2 sm:flex-row sm:gap-3 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             {clientLogoUrl && (
-              <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-aegis-gray-100 bg-white p-1 shadow-sm sm:h-14 sm:w-20">
+              <div className="flex h-9 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-aegis-gray-100 bg-white p-0.5 shadow-sm sm:h-14 sm:w-20 sm:rounded-lg sm:p-1">
                 {/* Plain <img> — kiosk loads from arbitrary Supabase Storage URLs and
                     sometimes data: URLs, so next/image's domain allowlist would just
                     get in the way here. */}
@@ -925,10 +928,13 @@ export default function KioskShell({
                   </button>
                 )}
               </p>
-              <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
+              <h1 className="truncate text-sm font-semibold text-aegis-navy sm:text-2xl">
                 {displayName(eventName)}
               </h1>
-              <p className="truncate text-[12px] text-aegis-gray-500 sm:text-sm">
+              {/* On phones we hide the date/location subline to save vertical
+                  space — the search input is what the usher actually needs
+                  above the fold. The full subline returns at sm+. */}
+              <p className="hidden truncate text-[12px] text-aegis-gray-500 sm:block sm:text-sm">
                 {[
                   clientLabel ? displayCompany(clientLabel) : null,
                   new Date(eventDate).toLocaleString(undefined, {
@@ -942,29 +948,33 @@ export default function KioskShell({
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <div className="rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-inset ring-emerald-200 sm:px-4">
-              <div className="flex items-baseline gap-1.5 tabular-nums">
-                <span className="text-2xl font-semibold text-emerald-700 sm:text-3xl">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div className="rounded-md bg-emerald-50 px-2 py-1 ring-1 ring-inset ring-emerald-200 sm:rounded-lg sm:px-4 sm:py-2">
+              <div className="flex items-baseline gap-1 tabular-nums">
+                <span className="text-base font-semibold text-emerald-700 sm:text-3xl">
                   {checkedIn}
                 </span>
-                <span className="text-sm text-emerald-700/70">/ {total}</span>
+                <span className="text-[11px] text-emerald-700/70 sm:text-sm">
+                  / {total}
+                </span>
               </div>
-              <div className="mt-1 h-1.5 w-24 overflow-hidden rounded-full bg-emerald-100 sm:w-32">
+              {/* Progress bar + caption only at sm+. On phones the count is
+                  enough — the bar adds nothing readable at 24px wide. */}
+              <div className="mt-1 hidden h-1.5 w-24 overflow-hidden rounded-full bg-emerald-100 sm:block sm:w-32">
                 <div
                   className="h-full bg-emerald-500 transition-all"
                   style={{ width: `${pct}%` }}
                   aria-hidden
                 />
               </div>
-              <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-emerald-700/80">
+              <p className="mt-1 hidden text-[10px] uppercase tracking-[0.08em] text-emerald-700/80 sm:block">
                 Checked in · {pct}%
               </p>
             </div>
             <button
               type="button"
               onClick={() => setExitConfirmOpen(true)}
-              className="inline-flex h-12 items-center justify-center gap-1.5 rounded-lg border border-aegis-gray-200 bg-white px-4 text-sm font-medium text-aegis-navy shadow-sm hover:bg-aegis-gray-50 sm:h-12"
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-aegis-gray-200 bg-white px-3 text-sm font-medium text-aegis-navy shadow-sm hover:bg-aegis-gray-50 sm:h-12 sm:rounded-lg sm:px-4"
               aria-label="Exit kiosk mode"
             >
               <svg

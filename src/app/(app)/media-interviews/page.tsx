@@ -11,6 +11,7 @@ import {
   type InterviewStatus,
   type MediaInterview,
 } from '@/lib/types';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 
 const PAGE_SIZE = 25;
 const SORTABLE = new Set(['interview_date', 'status', 'created_at']);
@@ -67,9 +68,12 @@ export default async function MediaInterviewsPage({
     );
 
   if (q) {
-    query = query.or(
-      `publication_name.ilike.%${q}%,reporter_name.ilike.%${q}%,topic.ilike.%${q}%,spokesperson_name.ilike.%${q}%`,
-    );
+    const safe = sanitizeIlikeTerm(q);
+    if (safe) {
+      query = query.or(
+        `publication_name.ilike.%${safe}%,reporter_name.ilike.%${safe}%,topic.ilike.%${safe}%,spokesperson_name.ilike.%${safe}%`,
+      );
+    }
   }
   if (status) query = query.eq('status', status);
   query = query.order(sort, { ascending: dir === 'asc' });

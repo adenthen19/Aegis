@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { assertDirectorOrAdmin } from '@/lib/auth';
+import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import type { AnalystType } from '@/lib/types';
 import {
   IMPORT_INITIAL,
@@ -109,7 +111,7 @@ export async function exportAnalystEmailsAction(
     .select('email')
     .not('email', 'is', null);
 
-  const term = q.trim();
+  const term = sanitizeIlikeTerm(q);
   if (term) {
     query = query.or(
       `full_name.ilike.%${term}%,institution_name.ilike.%${term}%,email.ilike.%${term}%`,
@@ -147,11 +149,15 @@ export async function deleteAnalystAction(investor_id: string): Promise<ActionSt
 export async function bulkDeleteAnalystsAction(
   investor_ids: string[],
 ): Promise<ActionState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  // Role-gate destructive bulk ops to director / super_admin. Members
+  // can still single-delete via deleteAnalystAction; the bulk path
+  // (often used to wipe a whole firm in one click) needs supervisor
+  // sign-off.
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
   if (investor_ids.length === 0) return { ok: false, error: 'No analysts selected.' };
 
+  const supabase = await createClient();
   const { error } = await supabase.from('analysts').delete().in('investor_id', investor_ids);
   if (error) return { ok: false, error: error.message };
 

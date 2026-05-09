@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { assertDirectorOrAdmin } from '@/lib/auth';
 import {
   INDUSTRY_LABEL,
   IPO_STATUS_LABEL,
@@ -226,11 +227,14 @@ export async function updateClientAction(
 }
 
 export async function deleteClientAction(client_id: string): Promise<ActionState> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'You must be signed in.' };
+  // Deleting a client cascades to all their engagements, deliverables,
+  // press releases, coverage, etc. Gate behind director / super_admin
+  // so a single accidental click can't wipe months of work.
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
   if (!client_id) return { ok: false, error: 'Missing client id.' };
 
+  const supabase = await createClient();
   const { error } = await supabase.from('clients').delete().eq('client_id', client_id);
   if (error) return { ok: false, error: error.message };
 
