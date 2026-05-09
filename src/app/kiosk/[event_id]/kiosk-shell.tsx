@@ -1033,7 +1033,7 @@ export default function KioskShell({
       </header>
 
       {/* ── Search input ──────────────────────────────────────── */}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-5 sm:px-6 sm:py-6">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-3 sm:px-6 sm:py-4">
         <form onSubmit={(e) => e.preventDefault()}>
           <label htmlFor="kiosk-search" className="sr-only">
             Search guest by name, company, or contact number
@@ -1064,7 +1064,7 @@ export default function KioskShell({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search name, company, or 4+ digit phone…"
-              className="w-full rounded-2xl border border-aegis-gray-200 bg-white py-5 pl-14 pr-14 text-lg text-aegis-gray-900 shadow-sm outline-none placeholder:text-aegis-gray-300 focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10 sm:py-6 sm:text-2xl"
+              className="w-full rounded-2xl border border-aegis-gray-200 bg-white py-3.5 pl-14 pr-14 text-base text-aegis-gray-900 shadow-sm outline-none placeholder:text-aegis-gray-300 focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10 sm:py-4 sm:text-xl"
             />
             {query && (
               <button
@@ -1092,7 +1092,7 @@ export default function KioskShell({
           </div>
         </form>
 
-        <p className="mt-3 text-xs text-aegis-gray-500 sm:text-sm">
+        <p className="mt-2 text-xs text-aegis-gray-500">
           {classified.hint
             ? classified.hint
             : classified.ready
@@ -1106,7 +1106,7 @@ export default function KioskShell({
 
         {/* ── Results ─────────────────────────────────────────── */}
         {classified.ready && (
-          <div className="mt-5 space-y-6">
+          <div className="mt-3 space-y-4">
             {direct.length === 0 && fuzzy.length > 0 && (
               <section>
                 <SectionHeader>
@@ -1115,7 +1115,7 @@ export default function KioskShell({
                     · likely typo in the search
                   </span>
                 </SectionHeader>
-                <ul className="grid gap-3">
+                <ul className="grid gap-2">
                   {fuzzy.map((g) => (
                     <GuestCard
                       key={g.guest_id}
@@ -1205,7 +1205,7 @@ export default function KioskShell({
                 <SectionHeader>
                   Match{direct.length > 1 ? 'es' : ''}
                 </SectionHeader>
-                <ul className="grid gap-3">
+                <ul className="grid gap-2">
                   {direct.map((g) => (
                     <GuestCard
                       key={g.guest_id}
@@ -1604,8 +1604,8 @@ function GuestCard({
 }) {
   const sizeClasses =
     tone === 'primary'
-      ? 'min-h-[88px] px-5 py-4 sm:min-h-[96px] sm:px-6 sm:py-5'
-      : 'min-h-[68px] px-4 py-3 sm:px-5 sm:py-4';
+      ? 'min-h-[68px] px-4 py-2.5 sm:min-h-[76px] sm:px-5 sm:py-3'
+      : 'min-h-[56px] px-3.5 py-2 sm:px-4 sm:py-2.5';
   const nameClasses =
     tone === 'primary'
       ? 'text-base font-semibold sm:text-lg'
