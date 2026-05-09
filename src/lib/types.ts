@@ -568,6 +568,57 @@ export type EventTable = {
   // Audience this table is reserved for (migration 0035). 'mixed' is the
   // default and acts as a wildcard for tier matching.
   section: TableSection;
+  // Floor-plan canvas position (migration 0036). NULL = auto-positioned
+  // by the floor-plan view in deterministic section bands.
+  x: number | null;
+  y: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Non-table elements on the floor-plan canvas — stage, doors, registration
+// desks, etc. (migration 0036)
+export type RoomMarkerKind =
+  | 'stage'
+  | 'door'
+  | 'entrance'
+  | 'podium'
+  | 'registration'
+  | 'custom';
+
+export const ROOM_MARKER_LABEL: Record<RoomMarkerKind, string> = {
+  stage: 'Stage',
+  door: 'Door',
+  entrance: 'Entrance',
+  podium: 'Podium',
+  registration: 'Registration',
+  custom: 'Custom',
+};
+
+// Default footprint per marker kind, in canvas units (1200x800).
+// Used when the host adds a new marker — they can drag immediately
+// without first having to pick a size.
+export const ROOM_MARKER_DEFAULT_SIZE: Record<RoomMarkerKind, { w: number; h: number }> = {
+  stage: { w: 240, h: 60 },
+  door: { w: 40, h: 40 },
+  entrance: { w: 60, h: 40 },
+  podium: { w: 80, h: 40 },
+  registration: { w: 140, h: 40 },
+  custom: { w: 120, h: 40 },
+};
+
+export type EventRoomMarker = {
+  marker_id: string;
+  event_id: string;
+  kind: RoomMarkerKind;
+  label: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rotation: number;
+  created_by_user_id: string | null;
+  updated_by_user_id: string | null;
   created_at: string;
   updated_at: string;
 };

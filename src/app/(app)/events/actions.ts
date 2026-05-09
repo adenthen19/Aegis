@@ -2,7 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type { EventStatus, GuestTier, TableSection } from '@/lib/types';
+import type {
+  EventStatus,
+  GuestTier,
+  RoomMarkerKind,
+  TableSection,
+} from '@/lib/types';
 import {
   IMPORT_INITIAL,
   parseCsv,
@@ -431,6 +436,152 @@ export async function swapEventTablesAction(
     moved_from: fromGuests.length,
     moved_to: toGuests.length,
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Floor-plan layout (positions + markers)
+// ────────────────────────────────────────────────────────────────────────
+//
+// Saves the entire layout in a single round-trip:
+//   • For each table position: upsert event_tables (auto-create the row
+//     if it doesn't exist yet, falling back to the event's default
+//     capacity). Section/label preserved when the row already exists.
+//   • For markers: replace-all (delete everything, insert payload).
+//     Markers are sparse, small, and the host typically edits the whole
+//     set in one go. Delete-all keeps the action atomic without needing
+//     id-stable diffing on the client.
+
+const MARKER_KINDS: RoomMarkerKind[] = [
+  'stage',
+  'door',
+  'entrance',
+  'podium',
+  'registration',
+  'custom',
+];
+
+export type SaveLayoutPayload = {
+  /** Table positions. Each entry upserts (event_tables.x, event_tables.y).
+   *  Tables that exist in event_guests but not in event_tables get a
+   *  fresh row with the event's default capacity copied in (so the row
+   *  can carry x/y). */
+  tables: Array<{ table_number: string; x: number; y: number }>;
+  /** Full marker set for the event. Replaces whatever's currently saved.
+   *  marker_id is ignored on insert — we generate fresh ones every save. */
+  markers: Array<{
+    kind: RoomMarkerKind;
+    label: string | null;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    rotation: number;
+  }>;
+};
+
+function clampCoord(value: number, max = 2000): number {
+  if (!Number.isFinite(value)) return 0;
+  const v = Math.round(value);
+  if (v < 0) return 0;
+  if (v > max) return max;
+  return v;
+}
+
+export async function saveEventLayoutAction(
+  event_id: string,
+  payload: SaveLayoutPayload,
+): Promise<ActionState> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+
+  // Read the event's default capacity so any auto-created event_tables
+  // row has a sensible value to start from. If the event has no default,
+  // we fall back to 10 (typical round-table size) — non-blocking and the
+  // host can edit it later in the list view.
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('default_table_capacity')
+    .eq('event_id', event_id)
+    .maybeSingle();
+  if (evErr) return { ok: false, error: evErr.message };
+  if (!ev) return { ok: false, error: 'Event not found.' };
+  const fallbackCapacity =
+    typeof ev.default_table_capacity === 'number'
+      ? ev.default_table_capacity
+      : 10;
+
+  // Read existing event_tables so we know which rows we can update in
+  // place vs which need to be inserted. table_number is the natural key.
+  const { data: existingTables, error: existingErr } = await supabase
+    .from('event_tables')
+    .select('table_number, capacity, label, section')
+    .eq('event_id', event_id);
+  if (existingErr) return { ok: false, error: existingErr.message };
+  const existingMap = new Map(
+    (existingTables ?? []).map(
+      (t) =>
+        [t.table_number as string, t as { capacity: number; label: string | null; section: TableSection }] as const,
+    ),
+  );
+
+  // Build the upsert payload. Carry forward capacity/label/section for
+  // existing rows so we don't overwrite them with defaults.
+  const upserts = payload.tables
+    .filter((t) => typeof t.table_number === 'string' && t.table_number.trim())
+    .map((t) => {
+      const existing = existingMap.get(t.table_number.trim());
+      return {
+        event_id,
+        table_number: t.table_number.trim(),
+        x: clampCoord(t.x, 1200),
+        y: clampCoord(t.y, 800),
+        capacity: existing?.capacity ?? fallbackCapacity,
+        label: existing?.label ?? null,
+        section: existing?.section ?? ('mixed' as TableSection),
+      };
+    });
+
+  if (upserts.length > 0) {
+    const { error } = await supabase
+      .from('event_tables')
+      .upsert(upserts, { onConflict: 'event_id,table_number' });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // Markers: replace-all. Delete first, then insert. Inserts run only
+  // when the payload is non-empty so an "empty layout" save doesn't
+  // round-trip a useless insert.
+  const { error: deleteErr } = await supabase
+    .from('event_room_markers')
+    .delete()
+    .eq('event_id', event_id);
+  if (deleteErr) return { ok: false, error: deleteErr.message };
+
+  const markerInserts = payload.markers
+    .filter((m) => MARKER_KINDS.includes(m.kind))
+    .map((m) => ({
+      event_id,
+      kind: m.kind,
+      label: m.label?.trim() || null,
+      x: clampCoord(m.x, 1200),
+      y: clampCoord(m.y, 800),
+      w: clampCoord(m.w, 1200),
+      h: clampCoord(m.h, 800),
+      rotation: ((Math.round(m.rotation) % 360) + 360) % 360,
+    }));
+
+  if (markerInserts.length > 0) {
+    const { error } = await supabase
+      .from('event_room_markers')
+      .insert(markerInserts);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath(`/kiosk/${event_id}`);
+  return { ok: true, error: null };
 }
 
 export async function deleteEventTableAction(

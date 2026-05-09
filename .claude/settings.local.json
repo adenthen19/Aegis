@@ -56,7 +56,8 @@
       "Bash(curl -sS -X POST -o /dev/null -w \"sync \\(POST\\): %{http_code}\\\\n\" http://localhost:3020/api/events/00000000-0000-0000-0000-000000000000/sheets/sync)",
       "Bash(echo \"EXIT: $?\")",
       "Bash(git stash *)",
-      "Bash(echo \"TSC EXIT: $?\")"
+      "Bash(echo \"TSC EXIT: $?\")",
+      "Bash(echo \"TSC: $?\")"
     ]
   }
 }

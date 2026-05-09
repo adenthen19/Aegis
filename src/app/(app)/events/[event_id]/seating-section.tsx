@@ -7,6 +7,7 @@ import { Section } from '@/components/detail-shell';
 import {
   TABLE_SECTION_LABEL,
   type EventGuest,
+  type EventRoomMarker,
   type EventTable,
   type TableSection,
 } from '@/lib/types';
@@ -22,6 +23,9 @@ import {
   upsertEventTableAction,
 } from '../actions';
 import SwapTablesModal from './swap-tables-modal';
+import FloorPlanView from './floor-plan-view';
+
+type SeatingView = 'list' | 'floor';
 
 const SECTION_OPTIONS: TableSection[] = ['vip', 'analyst', 'kol', 'media', 'mixed'];
 
@@ -42,11 +46,13 @@ export default function SeatingSection({
   defaultCapacity,
   tables,
   guests,
+  markers,
 }: {
   eventId: string;
   defaultCapacity: number | null;
   tables: EventTable[];
   guests: EventGuest[];
+  markers: EventRoomMarker[];
 }) {
   const rows = useMemo(
     () => buildTableRows(guests, tables, defaultCapacity),
@@ -58,6 +64,7 @@ export default function SeatingSection({
   const [editing, setEditing] = useState<
     { mode: 'add' } | { mode: 'edit'; row: TableRow } | null
   >(null);
+  const [view, setView] = useState<SeatingView>('list');
 
   const overCapacityCount = rows.filter(
     (r) => r.capacity != null && r.used > r.capacity,
@@ -167,8 +174,61 @@ export default function SeatingSection({
           </div>
         )}
 
-        {/* ── Per-table list ─────────────────────────────────── */}
-        {rows.length === 0 ? (
+        {/* ── View toggle: list vs floor plan ───────────────── */}
+        <div className="inline-flex rounded-md border border-aegis-gray-200 bg-white p-0.5">
+          <ViewTab
+            active={view === 'list'}
+            onClick={() => setView('list')}
+            label="List"
+            icon={
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+              </svg>
+            }
+          />
+          <ViewTab
+            active={view === 'floor'}
+            onClick={() => setView('floor')}
+            label="Floor plan"
+            icon={
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            }
+          />
+        </div>
+
+        {view === 'floor' ? (
+          <FloorPlanView
+            eventId={eventId}
+            guests={guests}
+            tables={tables}
+            defaultCapacity={defaultCapacity}
+            markers={markers}
+          />
+        ) : /* ── Per-table list ─────────────────────────────────── */
+        rows.length === 0 ? (
           <div className="rounded-lg border border-dashed border-aegis-gray-200 px-4 py-8 text-center">
             <p className="text-sm text-aegis-gray-500">
               No tables yet. Add overrides for non-standard tables (head table,
@@ -273,6 +333,35 @@ export default function SeatingSection({
         onClose={() => setSwapModalOpen(false)}
       />
     </Section>
+  );
+}
+
+function ViewTab({
+  active,
+  onClick,
+  label,
+  icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={[
+        'inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-colors',
+        active
+          ? 'bg-aegis-navy text-white'
+          : 'text-aegis-gray hover:bg-aegis-gray-50',
+      ].join(' ')}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 

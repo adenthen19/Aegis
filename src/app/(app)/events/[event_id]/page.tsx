@@ -12,6 +12,7 @@ import {
   EVENT_STATUS_LABEL,
   type EventGuest,
   type EventGuestCheckin,
+  type EventRoomMarker,
   type EventRow,
   type EventStatus,
   type EventTable,
@@ -52,7 +53,7 @@ export default async function EventDetailPage({
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const [eventRes, guestsRes, clientsRes, activityRes, googleRes, tablesRes] = await Promise.all([
+  const [eventRes, guestsRes, clientsRes, activityRes, googleRes, tablesRes, markersRes] = await Promise.all([
     supabase
       .from('events')
       .select('*, clients ( client_id, corporate_name )')
@@ -90,6 +91,10 @@ export default async function EventDetailPage({
       : Promise.resolve({ data: null, error: null } as const),
     supabase
       .from('event_tables')
+      .select('*')
+      .eq('event_id', event_id),
+    supabase
+      .from('event_room_markers')
       .select('*')
       .eq('event_id', event_id),
   ]);
@@ -131,6 +136,7 @@ export default async function EventDetailPage({
 
   const googleConnection = (googleRes.data as { google_email: string } | null) ?? null;
   const tables = (tablesRes.data ?? []) as EventTable[];
+  const markers = (markersRes.data ?? []) as EventRoomMarker[];
 
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
@@ -219,6 +225,7 @@ export default async function EventDetailPage({
         defaultCapacity={event.default_table_capacity ?? null}
         tables={tables}
         guests={guests}
+        markers={markers}
       />
 
       <GuestList

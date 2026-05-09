@@ -15,6 +15,11 @@ export type TableRow = {
    *  override row exists (i.e. the table was inferred from a guest's
    *  table_number assignment). */
   section: TableSection;
+  /** Saved position on the floor-plan canvas. null when no override row
+   *  exists yet OR the override exists but x/y haven't been set. The
+   *  floor-plan view auto-arranges any row whose x or y is null. */
+  x: number | null;
+  y: number | null;
   /** true if this row is a row in event_tables (i.e. has a custom limit/label) */
   override: boolean;
   used: number;
@@ -51,6 +56,8 @@ export function buildTableRows(
       capacity: ov?.capacity ?? defaultCapacity,
       label: ov?.label ?? null,
       section: ov?.section ?? 'mixed',
+      x: ov?.x ?? null,
+      y: ov?.y ?? null,
       override: !!ov,
       used: usage.get(t) ?? 0,
     });
