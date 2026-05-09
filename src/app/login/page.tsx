@@ -72,122 +72,54 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen w-full">
-      {/* ─── Brand panel ───────────────────────────────────────────── */}
-      <div className="relative hidden w-1/2 overflow-hidden bg-aegis-navy text-white lg:flex lg:flex-col lg:justify-between">
-        {/* Atmospheric color orbs */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-32 -left-24 h-[28rem] w-[28rem] rounded-full bg-aegis-blue/30 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute top-1/3 -right-32 h-[24rem] w-[24rem] rounded-full bg-aegis-gold/15 blur-3xl"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -bottom-40 left-1/4 h-[26rem] w-[26rem] rounded-full bg-aegis-orange/10 blur-3xl"
-        />
+      {/* ─── Brand panel ─────────────────────────────────────────────
+          Restraint pass: dropped the three blurred orbs, the dot-grid
+          texture, the decorative mountain SVG, and the pulsing status
+          badge. Kept one quiet surface (solid navy + gold rule) and
+          rewrote the headline so it's specific to the team rather
+          than generic IR-firm filler. */}
+      <div className="hidden w-1/2 flex-col justify-between bg-aegis-navy px-12 py-12 text-white lg:flex">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-aegis-blue-100/70">
+          Aegis Communication
+        </p>
 
-        {/* Subtle dot grid texture */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-[0.18]"
-          style={{
-            backgroundImage:
-              'radial-gradient(rgba(255,255,255,0.55) 1px, transparent 1px)',
-            backgroundSize: '22px 22px',
-          }}
-        />
-
-        {/* Large decorative mountain motif (echoes the logo mark) */}
-        <svg
-          aria-hidden
-          viewBox="0 0 600 400"
-          preserveAspectRatio="none"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 w-full text-white/[0.04]"
-          fill="currentColor"
-        >
-          <path d="M0 400 L260 90 L360 240 L600 60 L600 400 Z" />
-          <path d="M0 400 L180 200 L300 320 L500 180 L600 280 L600 400 Z" opacity="0.7" />
-        </svg>
-
-        {/* ── Top: status badge ── */}
-        <div className="relative z-10 px-12 pt-12">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 backdrop-blur-sm">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-aegis-blue opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-aegis-blue" />
-            </span>
-            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-aegis-blue-100/90">
-              Secure Internal Portal
-            </span>
-          </div>
-        </div>
-
-        {/* ── Middle: headline ── */}
-        <div className="relative z-10 max-w-lg px-12">
-          <h2 className="text-4xl font-semibold leading-[1.15] tracking-tight">
-            Strategic IR, PR, Events, AGM/EGM &amp; IPO operations,
-            <span className="block text-aegis-blue">all in one portal.</span>
+        <div className="max-w-lg">
+          <h2 className="text-[34px] font-semibold leading-[1.1] tracking-tight">
+            Run the desk.
           </h2>
-          <div className="mt-4 h-px w-12 bg-aegis-gold" />
-          <p className="mt-5 max-w-md text-sm leading-relaxed text-aegis-blue-100/85">
-            Manage clients, investor coverage, media relationships, and project
-            deliverables from a single workspace built for the Aegis team.
+          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-aegis-blue-100/80">
+            Clients, analysts, media, deliverables, kiosks. One place,
+            one source of truth — built for the way the Aegis team
+            actually works the day of an event.
           </p>
+          <div className="mt-8 h-px w-10 bg-aegis-gold" />
         </div>
 
-        {/* ── Bottom: service strip + copyright ── */}
-        <div className="relative z-10 px-12 pb-10">
-          <div className="mb-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium uppercase tracking-[0.18em] text-aegis-blue-100/60">
-            <span>Investor Relations</span>
-            <span className="h-1 w-1 rounded-full bg-aegis-blue/60" />
-            <span>Public Relations</span>
-            <span className="h-1 w-1 rounded-full bg-aegis-blue/60" />
-            <span>Corporate Events</span>
-            <span className="h-1 w-1 rounded-full bg-aegis-blue/60" />
-            <span>AGM/EGM</span>
-            <span className="h-1 w-1 rounded-full bg-aegis-blue/60" />
-            <span>IPO</span>
-          </div>
-          <div className="flex items-end justify-between border-t border-white/10 pt-5 text-[11px] text-aegis-blue-100/60">
-            <span>© {new Date().getFullYear()} Aegis Communication</span>
-            <span className="tabular-nums">v0.1</span>
-          </div>
+        <div className="flex items-end justify-between text-[11px] text-aegis-blue-100/55">
+          <span>© {new Date().getFullYear()} Aegis Communication</span>
+          <span className="tabular-nums">v0.1</span>
         </div>
       </div>
 
       {/* ─── Login form panel ──────────────────────────────────────── */}
-      <div className="relative flex w-full flex-col items-center justify-center bg-white px-6 py-12 lg:w-1/2">
-        {/* Quiet decorative arc, top-right */}
-        <svg
-          aria-hidden
-          className="pointer-events-none absolute top-0 right-0 h-64 w-64 text-aegis-blue/10"
-          viewBox="0 0 200 200"
-          fill="none"
-        >
-          <circle cx="200" cy="0" r="160" stroke="currentColor" strokeWidth="1" />
-          <circle cx="200" cy="0" r="110" stroke="currentColor" strokeWidth="1" />
-          <circle cx="200" cy="0" r="60" stroke="currentColor" strokeWidth="1" />
-        </svg>
-
-        <div className="relative z-10 w-full max-w-sm">
-          <div className="mb-12">
+      <div className="flex w-full flex-col items-center justify-center bg-white px-6 py-12 lg:w-1/2">
+        <div className="w-full max-w-sm">
+          <div className="mb-10">
             <Image
               src="/aegis_logo.png"
               alt="Aegis Communication"
               width={400}
               height={140}
               priority
-              className="h-14 w-auto"
+              className="h-12 w-auto"
             />
           </div>
 
-          <h1 className="text-3xl font-semibold tracking-tight text-aegis-navy">
-            Welcome back.
+          <h1 className="text-2xl font-semibold tracking-tight text-aegis-navy">
+            Sign in
           </h1>
-          <p className="mt-2 mb-10 text-sm text-aegis-gray-500">
-            Sign in with your username or Aegis email to continue.
+          <p className="mt-1.5 mb-8 text-sm text-aegis-gray-500">
+            Use your username or Aegis email.
           </p>
 
           <form onSubmit={onSubmit} className="space-y-5">
