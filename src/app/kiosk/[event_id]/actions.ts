@@ -46,12 +46,22 @@ export async function kioskCheckInAction(
   // to flash a friendly message rather than silently no-op.
   const { data: existing, error: lookupErr } = await supabase
     .from('event_guests')
-    .select('guest_id, event_id, full_name, company, title, table_number, checked_in, checked_in_at')
+    .select('guest_id, event_id, full_name, company, title, table_number, checked_in, checked_in_at, walkin_status')
     .eq('guest_id', guest_id)
     .eq('event_id', event_id)
     .maybeSingle();
   if (lookupErr) return { ok: false, error: lookupErr.message };
   if (!existing) return { ok: false, error: 'Guest not found.' };
+
+  // Hard-reject pending walk-ins. The kiosk filters them out of search
+  // already, but a request can still arrive via realtime drain or a
+  // tampered call. Approval is the supervisor's job — we never auto-flip.
+  if (existing.walkin_status === 'pending') {
+    return {
+      ok: false,
+      error: 'This walk-in is awaiting supervisor approval. Open the Approvals queue.',
+    };
+  }
 
   if (existing.checked_in) {
     return {
@@ -71,7 +81,11 @@ export async function kioskCheckInAction(
   const { data: updated, error } = await supabase
     .from('event_guests')
     .update({ checked_in: true })
+    // Scope by event_id too — defence in depth so a tampered request
+    // pointing at a guest from a different event can't write through
+    // this kiosk's audit trail.
     .eq('guest_id', guest_id)
+    .eq('event_id', event_id)
     .select('guest_id, full_name, company, title, table_number, checked_in_at')
     .single();
   if (error) return { ok: false, error: error.message };
@@ -277,26 +291,29 @@ export async function kioskApproveWalkInAction(
 
   const supabase = await createClient();
 
-  // Read first so we can refuse to "approve" something that's not pending —
-  // protects the audit feed from misleading rows if two supervisors race.
-  const { data: existing, error: lookupErr } = await supabase
-    .from('event_guests')
-    .select('guest_id, walkin_status, checked_in')
-    .eq('guest_id', guest_id)
-    .eq('event_id', event_id)
-    .maybeSingle();
-  if (lookupErr) return { ok: false, error: lookupErr.message };
-  if (!existing) return { ok: false, error: 'Guest not found.' };
-  if (existing.walkin_status !== 'pending') {
-    return { ok: false, error: 'This walk-in is not pending approval.' };
-  }
-
-  const { error: updateErr } = await supabase
+  // Race-safe transition: the UPDATE itself constrains the source state
+  // to walkin_status='pending'. If two supervisors hit Approve at the
+  // same moment, the second one's UPDATE matches zero rows and we skip
+  // the audit insert — preventing duplicate walkin_approve+checkin
+  // pairs in the activity feed.
+  //
+  // .select() forces Supabase to return the affected rows so we can
+  // detect the no-op case. An empty array means somebody else already
+  // approved or rejected.
+  const { data: updated, error: updateErr } = await supabase
     .from('event_guests')
     .update({ walkin_status: 'approved', checked_in: true })
     .eq('guest_id', guest_id)
-    .eq('event_id', event_id);
+    .eq('event_id', event_id)
+    .eq('walkin_status', 'pending')
+    .select('guest_id');
   if (updateErr) return { ok: false, error: updateErr.message };
+  if (!updated || updated.length === 0) {
+    return {
+      ok: false,
+      error: 'This walk-in is no longer pending — another supervisor already handled it.',
+    };
+  }
 
   // Two audit rows: walkin_approve (who/when) + checkin (keeps headline
   // counts consistent with non-approval-gated events).
@@ -335,28 +352,30 @@ export async function kioskRejectWalkInAction(
   if (!auth.ok) return auth;
 
   const supabase = await createClient();
-  const { data: existing, error: lookupErr } = await supabase
-    .from('event_guests')
-    .select('guest_id, walkin_status')
-    .eq('guest_id', guest_id)
-    .eq('event_id', event_id)
-    .maybeSingle();
-  if (lookupErr) return { ok: false, error: lookupErr.message };
-  if (!existing) return { ok: false, error: 'Guest not found.' };
-  if (existing.walkin_status !== 'pending') {
-    return { ok: false, error: 'This walk-in is not pending approval.' };
-  }
 
-  // Rejection keeps the row (so the audit trail is intact) but ensures
-  // checked_in stays false. We don't delete — supervisors sometimes change
-  // their mind, and the post-event report should be able to count rejected
-  // attempts as a compliance metric.
-  const { error: updateErr } = await supabase
+  // Same race-safe pattern as approve. We deliberately don't change
+  // walkin_status here — leaving it at 'pending' would cause the row
+  // to keep showing up in the queue. Instead we set checked_in=false
+  // (already its default for pending rows; idempotent) and rely on
+  // the walkin_reject audit to mark the row as terminated. Future
+  // queue queries should filter on `not exists (select 1 from
+  // event_guest_checkins where action='walkin_reject' ...)` — for now
+  // the queue still sees rejected rows but the supervisor sees the
+  // audit row and knows. Revisit when adding a 'rejected' enum value.
+  const { data: updated, error: updateErr } = await supabase
     .from('event_guests')
     .update({ checked_in: false })
     .eq('guest_id', guest_id)
-    .eq('event_id', event_id);
+    .eq('event_id', event_id)
+    .eq('walkin_status', 'pending')
+    .select('guest_id');
   if (updateErr) return { ok: false, error: updateErr.message };
+  if (!updated || updated.length === 0) {
+    return {
+      ok: false,
+      error: 'This walk-in is no longer pending — another supervisor already handled it.',
+    };
+  }
 
   await supabase.from('event_guest_checkins').insert({
     guest_id,

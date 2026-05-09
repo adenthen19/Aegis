@@ -550,14 +550,25 @@ export async function saveEventLayoutAction(
     if (error) return { ok: false, error: error.message };
   }
 
-  // Markers: replace-all. Delete first, then insert. Inserts run only
-  // when the payload is non-empty so an "empty layout" save doesn't
-  // round-trip a useless insert.
-  const { error: deleteErr } = await supabase
+  // Markers: replace-all, but ordered so a failed insert never leaves
+  // the event with NO markers. Sequence:
+  //   1. Snapshot the IDs of the currently-saved markers.
+  //   2. Insert the new payload. If this fails the host sees an error
+  //      and their existing markers are still on disk.
+  //   3. Delete the old IDs we snapshotted in step 1.
+  //
+  // If step 3 fails (very rare) the host sees the new save AND the old
+  // markers stacked on the canvas next time they load. They can re-save
+  // to clean it up — far better than the alternative (delete-then-insert
+  // failing on insert and wiping the layout entirely).
+  const { data: existingMarkers, error: existingMarkersErr } = await supabase
     .from('event_room_markers')
-    .delete()
+    .select('marker_id')
     .eq('event_id', event_id);
-  if (deleteErr) return { ok: false, error: deleteErr.message };
+  if (existingMarkersErr) return { ok: false, error: existingMarkersErr.message };
+  const oldMarkerIds = (existingMarkers ?? []).map(
+    (r) => r.marker_id as string,
+  );
 
   const markerInserts = payload.markers
     .filter((m) => MARKER_KINDS.includes(m.kind))
@@ -573,10 +584,23 @@ export async function saveEventLayoutAction(
     }));
 
   if (markerInserts.length > 0) {
-    const { error } = await supabase
+    const { error: insertErr } = await supabase
       .from('event_room_markers')
       .insert(markerInserts);
-    if (error) return { ok: false, error: error.message };
+    if (insertErr) return { ok: false, error: insertErr.message };
+  }
+
+  if (oldMarkerIds.length > 0) {
+    const { error: deleteErr } = await supabase
+      .from('event_room_markers')
+      .delete()
+      .in('marker_id', oldMarkerIds);
+    if (deleteErr) {
+      // Don't fail the whole save — the new markers are persisted. The
+      // host will see duplicates on the next load and can re-save to
+      // clean up. Log so production has a trail.
+      console.error('saveEventLayoutAction: stale marker cleanup failed', deleteErr);
+    }
   }
 
   revalidatePath(`/events/${event_id}`);

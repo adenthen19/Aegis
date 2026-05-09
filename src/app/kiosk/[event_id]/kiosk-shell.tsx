@@ -203,7 +203,15 @@ function searchGuests(
 ): SearchResult {
   if (!classified.ready) return { direct: [], colleagueGroups: [], fuzzy: [] };
 
-  const direct = guests.filter((g) => matches(g, classified)).slice(0, 50);
+  // Pending walk-ins are excluded from the search entirely. They live in
+  // the approval-queue panel (header pill) and must not surface as
+  // tappable rows here — tapping a pending row would route through
+  // kioskCheckInAction and bypass the supervisor gate. The server also
+  // refuses checkin on pending rows, but filtering here prevents the
+  // confusing UX of "tap → error toast".
+  const eligible = guests.filter((g) => g.walkin_status !== 'pending');
+
+  const direct = eligible.filter((g) => matches(g, classified)).slice(0, 50);
   const matchedIds = new Set(direct.map((g) => g.guest_id));
 
   // Companies represented in direct matches (case-insensitive, trimmed).
@@ -218,7 +226,7 @@ function searchGuests(
 
   const groups: { company: string; colleagues: EventGuest[] }[] = [];
   for (const [canon, display] of companyCanonToDisplay) {
-    const colleagues = guests
+    const colleagues = eligible
       .filter(
         (g) =>
           !matchedIds.has(g.guest_id) &&
@@ -235,7 +243,7 @@ function searchGuests(
     const qSet = bigramSet(classified.text);
     if (qSet.size > 0) {
       const scored: { g: EventGuest; s: number }[] = [];
-      for (const g of guests) {
+      for (const g of eligible) {
         const s = fuzzyScore(g, qSet);
         if (s >= FUZZY_THRESHOLD) scored.push({ g, s });
       }
@@ -479,8 +487,16 @@ export default function KioskShell({
   // Multiple kiosks watching the same event get row-level INSERT / UPDATE /
   // DELETE notifications and re-fetch the server component on any change.
   // Cheap because the server component is fast and Next dedupes refreshes;
-  // safer than maintaining a parallel client cache that can drift. Requires
-  // event_guests to be in the supabase_realtime publication (migration 0028).
+  // safer than maintaining a parallel client cache that can drift.
+  //
+  // Three tables are watched on a single channel:
+  //   • event_guests       — check-ins, walk-ins, table swaps. (publication 0028)
+  //   • event_tables       — capacity overrides, section changes, floor-plan
+  //                           positions. (publication 0033 / 0036)
+  //   • event_room_markers — stage/door/registration adjustments saved from
+  //                           the floor-plan editor. (publication 0036)
+  // Without the latter two, an admin saving a layout or capacity change
+  // wouldn't propagate to open kiosks until the next manual refresh.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -499,6 +515,26 @@ export default function KioskShell({
           // kiosks watching the same event.
           router.refresh();
         },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_tables',
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => router.refresh(),
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'event_room_markers',
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => router.refresh(),
       )
       .subscribe((status) => {
         setLiveConnected(status === 'SUBSCRIBED');
