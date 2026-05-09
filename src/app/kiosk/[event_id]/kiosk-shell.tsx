@@ -497,51 +497,88 @@ export default function KioskShell({
   //                           the floor-plan editor. (publication 0036)
   // Without the latter two, an admin saving a layout or capacity change
   // wouldn't propagate to open kiosks until the next manual refresh.
+  //
+  // CRITICAL: Realtime authenticates the websocket independently of the
+  // REST client. Without explicitly setting the access token on
+  // `realtime`, the channel connects as anon and RLS on every event_*
+  // table (`for select to authenticated`) silently drops the change
+  // notifications — the channel reaches SUBSCRIBED, the "Live" badge
+  // lights up, but no events arrive. We pull the session up front and
+  // also subscribe to auth-state changes so token refreshes keep
+  // realtime in sync.
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`kiosk-event-${eventId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'event_guests',
-          filter: `event_id=eq.${eventId}`,
-        },
-        () => {
-          // The server action's revalidatePath already refreshes the device
-          // that did the check-in. This refresh handles all the *other*
-          // kiosks watching the same event.
-          router.refresh();
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'event_tables',
-          filter: `event_id=eq.${eventId}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'event_room_markers',
-          filter: `event_id=eq.${eventId}`,
-        },
-        () => router.refresh(),
-      )
-      .subscribe((status) => {
-        setLiveConnected(status === 'SUBSCRIBED');
-      });
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+
+      channel = supabase
+        .channel(`kiosk-event-${eventId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_guests',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => {
+            // The server action's revalidatePath already refreshes the
+            // device that did the check-in. This refresh handles all the
+            // *other* kiosks watching the same event.
+            router.refresh();
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_tables',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_room_markers',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .subscribe((status) => {
+          if (!cancelled) setLiveConnected(status === 'SUBSCRIBED');
+        });
+    })();
+
+    // Token-refresh listener — when Supabase rotates the JWT (typically
+    // every hour), push the new token onto realtime so the websocket
+    // doesn't get torn down by a stale-auth disconnect during a
+    // multi-hour event.
+    const { data: authSub } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.access_token) {
+          supabase.realtime.setAuth(session.access_token);
+        }
+      },
+    );
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
     };
   }, [eventId, router]);
 
