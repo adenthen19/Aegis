@@ -157,6 +157,16 @@ export async function getConnectionForCurrentUser(): Promise<GoogleConnection | 
 // Returns a fresh access token, refreshing if necessary. Updates the stored
 // row so subsequent calls in this request (and concurrent kiosks) hit the
 // new value. Throws if the user isn't connected.
+//
+// Concurrency: two parallel actions for the same user could both see an
+// expired token and both fire a refresh. Google may rotate / invalidate
+// the prior access_token on refresh, in which case the "loser" of the
+// race writes a stale token last. Optimistic compare-and-swap on the
+// pre-refresh access_token: only the winner's UPDATE matches a row, the
+// loser silently no-ops AND falls back to re-reading the now-stored
+// fresh token. Either way, the caller of getValidAccessToken gets a
+// usable token — there's no scenario where we hand out the loser's
+// stale value.
 export async function getValidAccessToken(): Promise<{
   accessToken: string;
   email: string;
@@ -175,14 +185,34 @@ export async function getValidAccessToken(): Promise<{
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000);
 
   const supabase = await createClient();
-  await supabase
+  // CAS on the pre-refresh access_token. Returns the affected rows so
+  // we can detect the no-op case where another concurrent refresh
+  // already wrote a newer value.
+  const { data: updated } = await supabase
     .from('google_connections')
     .update({
       access_token: refreshed.access_token,
       expires_at: newExpiresAt.toISOString(),
       scope: refreshed.scope,
     })
-    .eq('user_id', conn.user_id);
+    .eq('user_id', conn.user_id)
+    .eq('access_token', conn.access_token)
+    .select('access_token');
 
-  return { accessToken: refreshed.access_token, email: conn.google_email };
+  if (updated && updated.length > 0) {
+    return { accessToken: refreshed.access_token, email: conn.google_email };
+  }
+
+  // We lost the race. Re-read the now-stored value — the winner already
+  // wrote a fresh token, and any subsequent caller (including this one)
+  // should use that rather than our locally-refreshed-but-not-stored
+  // copy, which Google may have invalidated by rotating it under us.
+  const fresh = await getConnectionForCurrentUser();
+  if (!fresh) {
+    // Connection was deleted mid-flight (sign-out, revoke). Surface the
+    // refreshed token we just got — the caller will discover the
+    // disconnection on the next request.
+    return { accessToken: refreshed.access_token, email: conn.google_email };
+  }
+  return { accessToken: fresh.access_token, email: fresh.google_email };
 }

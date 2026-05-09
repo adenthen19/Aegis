@@ -211,7 +211,11 @@ export default function SubstituteModal({
             spellCheck={false}
             className={inputClass}
           />
-          <ul className="mt-3 max-h-56 divide-y divide-aegis-gray-100 overflow-y-auto rounded-lg border border-aegis-gray-100 bg-white">
+          {/* On mobile we let the picker list grow up to the page —
+              avoids three nested scroll regions (page → modal body →
+              picker). Cap at 14rem on sm+ where the modal isn't full
+              screen and the picker would otherwise crowd the form. */}
+          <ul className="mt-3 divide-y divide-aegis-gray-100 rounded-lg border border-aegis-gray-100 bg-white sm:max-h-56 sm:overflow-y-auto">
             {candidates.length === 0 ? (
               <li className="px-3 py-6 text-center text-xs text-aegis-gray-500">
                 No matching invitees on the no-show list. If the original was already

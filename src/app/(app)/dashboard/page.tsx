@@ -47,8 +47,33 @@ const TIER_COLOR: Record<ServiceTier, string> = {
 
 const MS_PER_DAY = 86_400_000;
 
+// Date-only ISO strings (YYYY-MM-DD) parse as UTC midnight in JS, but
+// deadlines are conceptually a calendar day, not an instant. Comparing
+// `new Date('2026-05-09').getTime()` against `Date.now()` flips a day
+// across UTC boundaries — a Malaysian user (UTC+8) checking the
+// dashboard at 02:00 local sees a 2026-05-09 deadline as "Due today"
+// when by their clock it's already May 10. The fix: parse YYYY-MM-DD as
+// LOCAL midnight, and compare day-aligned dates on both sides.
 function daysFromNow(iso: string): number {
-  return Math.round((new Date(iso).getTime() - Date.now()) / MS_PER_DAY);
+  let target: Date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-').map(Number);
+    target = new Date(y, m - 1, d);
+  } else {
+    target = new Date(iso);
+  }
+  const now = new Date();
+  const targetMidnight = new Date(
+    target.getFullYear(),
+    target.getMonth(),
+    target.getDate(),
+  ).getTime();
+  const nowMidnight = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  return Math.round((targetMidnight - nowMidnight) / MS_PER_DAY);
 }
 
 function formatDeadlineDelta(iso: string): { label: string; overdue: boolean } {

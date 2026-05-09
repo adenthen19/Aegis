@@ -8,6 +8,7 @@ import type { AnalystType } from '@/lib/types';
 import {
   IMPORT_INITIAL,
   parseCsv,
+  readCsvFile,
   type ImportRowError,
   type ImportState,
 } from '@/lib/csv';
@@ -229,7 +230,7 @@ export async function importAnalystsAction(
     return { ...IMPORT_INITIAL, error: 'File is too large. Limit is 2 MB.' };
   }
 
-  const text = await file.text();
+  const text = await readCsvFile(file);
   const rows = parseCsv(text);
   if (rows.length === 0) {
     return { ...IMPORT_INITIAL, error: 'The file is empty.' };

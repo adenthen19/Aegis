@@ -25,7 +25,7 @@ export default function EventRowActions({
         onClick={() => setEditOpen(true)}
         title="Edit"
         aria-label="Edit"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy sm:h-8 sm:w-8"
       >
         <svg
           className="h-4 w-4"
@@ -46,7 +46,7 @@ export default function EventRowActions({
         onClick={() => setConfirmOpen(true)}
         title="Delete"
         aria-label="Delete"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8"
       >
         <svg
           className="h-4 w-4"

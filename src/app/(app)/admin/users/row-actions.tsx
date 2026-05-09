@@ -23,7 +23,7 @@ export default function UserRowActions({
         onClick={() => setEditOpen(true)}
         title="Edit"
         aria-label="Edit"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy"
+        className="inline-flex h-11 w-11 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-aegis-navy-50 hover:text-aegis-navy sm:h-8 sm:w-8"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -37,7 +37,7 @@ export default function UserRowActions({
           onClick={() => setConfirmOpen(true)}
           title="Delete"
           aria-label="Delete"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600 sm:h-8 sm:w-8"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 6h18" />

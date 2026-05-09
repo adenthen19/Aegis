@@ -173,9 +173,15 @@ export async function updatePressReleaseAction(
 
   const wasDistributed = before.status === 'distributed';
   const isNowDistributed = parsed.value.status === 'distributed';
+  // Preserve distributed_at once it's been set — flipping status back
+  // to draft / archived must NOT erase the historical "this was sent
+  // at 14:32" timestamp. Setting it to null on every non-distributed
+  // save was the previous bug. We only stamp a fresh value when the
+  // row transitions FROM not-distributed TO distributed and no prior
+  // timestamp exists.
   const distributed_at = isNowDistributed
     ? ((before.distributed_at as string | null) ?? new Date().toISOString())
-    : null;
+    : (before.distributed_at as string | null);
 
   // Strip client_id from the update payload — it's set at create time and
   // must not be mutated through this action. Same reason as above.
@@ -226,9 +232,11 @@ export async function setPressReleaseStatusAction(
 
   const wasDistributed = before.status === 'distributed';
   const isNowDistributed = next === 'distributed';
+  // Preserve distributed_at — see updatePressReleaseAction for the
+  // reasoning. Status flips do not erase the historical timestamp.
   const distributed_at = isNowDistributed
     ? ((before.distributed_at as string | null) ?? new Date().toISOString())
-    : null;
+    : (before.distributed_at as string | null);
 
   const { error } = await supabase
     .from('press_releases')

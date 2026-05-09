@@ -13,14 +13,33 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function resolveEmail(input: string): Promise<string | null> {
+  // resolveEmail returns:
+  //   { kind: 'email', value }       — caller has an address (literal or resolved)
+  //   { kind: 'not_found' }          — RPC succeeded, no row matched
+  //   { kind: 'error', message }     — RPC itself failed (network, RLS,
+  //                                     missing function). Surfacing this
+  //                                     separately stops a "no account"
+  //                                     toast from masking real ops issues
+  //                                     like a missing migration on staging.
+  type ResolveResult =
+    | { kind: 'email'; value: string }
+    | { kind: 'not_found' }
+    | { kind: 'error'; message: string };
+
+  async function resolveEmail(input: string): Promise<ResolveResult> {
     const trimmed = input.trim();
-    if (trimmed.includes('@')) return trimmed;
+    if (trimmed.includes('@')) return { kind: 'email', value: trimmed };
     const { data, error: rpcErr } = await supabase.rpc('get_email_by_username', {
       p_username: trimmed,
     });
-    if (rpcErr) return null;
-    return typeof data === 'string' ? data : null;
+    if (rpcErr) {
+      return {
+        kind: 'error',
+        message: `Couldn't look up that username — ${rpcErr.message}`,
+      };
+    }
+    if (typeof data !== 'string' || !data) return { kind: 'not_found' };
+    return { kind: 'email', value: data };
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -28,12 +47,18 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const email = await resolveEmail(identifier);
-    if (!email) {
+    const resolved = await resolveEmail(identifier);
+    if (resolved.kind === 'error') {
+      setLoading(false);
+      setError(resolved.message);
+      return;
+    }
+    if (resolved.kind === 'not_found') {
       setLoading(false);
       setError('No account found for that username.');
       return;
     }
+    const email = resolved.value;
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);

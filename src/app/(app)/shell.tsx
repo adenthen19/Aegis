@@ -76,8 +76,11 @@ export default function Shell({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-aegis-gray">
-      {/* ─── Mobile top bar ─────────────────────────────────────── */}
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-aegis-gray-100 bg-white/90 px-4 backdrop-blur-sm lg:hidden">
+      {/* ─── Mobile top bar ─────────────────────────────────────────
+          Visible below md (768px). At md+ the persistent sidebar
+          replaces it — iPad-portrait users get the same affordances
+          as desktop instead of a hamburger menu. */}
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-aegis-gray-100 bg-white/90 px-4 backdrop-blur-sm md:hidden">
         <button
           type="button"
           onClick={() => setMobileOpen(true)}
@@ -112,7 +115,7 @@ export default function Shell({
         aria-hidden
         onClick={() => setMobileOpen(false)}
         className={[
-          'fixed inset-0 z-40 bg-aegis-navy/40 backdrop-blur-sm transition-opacity duration-200 lg:hidden',
+          'fixed inset-0 z-40 bg-aegis-navy/40 backdrop-blur-sm transition-opacity duration-200 md:hidden',
           mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
       />
@@ -121,11 +124,13 @@ export default function Shell({
       <aside
         aria-label="Primary navigation"
         className={[
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-gradient-to-b from-aegis-navy to-aegis-navy-800 text-white shadow-xl transition-[width,transform] duration-200 ease-out lg:shadow-none',
-          // mobile slide-in
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-gradient-to-b from-aegis-navy to-aegis-navy-800 text-white shadow-xl transition-[width,transform] duration-200 ease-out md:shadow-none',
+          // below md: slide-in drawer triggered by hamburger
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          // desktop always visible; width depends on collapsed
-          collapsed ? 'lg:w-16 lg:translate-x-0' : 'lg:w-64 lg:translate-x-0',
+          // md+: always visible; width depends on collapsed (iPad
+          // portrait at 768px gets the persistent sidebar — usually
+          // collapsed by default to leave room for content)
+          collapsed ? 'md:w-16 md:translate-x-0' : 'md:w-64 md:translate-x-0',
         ].join(' ')}
       >
         {/* Atmospheric glow */}
@@ -174,12 +179,12 @@ export default function Shell({
               className="h-11 w-auto brightness-0 invert"
             />
           )}
-          {/* Mobile close button — only on small screens */}
+          {/* Mobile close button — only on small screens (below md) */}
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close menu"
-            className="-mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white lg:hidden"
+            className="-mr-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white md:hidden"
           >
             <svg
               className="h-4 w-4"
@@ -202,7 +207,7 @@ export default function Shell({
         </div>
 
         {/* ── Desktop collapse toggle ── */}
-        <div className="relative z-10 hidden border-t border-white/10 px-3 py-2 lg:block">
+        <div className="relative z-10 hidden border-t border-white/10 px-3 py-2 md:block">
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
@@ -305,7 +310,7 @@ export default function Shell({
       <main
         className={[
           'transition-[padding] duration-200 ease-out',
-          collapsed ? 'lg:pl-16' : 'lg:pl-64',
+          collapsed ? 'md:pl-16' : 'md:pl-64',
         ].join(' ')}
       >
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">

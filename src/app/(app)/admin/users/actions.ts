@@ -178,6 +178,32 @@ export async function updateUserAction(
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
+  // Order matters: update profiles BEFORE auth.users.
+  //
+  // Previously this ran auth update first; if the subsequent profile
+  // UPDATE failed (RLS, unique-violation race on username, network),
+  // the email change in auth.users was already committed and the two
+  // tables drifted with no compensation path.
+  //
+  // New order: profile update first. If it fails, auth.users is
+  // untouched. If profile succeeds and the auth update then fails,
+  // the worst case is non-email profile fields (role / display_name /
+  // etc.) update without the new email — manageable, and the admin
+  // sees the auth error to retry.
+  const { error: profileErr } = await admin
+    .from('profiles')
+    .update({
+      username: parsed.value.username,
+      gmail_address: parsed.value.gmail_address,
+      contact_number: parsed.value.contact_number,
+      role: parsed.value.role,
+      avatar_url: parsed.value.avatar_url,
+      display_name: parsed.value.display_name,
+      birthday: parsed.value.birthday,
+    })
+    .eq('user_id', user_id);
+  if (profileErr) return { ok: false, error: profileErr.message };
+
   const authUpdate: {
     email?: string;
     password?: string;
@@ -193,20 +219,6 @@ export async function updateUserAction(
 
   const { error: authErr } = await admin.auth.admin.updateUserById(user_id, authUpdate);
   if (authErr) return { ok: false, error: authErr.message };
-
-  const { error: profileErr } = await admin
-    .from('profiles')
-    .update({
-      username: parsed.value.username,
-      gmail_address: parsed.value.gmail_address,
-      contact_number: parsed.value.contact_number,
-      role: parsed.value.role,
-      avatar_url: parsed.value.avatar_url,
-      display_name: parsed.value.display_name,
-      birthday: parsed.value.birthday,
-    })
-    .eq('user_id', user_id);
-  if (profileErr) return { ok: false, error: profileErr.message };
 
   revalidatePath('/admin/users');
   return { ok: true, error: null };

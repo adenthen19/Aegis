@@ -1596,7 +1596,20 @@ function GuestCard({
         ].join(' ')}
       >
         <div className="min-w-0 flex-1">
-          <p className={`${nameClasses} text-aegis-navy`}>
+          {/* Truncate the name line so long Malay/Chinese names with
+              honorifics ("Datuk Seri Dr. Wan Mohd …") don't wrap to 3
+              lines and break the row's `min-h-[88px]` rhythm. The full
+              text remains accessible via the `title` attribute. */}
+          <p
+            className={`${nameClasses} truncate text-aegis-navy`}
+            title={`${guest.honorific ? guest.honorific + ' ' : ''}${guest.full_name}${
+              guest.preferred_name &&
+              guest.preferred_name.trim().toLowerCase() !==
+                guest.full_name.trim().toLowerCase()
+                ? ` (${guest.preferred_name})`
+                : ''
+            }`}
+          >
             {/* Honorific (Datuk / Tan Sri / Dr) sits before the name in a
                 muted shade so the usher's eye still lands on the name —
                 but the courtesy is captured for the door greeting. */}
@@ -1608,11 +1621,12 @@ function GuestCard({
             {highlight(displayName(guest.full_name), classified)}
             {/* Preferred name is shown as a quiet alias when it differs
                 from full_name — common when the legal name is Bahasa or
-                Chinese but the analyst goes by an English moniker. */}
+                Chinese but the analyst goes by an English moniker.
+                Hidden on phones where the row is already tight. */}
             {guest.preferred_name &&
               guest.preferred_name.trim().toLowerCase() !==
                 guest.full_name.trim().toLowerCase() && (
-                <span className="ml-2 text-[12px] font-normal text-aegis-gray-500">
+                <span className="ml-2 hidden text-[12px] font-normal text-aegis-gray-500 sm:inline">
                   &ldquo;{displayName(guest.preferred_name)}&rdquo;
                 </span>
               )}

@@ -389,7 +389,7 @@ function DeleteOverrideButton({
           await deleteEventTableAction(eventId, tableNumber);
         });
       }}
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+      className="inline-flex h-11 w-11 items-center justify-center rounded-md text-aegis-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:h-7 sm:w-7"
       aria-label={`Remove override for Table ${tableNumber}`}
       title="Remove override"
     >
