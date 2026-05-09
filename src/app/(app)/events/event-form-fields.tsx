@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  CheckboxField,
   DateTimeField,
   NumberField,
   SelectField,
@@ -140,6 +141,13 @@ export default function EventFormFields({
             : undefined
         }
         hint="Leave blank to disable table-capacity warnings. Per-table overrides (head table, VIP, etc.) live in the event's seating section."
+      />
+
+      <CheckboxField
+        name="requires_walkin_approval"
+        label="Walk-ins need supervisor approval"
+        hint="Turn on for IPO prospectus launches and other quiet-period events. Walk-ins (and same-firm substitutes) land as pending until a director or super admin approves them in the kiosk's approval queue."
+        defaultChecked={initial?.requires_walkin_approval ?? false}
       />
 
       <TextAreaField

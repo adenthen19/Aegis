@@ -56,3 +56,17 @@ export async function assertSuperAdmin(): Promise<{ ok: true; user: CurrentUser 
   }
   return { ok: true, user };
 }
+
+// Action guard — director or super-admin. Used at the kiosk to gate the
+// walk-in approval flow on prospectus-launch / quiet-period events.
+export async function assertDirectorOrAdmin(): Promise<{ ok: true; user: CurrentUser } | { ok: false; error: string }> {
+  const user = await getCurrentUserWithRole();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (user.role !== 'director' && user.role !== 'super_admin') {
+    return {
+      ok: false,
+      error: 'Supervisor approval required — a director or super admin must sign in to approve.',
+    };
+  }
+  return { ok: true, user };
+}

@@ -4,12 +4,17 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { EventGuest, EventTable } from '@/lib/types';
+import type { EventGuest, EventTable, UserRole } from '@/lib/types';
 import {
   displayCompany,
   displayName,
   displayPhone,
 } from '@/lib/display-format';
+import {
+  readQueue,
+  writeQueue,
+  type QueueItem,
+} from '@/lib/kiosk-queue';
 import {
   kioskCheckInAction,
   kioskUndoCheckInAction,
@@ -17,6 +22,8 @@ import {
 } from './actions';
 import WalkInModal from './walk-in-modal';
 import CompanionModal from './companion-modal';
+import SubstituteModal from './substitute-modal';
+import ApprovalQueue from './approval-queue';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Search classifier — same UX as the in-app kiosk tab:
@@ -62,8 +69,13 @@ function matches(guest: EventGuest, q: Classified): boolean {
     return guestDigits.includes(q.digits);
   }
   const term = q.text.toLowerCase();
+  // Search includes preferred_name and honorific so an usher who hears
+  // "Datuk Lim" or types a chosen English name still finds the right
+  // record even when full_name carries the legal Malay name.
   return (
     guest.full_name.toLowerCase().includes(term) ||
+    (guest.preferred_name?.toLowerCase().includes(term) ?? false) ||
+    (guest.honorific?.toLowerCase().includes(term) ?? false) ||
     (guest.title?.toLowerCase().includes(term) ?? false) ||
     (guest.company?.toLowerCase().includes(term) ?? false) ||
     (guest.email?.toLowerCase().includes(term) ?? false)
@@ -182,53 +194,19 @@ type ToastState =
 // ─────────────────────────────────────────────────────────────────────────
 //
 // When the kiosk is offline (or a server call hits a network error), taps
-// go into a localStorage queue per event. The UI flips optimistically so
-// ushers can keep working through a wifi blip; once we're back online the
-// queue is drained automatically and any items that fail will just stay
-// in the queue for the next attempt.
+// go into an IndexedDB queue per event (see lib/kiosk-queue). The UI flips
+// optimistically so ushers can keep working through a wifi blip; once
+// we're back online the queue is drained automatically and any items that
+// fail will just stay in the queue for the next attempt.
 //
 // Dedup rule: only the LATEST action per guest is kept. So if an usher
 // checks Sarah in offline, then taps Undo, the queue ends with one
 // 'undo'. Keeps the drain simple and avoids racing operations.
-
-type QueueItem = {
-  guest_id: string;
-  action: 'checkin' | 'undo';
-  ts: number; // ms — informational
-};
-
-function queueKey(eventId: string): string {
-  return `aegis-kiosk-queue:${eventId}`;
-}
-
-function readQueueFromStorage(eventId: string): QueueItem[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(queueKey(eventId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (x): x is QueueItem =>
-        typeof x === 'object' &&
-        x !== null &&
-        typeof (x as QueueItem).guest_id === 'string' &&
-        ((x as QueueItem).action === 'checkin' ||
-          (x as QueueItem).action === 'undo'),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function writeQueueToStorage(eventId: string, items: QueueItem[]): void {
-  if (typeof window === 'undefined') return;
-  if (items.length === 0) {
-    window.localStorage.removeItem(queueKey(eventId));
-    return;
-  }
-  window.localStorage.setItem(queueKey(eventId), JSON.stringify(items));
-}
+//
+// IndexedDB swap-out (from localStorage) was needed because the kiosk
+// runs on hotel-ballroom Wi-Fi for hours and iPad Safari aggressively
+// purges localStorage when storage gets tight. The kiosk-queue module
+// migrates any leftover localStorage entries on first read.
 
 // Returns true if the error looks like a network / connectivity failure
 // rather than an application-level error (e.g. "Guest not found"). The
@@ -252,7 +230,9 @@ export default function KioskShell({
   guests,
   tables,
   defaultCapacity,
+  requiresWalkInApproval,
   googleSheetId,
+  userRole,
 }: {
   eventId: string;
   eventName: string;
@@ -263,7 +243,12 @@ export default function KioskShell({
   guests: EventGuest[];
   tables: EventTable[];
   defaultCapacity: number | null;
+  /** When true, walk-ins land as walkin_status='pending' and need a
+   *  director / super_admin to approve from the queue panel. */
+  requiresWalkInApproval: boolean;
   googleSheetId: string | null;
+  /** Logged-in operator's role; gates the Approve / Reject buttons. */
+  userRole: UserRole;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -271,6 +256,8 @@ export default function KioskShell({
   const [toast, setToast] = useState<ToastState>({ kind: 'idle' });
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
+  const [substituteOpen, setSubstituteOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
   // The host of an in-progress companion add. Null = modal closed.
   // Stored as the full guest so the modal can read the host's table /
   // company directly without a second lookup.
@@ -293,9 +280,11 @@ export default function KioskShell({
   const lastCheckedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Offline queue + connectivity ─────────────────────────────────────
-  const [queue, setQueueState] = useState<QueueItem[]>(() =>
-    readQueueFromStorage(eventId),
-  );
+  // IndexedDB reads are async so we start empty and hydrate in an effect.
+  // The kiosk runs client-only after auth — there's no SSR to worry about
+  // missing the queue data, and the 1-frame "0 pending" flash on mount is
+  // acceptable for what's typically an empty queue anyway.
+  const [queue, setQueueState] = useState<QueueItem[]>([]);
   // Lazy initializer so we read navigator.onLine on the client's very first
   // render rather than starting at `true` and bouncing on mount. Server
   // render falls back to `true` since navigator isn't available there.
@@ -308,10 +297,12 @@ export default function KioskShell({
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Persist queue + keep optimistic sets in sync whenever we mutate it.
-  // Wrapping setQueueState makes sure localStorage and the in-memory copy
-  // never drift apart.
+  // Wrapping setQueueState makes sure IDB and the in-memory copy never
+  // drift apart. The IDB write is fire-and-forget — in-memory state is
+  // the source of truth for the UI; if a write fails the next mutation
+  // will retry.
   function commitQueue(next: QueueItem[]) {
-    writeQueueToStorage(eventId, next);
+    void writeQueue(eventId, next);
     setQueueState(next);
   }
 
@@ -320,7 +311,7 @@ export default function KioskShell({
     setQueueState((prev) => {
       const filtered = prev.filter((p) => p.guest_id !== item.guest_id);
       const next = [...filtered, item];
-      writeQueueToStorage(eventId, next);
+      void writeQueue(eventId, next);
       return next;
     });
     if (item.action === 'checkin') {
@@ -339,6 +330,31 @@ export default function KioskShell({
       });
     }
   }
+
+  // Hydrate the queue from IndexedDB on mount. Includes one-shot migration
+  // of any leftover localStorage entries from earlier builds. We re-build
+  // the optimistic flag sets from the recovered queue so the UI shows
+  // queued check-ins as already ticked.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const items = await readQueue(eventId);
+      if (cancelled) return;
+      setQueueState(items);
+      if (items.length === 0) return;
+      const inSet = new Set<string>();
+      const outSet = new Set<string>();
+      for (const item of items) {
+        if (item.action === 'checkin') inSet.add(item.guest_id);
+        else outSet.add(item.guest_id);
+      }
+      setOptimisticIn(inSet);
+      setOptimisticOut(outSet);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
 
   // Auto-focus the search box on mount so the kiosk is immediately usable.
   // The set of optimistic ids is allowed to keep stale entries — `isCheckedIn`
@@ -487,6 +503,14 @@ export default function KioskShell({
     return c;
   }, [guests, optimisticIn, optimisticOut]);
   const pct = total === 0 ? 0 : Math.round((checkedIn / total) * 100);
+
+  // Pending walk-ins waiting on supervisor approval. Excluded from the
+  // direct search results so the kiosk doesn't surface them as
+  // checkin-able rows (they're already in the system, just gated).
+  const pendingWalkIns = useMemo(
+    () => guests.filter((g) => g.walkin_status === 'pending'),
+    [guests],
+  );
 
   const classified = useMemo(() => classifyQuery(query), [query]);
   const { direct, colleagueGroups } = useMemo(
@@ -663,7 +687,7 @@ export default function KioskShell({
     (async () => {
       // Snapshot at start; if more items get added mid-drain we just pick
       // them up on the next effect run.
-      let working = readQueueFromStorage(eventId);
+      let working = await readQueue(eventId);
       let netError = false;
 
       for (const item of working) {
@@ -676,17 +700,17 @@ export default function KioskShell({
             // Success — remove this one item from the live queue. Re-read
             // from storage in case another tap added something while we
             // were awaiting the server.
-            working = readQueueFromStorage(eventId).filter(
+            working = (await readQueue(eventId)).filter(
               (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
             );
-            writeQueueToStorage(eventId, working);
+            await writeQueue(eventId, working);
           } else {
             // Application failure — drop the item so the queue doesn't
             // get stuck on a single bad row.
-            working = readQueueFromStorage(eventId).filter(
+            working = (await readQueue(eventId)).filter(
               (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
             );
-            writeQueueToStorage(eventId, working);
+            await writeQueue(eventId, working);
           }
         } catch (err) {
           if (isNetworkError(err)) {
@@ -695,15 +719,15 @@ export default function KioskShell({
           }
           // Unknown error — drop and move on, log for debug.
           console.error('Kiosk drain: unknown error', err);
-          working = readQueueFromStorage(eventId).filter(
+          working = (await readQueue(eventId)).filter(
             (q) => q.guest_id !== item.guest_id || q.ts !== item.ts,
           );
-          writeQueueToStorage(eventId, working);
+          await writeQueue(eventId, working);
         }
       }
 
       // Push the final queue into React state so the badge updates.
-      const final = readQueueFromStorage(eventId);
+      const final = await readQueue(eventId);
       setQueueState(final);
       // Clear optimistic sets for guests whose canonical state matches —
       // the server-write will land via realtime / revalidatePath shortly.
@@ -734,7 +758,7 @@ export default function KioskShell({
 
   // Helps the linter know commitQueue is "used" (kept for future API
   // consistency with the bulk reset / clear flows). Direct uses go via
-  // setQueueState + writeQueueToStorage so concurrent updates are atomic.
+  // setQueueState + writeQueue so concurrent updates are atomic.
   void commitQueue;
 
   return (
@@ -770,6 +794,20 @@ export default function KioskShell({
                     status={sheetSyncStatus}
                     lastAt={lastSheetSyncAt}
                   />
+                )}
+                {pendingWalkIns.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setApprovalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em] text-amber-800 ring-1 ring-inset ring-amber-300 hover:bg-amber-200"
+                    title="Walk-ins awaiting supervisor approval"
+                  >
+                    <span
+                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500"
+                      aria-hidden
+                    />
+                    Approvals · {pendingWalkIns.length}
+                  </button>
                 )}
               </p>
               <h1 className="truncate text-lg font-semibold text-aegis-navy sm:text-2xl">
@@ -913,7 +951,31 @@ export default function KioskShell({
                 <p className="mt-1 text-sm text-aegis-gray-500">
                   Try a colleague&apos;s name, the company, or the contact number.
                 </p>
-                <div className="mt-5">
+                <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setSubstituteOpen(true)}
+                    disabled={!online}
+                    className="inline-flex items-center gap-2 rounded-lg border border-aegis-navy bg-white px-5 py-3 text-sm font-semibold text-aegis-navy shadow-sm hover:bg-aegis-navy-50/40 disabled:cursor-not-allowed disabled:opacity-50"
+                    title="Same firm, different person — links back to the original RSVP"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M16 3l4 4-4 4" />
+                      <path d="M20 7H10a4 4 0 0 0-4 4v0" />
+                      <path d="M8 21l-4-4 4-4" />
+                      <path d="M4 17h10a4 4 0 0 0 4-4v0" />
+                    </svg>
+                    Register substitute
+                  </button>
                   <button
                     type="button"
                     onClick={() => setWalkInOpen(true)}
@@ -933,13 +995,20 @@ export default function KioskShell({
                     </svg>
                     Add walk-in
                   </button>
-                  {!online && (
-                    <p className="mt-2 text-[11px] text-aegis-gray-500">
-                      Walk-ins require connectivity — they sync directly, not
-                      through the offline queue.
-                    </p>
-                  )}
                 </div>
+                {!online && (
+                  <p className="mt-3 text-[11px] text-aegis-gray-500">
+                    Walk-ins and substitutes require connectivity — they sync
+                    directly, not through the offline queue.
+                  </p>
+                )}
+                {requiresWalkInApproval && online && (
+                  <p className="mt-3 text-[11px] text-amber-700">
+                    This event gates walk-ins on supervisor approval —
+                    submissions land as <strong>pending</strong> until a
+                    director or super admin approves.
+                  </p>
+                )}
               </div>
             ) : (
               <section>
@@ -1059,26 +1128,100 @@ export default function KioskShell({
         guests={guests}
         tables={tables}
         defaultCapacity={defaultCapacity}
+        requiresApproval={requiresWalkInApproval}
         prefillName={classified.text || ''}
         onSuccess={(res) => {
-          // Mirror checkIn's success flow so the walk-in feels like a normal
-          // tap from the usher's perspective: same toast, same "wrong tap?"
-          // undo affordance, same input reset.
-          rememberLastChecked(res.guest.guest_id);
-          flashToast({
-            kind: 'success',
-            guest_id: res.guest.guest_id,
-            name: displayName(res.guest.full_name),
-            company: res.guest.company ? displayCompany(res.guest.company) : null,
-            table: res.guest.table_number,
-            already: false,
-            queued: false,
-          });
+          // Two outcomes here:
+          //   • pending_approval=false → identical to a normal kiosk tap.
+          //   • pending_approval=true  → the row exists but is gated. We
+          //     skip the rememberLastChecked() affordance (no "wrong tap?
+          //     undo" makes sense for an unchecked row) and instead bounce
+          //     the usher into the approval queue so a supervisor can see
+          //     it immediately.
+          if (res.pending_approval) {
+            flashToast({
+              kind: 'success',
+              guest_id: res.guest.guest_id,
+              name: displayName(res.guest.full_name),
+              company: res.guest.company
+                ? displayCompany(res.guest.company)
+                : null,
+              table: res.guest.table_number,
+              already: false,
+              queued: true, // amber tint reuses the "queued" visual
+            });
+            setApprovalOpen(true);
+          } else {
+            rememberLastChecked(res.guest.guest_id);
+            flashToast({
+              kind: 'success',
+              guest_id: res.guest.guest_id,
+              name: displayName(res.guest.full_name),
+              company: res.guest.company
+                ? displayCompany(res.guest.company)
+                : null,
+              table: res.guest.table_number,
+              already: false,
+              queued: false,
+            });
+          }
           setQuery('');
           setWalkInOpen(false);
           inputRef.current?.focus();
           router.refresh();
         }}
+      />
+
+      {/* ── Substitute-on-arrival modal ───────────────────────── */}
+      <SubstituteModal
+        open={substituteOpen}
+        onClose={() => setSubstituteOpen(false)}
+        eventId={eventId}
+        guests={guests}
+        requiresApproval={requiresWalkInApproval}
+        prefillName={classified.text || ''}
+        onSuccess={(res) => {
+          if (res.pending_approval) {
+            flashToast({
+              kind: 'success',
+              guest_id: res.guest.guest_id,
+              name: displayName(res.guest.full_name),
+              company: res.guest.company
+                ? displayCompany(res.guest.company)
+                : null,
+              table: res.guest.table_number,
+              already: false,
+              queued: true,
+            });
+            setApprovalOpen(true);
+          } else {
+            rememberLastChecked(res.guest.guest_id);
+            flashToast({
+              kind: 'success',
+              guest_id: res.guest.guest_id,
+              name: displayName(res.guest.full_name),
+              company: res.guest.company
+                ? displayCompany(res.guest.company)
+                : null,
+              table: res.guest.table_number,
+              already: false,
+              queued: false,
+            });
+          }
+          setQuery('');
+          setSubstituteOpen(false);
+          inputRef.current?.focus();
+          router.refresh();
+        }}
+      />
+
+      {/* ── Approval queue (walk-ins awaiting supervisor) ─────── */}
+      <ApprovalQueue
+        open={approvalOpen}
+        onClose={() => setApprovalOpen(false)}
+        eventId={eventId}
+        pending={pendingWalkIns}
+        userRole={userRole}
       />
 
       {/* ── +1 companion modal ────────────────────────────────── */}
@@ -1301,7 +1444,25 @@ function GuestCard({
       >
         <div className="min-w-0 flex-1">
           <p className={`${nameClasses} text-aegis-navy`}>
+            {/* Honorific (Datuk / Tan Sri / Dr) sits before the name in a
+                muted shade so the usher's eye still lands on the name —
+                but the courtesy is captured for the door greeting. */}
+            {guest.honorific && (
+              <span className="mr-1 text-aegis-orange-600">
+                {guest.honorific}
+              </span>
+            )}
             {highlight(displayName(guest.full_name), classified)}
+            {/* Preferred name is shown as a quiet alias when it differs
+                from full_name — common when the legal name is Bahasa or
+                Chinese but the analyst goes by an English moniker. */}
+            {guest.preferred_name &&
+              guest.preferred_name.trim().toLowerCase() !==
+                guest.full_name.trim().toLowerCase() && (
+                <span className="ml-2 text-[12px] font-normal text-aegis-gray-500">
+                  &ldquo;{displayName(guest.preferred_name)}&rdquo;
+                </span>
+              )}
           </p>
           <p className={`${subClasses} mt-0.5 text-aegis-gray-500`}>
             {[
@@ -1319,6 +1480,30 @@ function GuestCard({
               </>
             )}
           </p>
+          {/* Accreditation chip — only when we have a CMSRL or press card.
+              Helps the usher verify the named-person presented matches
+              the badge / business card. */}
+          {(guest.cmsrl_number || guest.press_card_no) && (
+            <p className="mt-0.5 text-[11px] text-aegis-gray-500">
+              {guest.cmsrl_number && (
+                <>
+                  CMSRL{' '}
+                  <span className="font-mono text-aegis-navy">
+                    {guest.cmsrl_number}
+                  </span>
+                </>
+              )}
+              {guest.cmsrl_number && guest.press_card_no && ' · '}
+              {guest.press_card_no && (
+                <>
+                  Press{' '}
+                  <span className="font-mono text-aegis-navy">
+                    {guest.press_card_no}
+                  </span>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {guest.table_number && (

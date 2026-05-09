@@ -24,6 +24,9 @@ type EventPayload = {
   description: string | null;
   status: EventStatus;
   default_table_capacity: number | null;
+  /** When true, walk-ins land as walkin_status='pending' until a director
+   *  or super_admin approves them. Defaults to false on create. */
+  requires_walkin_approval: boolean;
 };
 
 function readEventPayload(
@@ -74,6 +77,10 @@ function readEventPayload(
     default_table_capacity = parsed;
   }
 
+  // CheckboxField submits 'true' when checked; absent when unchecked.
+  const requires_walkin_approval =
+    formData.get('requires_walkin_approval')?.toString() === 'true';
+
   return {
     ok: true,
     value: {
@@ -85,6 +92,7 @@ function readEventPayload(
       description: formData.get('description')?.toString().trim() || null,
       status,
       default_table_capacity,
+      requires_walkin_approval,
     },
   };
 }

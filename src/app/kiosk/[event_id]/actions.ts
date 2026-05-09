@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { assertDirectorOrAdmin } from '@/lib/auth';
 
 export type KioskCheckInResult =
   | {
@@ -109,6 +110,13 @@ export type KioskWalkInPayload = {
   email: string | null;
   table_number: string | null;
   notes: string | null;
+  /** Honorific (Datuk, Tan Sri, Dr, etc.) — printed on badges and used at door greetings. */
+  honorific?: string | null;
+  /** Preferred display name; falls back to full_name when null. */
+  preferred_name?: string | null;
+  /** CMSRL number for analysts; press card number for media. Either may be set. */
+  cmsrl_number?: string | null;
+  press_card_no?: string | null;
   /** True iff the usher acknowledged seating past capacity. */
   capacity_override: boolean;
 };
@@ -116,6 +124,9 @@ export type KioskWalkInPayload = {
 export type KioskWalkInResult =
   | {
       ok: true;
+      /** Whether the walk-in is awaiting supervisor approval. When false the
+       *  guest was checked in immediately (event has approval disabled). */
+      pending_approval: boolean;
       guest: {
         guest_id: string;
         full_name: string;
@@ -142,6 +153,20 @@ export async function kioskAddWalkInAction(
     return { ok: false, error: 'Email looks invalid.' };
   }
 
+  // Read the event's approval flag — drives whether this walk-in lands as
+  // checked-in immediately or as walkin_status='pending' awaiting a
+  // supervisor (director / super_admin) tap. We deliberately read this on
+  // the server rather than trusting a client-passed flag — quiet-period
+  // events shouldn't be bypassable from a tampered request.
+  const { data: ev, error: evErr } = await supabase
+    .from('events')
+    .select('event_id, requires_walkin_approval')
+    .eq('event_id', event_id)
+    .maybeSingle();
+  if (evErr) return { ok: false, error: evErr.message };
+  if (!ev) return { ok: false, error: 'Event not found.' };
+  const requiresApproval = !!ev.requires_walkin_approval;
+
   // Notes carry "Walk-in" as a marker so post-event reports can filter and
   // route follow-up to PR/sales (these are often the most interesting
   // attendees). Free-text usher notes are appended after the marker.
@@ -159,27 +184,41 @@ export async function kioskAddWalkInAction(
       email: payload.email?.trim() || null,
       table_number: payload.table_number?.trim() || null,
       notes: composedNotes,
-      checked_in: true,
+      honorific: payload.honorific?.trim() || null,
+      preferred_name: payload.preferred_name?.trim() || null,
+      cmsrl_number: payload.cmsrl_number?.trim() || null,
+      press_card_no: payload.press_card_no?.trim() || null,
+      // Pending approval: don't check them in yet.
+      checked_in: !requiresApproval,
+      walkin_status: requiresApproval ? 'pending' : 'approved',
     })
     .select('guest_id, full_name, company, title, table_number, checked_in_at')
     .single();
   if (insertErr) return { ok: false, error: insertErr.message };
 
-  // Three audit rows so the activity feed reads naturally:
-  //   1. walkin_add — "Aden was added as a walk-in"
-  //   2. checkin    — keeps the headline "checked in" count consistent
-  //   3. capacity_override (optional) — flags the seat-past-capacity
-  // We don't fail the walk-in if audit inserts error — the guest is in.
+  // Audit feed:
+  //   • requires_approval=false → walkin_add + checkin (legacy fast path)
+  //   • requires_approval=true  → walkin_request only (no checkin row yet);
+  //                               approval action will append walkin_approve
+  //                               + checkin atoms when a supervisor taps
+  //                               Approve.
   const baseAudit = {
     guest_id: inserted.guest_id as string,
     event_id,
     source: 'kiosk' as const,
     performed_by_user_id: user.id,
   };
-  const auditRows: Array<typeof baseAudit & { action: string; notes: string | null }> = [
-    { ...baseAudit, action: 'walkin_add', notes: null },
-    { ...baseAudit, action: 'checkin', notes: 'Walk-in initial check-in' },
-  ];
+  const auditRows: Array<typeof baseAudit & { action: string; notes: string | null }> = [];
+  if (requiresApproval) {
+    auditRows.push({
+      ...baseAudit,
+      action: 'walkin_request',
+      notes: 'Awaiting supervisor approval',
+    });
+  } else {
+    auditRows.push({ ...baseAudit, action: 'walkin_add', notes: null });
+    auditRows.push({ ...baseAudit, action: 'checkin', notes: 'Walk-in initial check-in' });
+  }
   if (payload.capacity_override && payload.table_number) {
     auditRows.push({
       ...baseAudit,
@@ -194,6 +233,302 @@ export async function kioskAddWalkInAction(
 
   return {
     ok: true,
+    pending_approval: requiresApproval,
+    guest: {
+      guest_id: inserted.guest_id as string,
+      full_name: inserted.full_name as string,
+      company: (inserted.company as string | null) ?? null,
+      title: (inserted.title as string | null) ?? null,
+      table_number: (inserted.table_number as string | null) ?? null,
+      checked_in_at: (inserted.checked_in_at as string | null) ?? null,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Walk-in approval / rejection. Only directors and super_admins can call
+// these — that's the supervisor-PIN equivalent for the IPO/prospectus
+// quiet-period gate. The action that flips checked_in is intentionally
+// SEPARATE from the original walk-in-add path so the audit feed clearly
+// shows the request → approve sequence with two named users.
+// ─────────────────────────────────────────────────────────────────────
+
+export async function kioskApproveWalkInAction(
+  event_id: string,
+  guest_id: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!event_id || !guest_id) {
+    return { ok: false, error: 'Missing event or guest id.' };
+  }
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
+
+  const supabase = await createClient();
+
+  // Read first so we can refuse to "approve" something that's not pending —
+  // protects the audit feed from misleading rows if two supervisors race.
+  const { data: existing, error: lookupErr } = await supabase
+    .from('event_guests')
+    .select('guest_id, walkin_status, checked_in')
+    .eq('guest_id', guest_id)
+    .eq('event_id', event_id)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, error: lookupErr.message };
+  if (!existing) return { ok: false, error: 'Guest not found.' };
+  if (existing.walkin_status !== 'pending') {
+    return { ok: false, error: 'This walk-in is not pending approval.' };
+  }
+
+  const { error: updateErr } = await supabase
+    .from('event_guests')
+    .update({ walkin_status: 'approved', checked_in: true })
+    .eq('guest_id', guest_id)
+    .eq('event_id', event_id);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  // Two audit rows: walkin_approve (who/when) + checkin (keeps headline
+  // counts consistent with non-approval-gated events).
+  await supabase.from('event_guest_checkins').insert([
+    {
+      guest_id,
+      event_id,
+      action: 'walkin_approve',
+      source: 'kiosk',
+      performed_by_user_id: auth.user.id,
+    },
+    {
+      guest_id,
+      event_id,
+      action: 'checkin',
+      source: 'kiosk',
+      performed_by_user_id: auth.user.id,
+      notes: 'Walk-in approved · check-in',
+    },
+  ]);
+
+  revalidatePath(`/kiosk/${event_id}`);
+  revalidatePath(`/events/${event_id}`);
+  return { ok: true };
+}
+
+export async function kioskRejectWalkInAction(
+  event_id: string,
+  guest_id: string,
+  notes?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!event_id || !guest_id) {
+    return { ok: false, error: 'Missing event or guest id.' };
+  }
+  const auth = await assertDirectorOrAdmin();
+  if (!auth.ok) return auth;
+
+  const supabase = await createClient();
+  const { data: existing, error: lookupErr } = await supabase
+    .from('event_guests')
+    .select('guest_id, walkin_status')
+    .eq('guest_id', guest_id)
+    .eq('event_id', event_id)
+    .maybeSingle();
+  if (lookupErr) return { ok: false, error: lookupErr.message };
+  if (!existing) return { ok: false, error: 'Guest not found.' };
+  if (existing.walkin_status !== 'pending') {
+    return { ok: false, error: 'This walk-in is not pending approval.' };
+  }
+
+  // Rejection keeps the row (so the audit trail is intact) but ensures
+  // checked_in stays false. We don't delete — supervisors sometimes change
+  // their mind, and the post-event report should be able to count rejected
+  // attempts as a compliance metric.
+  const { error: updateErr } = await supabase
+    .from('event_guests')
+    .update({ checked_in: false })
+    .eq('guest_id', guest_id)
+    .eq('event_id', event_id);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  await supabase.from('event_guest_checkins').insert({
+    guest_id,
+    event_id,
+    action: 'walkin_reject',
+    source: 'kiosk',
+    performed_by_user_id: auth.user.id,
+    notes: notes?.trim() || null,
+  });
+
+  revalidatePath(`/kiosk/${event_id}`);
+  revalidatePath(`/events/${event_id}`);
+  return { ok: true };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Substitute-on-arrival. The most common door grey area: the named
+// invitee didn't come, but a colleague from the same firm did. Rather
+// than treating this as a generic walk-in (which loses the link to the
+// original RSVP), we create a fresh row pointing at the original via
+// substitute_for_guest_id.
+//
+// Behaviour:
+//   • Original invitee row stays untouched (checked_in=false). The
+//     reconciliation report can derive "no-show but substituted" from
+//     the inverse FK.
+//   • Substitute is checked in immediately — registering at the door
+//     IS the act of attendance.
+//   • If the event requires walk-in approval, the substitute also
+//     lands as walkin_status='pending' and goes through the same
+//     supervisor flow as a generic walk-in. (Same compliance bar; we
+//     can't let firms route around quiet-period gates by waving the
+//     "substitute" word.)
+// ─────────────────────────────────────────────────────────────────────
+
+export type KioskSubstitutePayload = {
+  /** The original invitee being substituted — usually picked from the
+   *  same-firm picker on the kiosk's no-match screen. */
+  original_guest_id: string;
+  full_name: string;
+  title: string | null;
+  contact_number: string | null;
+  email: string | null;
+  honorific: string | null;
+  preferred_name: string | null;
+  cmsrl_number: string | null;
+  press_card_no: string | null;
+  notes: string | null;
+};
+
+export type KioskSubstituteResult =
+  | {
+      ok: true;
+      pending_approval: boolean;
+      guest: {
+        guest_id: string;
+        full_name: string;
+        company: string | null;
+        title: string | null;
+        table_number: string | null;
+        checked_in_at: string | null;
+      };
+    }
+  | { ok: false; error: string };
+
+export async function kioskRegisterSubstituteAction(
+  event_id: string,
+  payload: KioskSubstitutePayload,
+): Promise<KioskSubstituteResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+  if (!payload.original_guest_id) {
+    return { ok: false, error: 'Pick the original invitee being substituted.' };
+  }
+
+  const full_name = payload.full_name.trim();
+  if (!full_name) return { ok: false, error: 'Substitute name is required.' };
+  if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
+    return { ok: false, error: 'Email looks invalid.' };
+  }
+
+  // Pull the original row + event approval flag in parallel. We need the
+  // original's company / table to copy onto the substitute, AND a guard so
+  // that a substitute can't bypass requires_walkin_approval.
+  const [origRes, evRes] = await Promise.all([
+    supabase
+      .from('event_guests')
+      .select('guest_id, full_name, company, table_number')
+      .eq('guest_id', payload.original_guest_id)
+      .eq('event_id', event_id)
+      .maybeSingle(),
+    supabase
+      .from('events')
+      .select('event_id, requires_walkin_approval')
+      .eq('event_id', event_id)
+      .maybeSingle(),
+  ]);
+  if (origRes.error) return { ok: false, error: origRes.error.message };
+  if (!origRes.data) return { ok: false, error: 'Original invitee not found.' };
+  if (evRes.error) return { ok: false, error: evRes.error.message };
+  if (!evRes.data) return { ok: false, error: 'Event not found.' };
+
+  const original = origRes.data as {
+    guest_id: string;
+    full_name: string;
+    company: string | null;
+    table_number: string | null;
+  };
+  const requiresApproval = !!evRes.data.requires_walkin_approval;
+
+  // Compose notes so the activity feed reads "Substitute for Jane Tan
+  // (firm)" without an extra join. Free-text usher notes are appended.
+  const userNote = payload.notes?.trim();
+  const marker = `Substitute for ${original.full_name}${
+    original.company ? ` (${original.company})` : ''
+  }`;
+  const composedNotes = userNote ? `${marker} · ${userNote}` : marker;
+
+  const { data: inserted, error: insertErr } = await supabase
+    .from('event_guests')
+    .insert({
+      event_id,
+      full_name,
+      title: payload.title?.trim() || null,
+      // Firm carries over by default — substitution by definition is
+      // "same firm". The usher can still edit this on the original
+      // record afterwards if they really need to.
+      company: original.company,
+      contact_number: payload.contact_number?.trim() || null,
+      email: payload.email?.trim() || null,
+      // Inherit the original's seat — substitution is at-table-replacement.
+      // Reconciliation report flags pairs where original.checked_in=false
+      // and a substitute exists.
+      table_number: original.table_number,
+      honorific: payload.honorific?.trim() || null,
+      preferred_name: payload.preferred_name?.trim() || null,
+      cmsrl_number: payload.cmsrl_number?.trim() || null,
+      press_card_no: payload.press_card_no?.trim() || null,
+      substitute_for_guest_id: original.guest_id,
+      notes: composedNotes,
+      checked_in: !requiresApproval,
+      walkin_status: requiresApproval ? 'pending' : 'approved',
+    })
+    .select('guest_id, full_name, company, title, table_number, checked_in_at')
+    .single();
+  if (insertErr) return { ok: false, error: insertErr.message };
+
+  // Audit:
+  //   • substitute_register — always (carries the link to the original).
+  //   • walkin_request OR (walkin_add + checkin) — same branching as a
+  //     generic walk-in so the feed is consistent.
+  const baseAudit = {
+    guest_id: inserted.guest_id as string,
+    event_id,
+    source: 'kiosk' as const,
+    performed_by_user_id: user.id,
+  };
+  const auditRows: Array<typeof baseAudit & { action: string; notes: string | null }> = [
+    {
+      ...baseAudit,
+      action: 'substitute_register',
+      notes: marker,
+    },
+  ];
+  if (requiresApproval) {
+    auditRows.push({
+      ...baseAudit,
+      action: 'walkin_request',
+      notes: 'Awaiting supervisor approval (substitute)',
+    });
+  } else {
+    auditRows.push({ ...baseAudit, action: 'walkin_add', notes: null });
+    auditRows.push({ ...baseAudit, action: 'checkin', notes: 'Substitute initial check-in' });
+  }
+  await supabase.from('event_guest_checkins').insert(auditRows);
+
+  revalidatePath(`/kiosk/${event_id}`);
+  revalidatePath(`/events/${event_id}`);
+
+  return {
+    ok: true,
+    pending_approval: requiresApproval,
     guest: {
       guest_id: inserted.guest_id as string,
       full_name: inserted.full_name as string,

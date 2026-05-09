@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUserWithRole } from '@/lib/auth';
 import type { EventGuest, EventRow, EventTable } from '@/lib/types';
 import KioskShell from './kiosk-shell';
 
@@ -15,8 +16,8 @@ export default async function KioskPage({
   const { event_id } = await params;
   const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect(`/login?next=/kiosk/${event_id}`);
+  const me = await getCurrentUserWithRole();
+  if (!me) redirect(`/login?next=/kiosk/${event_id}`);
 
   const [eventRes, guestsRes, tablesRes] = await Promise.all([
     supabase
@@ -65,7 +66,9 @@ export default async function KioskPage({
       guests={guests}
       tables={tables}
       defaultCapacity={event.default_table_capacity ?? null}
+      requiresWalkInApproval={!!event.requires_walkin_approval}
       googleSheetId={event.google_sheet_id ?? null}
+      userRole={me.role}
     />
   );
 }

@@ -9,8 +9,15 @@ import { kioskAddWalkInAction, type KioskWalkInResult } from './actions';
 
 // Walk-in: a guest with no prior record arrives at the door. We collect
 // the bare minimum (name + optional company / contact / table) and create
-// an event_guests row already marked checked-in. Capacity is checked
-// soft-warning only — usher can override and we audit the override.
+// an event_guests row. Capacity is checked soft-warning only — usher can
+// override and we audit the override.
+//
+// Two outcome paths driven by the event's requires_walkin_approval flag:
+//   • Off — row is created with checked_in=true, walkin_status='approved'.
+//           Usher sees "checked in" and the toast confirms.
+//   • On  — row is created with checked_in=false, walkin_status='pending'.
+//           Usher sees "submitted for approval" toast; supervisor (director
+//           / super_admin) approves later from the kiosk's pending queue.
 
 type Props = {
   open: boolean;
@@ -19,6 +26,8 @@ type Props = {
   guests: EventGuest[];
   tables: EventTable[];
   defaultCapacity: number | null;
+  /** True iff the event gates walk-ins on supervisor approval. */
+  requiresApproval: boolean;
   /** Prefill the name field — we hand over the search query so the usher
    *  doesn't have to retype what they just searched. */
   prefillName?: string;
@@ -37,26 +46,35 @@ export default function WalkInModal({
   guests,
   tables,
   defaultCapacity,
+  requiresApproval,
   prefillName,
   onSuccess,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState(prefillName ?? '');
+  const [honorific, setHonorific] = useState('');
+  const [preferred, setPreferred] = useState('');
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [contact, setContact] = useState('');
   const [email, setEmail] = useState('');
+  const [cmsrl, setCmsrl] = useState('');
+  const [pressCard, setPressCard] = useState('');
   const [notes, setNotes] = useState('');
   const [tableNumber, setTableNumber] = useState<string | null>(null);
 
   function reset() {
     setError(null);
     setName('');
+    setHonorific('');
+    setPreferred('');
     setTitle('');
     setCompany('');
     setContact('');
     setEmail('');
+    setCmsrl('');
+    setPressCard('');
     setNotes('');
     setTableNumber(null);
   }
@@ -98,6 +116,10 @@ export default function WalkInModal({
         email: email.trim() || null,
         table_number: tableNumber,
         notes: notes.trim() || null,
+        honorific: honorific.trim() || null,
+        preferred_name: preferred.trim() || null,
+        cmsrl_number: cmsrl.trim() || null,
+        press_card_no: pressCard.trim() || null,
         capacity_override: capacityOverride,
       });
       if (!res.ok) {
@@ -109,17 +131,41 @@ export default function WalkInModal({
     });
   }
 
+  const submitLabel = pending
+    ? requiresApproval
+      ? 'Submitting…'
+      : 'Adding…'
+    : requiresApproval
+      ? 'Submit for approval'
+      : 'Add & check in';
+
   return (
     <Modal
       open={open}
       onClose={close}
       title="Add walk-in"
-      description="Register a guest who didn't have a prior record. They'll be checked in immediately and flagged in the post-event report."
+      description={
+        requiresApproval
+          ? 'This event requires supervisor approval. The walk-in will land as pending until a director or super admin approves.'
+          : "Register a guest who didn't have a prior record. They'll be checked in immediately and flagged in the post-event report."
+      }
       size="2xl"
     >
       <form onSubmit={submit} className="space-y-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+          <div>
+            <label htmlFor="walkin_honorific" className={labelClass}>
+              Honorific
+            </label>
+            <input
+              id="walkin_honorific"
+              value={honorific}
+              onChange={(e) => setHonorific(e.target.value)}
+              placeholder="Datuk, Tan Sri, Dr…"
+              className={inputClass}
+            />
+          </div>
+          <div>
             <label htmlFor="walkin_name" className={labelClass}>
               Full name *
             </label>
@@ -130,6 +176,18 @@ export default function WalkInModal({
               required
               autoFocus
               placeholder="Guest's full name"
+              className={inputClass}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="walkin_preferred" className={labelClass}>
+              Preferred name (badge)
+            </label>
+            <input
+              id="walkin_preferred"
+              value={preferred}
+              onChange={(e) => setPreferred(e.target.value)}
+              placeholder="Optional — what to print on the badge"
               className={inputClass}
             />
           </div>
@@ -180,6 +238,30 @@ export default function WalkInModal({
               onChange={(e) => setEmail(e.target.value)}
               type="email"
               placeholder="name@example.com"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="walkin_cmsrl" className={labelClass}>
+              CMSRL number
+            </label>
+            <input
+              id="walkin_cmsrl"
+              value={cmsrl}
+              onChange={(e) => setCmsrl(e.target.value)}
+              placeholder="For sell-side analysts"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="walkin_press_card" className={labelClass}>
+              Press card no.
+            </label>
+            <input
+              id="walkin_press_card"
+              value={pressCard}
+              onChange={(e) => setPressCard(e.target.value)}
+              placeholder="For accredited media"
               className={inputClass}
             />
           </div>
@@ -244,7 +326,7 @@ export default function WalkInModal({
             disabled={pending}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-aegis-orange px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-aegis-orange-600 disabled:opacity-60"
           >
-            {pending ? 'Adding…' : 'Add & check in'}
+            {submitLabel}
           </button>
         </div>
       </form>

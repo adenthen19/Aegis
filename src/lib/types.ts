@@ -86,6 +86,14 @@ export const MARKET_SEGMENT_LABEL: Record<MarketSegment, string> = {
   leap: 'LEAP Market',
 };
 
+export type AccreditationStatus = 'pending' | 'verified' | 'expired';
+
+export const ACCREDITATION_STATUS_LABEL: Record<AccreditationStatus, string> = {
+  pending: 'Pending',
+  verified: 'Verified',
+  expired: 'Expired',
+};
+
 export type Analyst = {
   investor_id: string;
   full_name: string | null;
@@ -96,6 +104,15 @@ export type Analyst = {
   // Sentiment score is a -1.0..+1.0 rolling figure rendered on the dashboard.
   // Will be populated by Phase 4 AI scoring of meetings + coverage.
   sentiment_score: number | null;
+  // Door-floor compliance fields (migration 0034). Surface on the kiosk
+  // and on badges so the usher can verify the named CMSRL holder is in
+  // front of them.
+  cmsrl_number: string | null;
+  accreditation_status: AccreditationStatus;
+  honorific: string | null;
+  preferred_name: string | null;
+  language_pref: string | null;
+  dietary: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -107,6 +124,13 @@ export type MediaContact = {
   state: string | null;
   contact_number: string | null;
   email: string | null;
+  // Door-floor compliance fields (migration 0034).
+  press_card_no: string | null;
+  accreditation_status: AccreditationStatus;
+  honorific: string | null;
+  preferred_name: string | null;
+  language_pref: string | null;
+  dietary: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -526,6 +550,10 @@ export type EventRow = {
   description: string | null;
   status: EventStatus;
   default_table_capacity: number | null;
+  // When true, walk-ins land as walkin_status='pending' and require a
+  // director/super_admin to approve. Default off; turn on for prospectus
+  // launches and other quiet-period events. (migration 0034)
+  requires_walkin_approval: boolean;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;
@@ -585,6 +613,13 @@ export type MediaInterview = {
   updated_at: string;
 };
 
+export type WalkinStatus = 'pending' | 'approved';
+
+export const WALKIN_STATUS_LABEL: Record<WalkinStatus, string> = {
+  pending: 'Pending approval',
+  approved: 'Approved',
+};
+
 export type EventGuest = {
   guest_id: string;
   event_id: string;
@@ -597,6 +632,24 @@ export type EventGuest = {
   checked_in: boolean;
   checked_in_at: string | null;
   notes: string | null;
+  // Door-floor compliance snapshot (migration 0034). Denormalised from
+  // analysts / media_contacts so the kiosk has them at the door even when
+  // the guest was imported by name only.
+  honorific: string | null;
+  preferred_name: string | null;
+  language_pref: string | null;
+  dietary: string | null;
+  cmsrl_number: string | null;
+  press_card_no: string | null;
+  accreditation_status: AccreditationStatus;
+  // Same-firm substitute for an original invitee (migration 0034). The
+  // original row stays in place (checked_in stays false) — reconciliation
+  // reports derive substitution counts from this FK.
+  substitute_for_guest_id: string | null;
+  // NULL = pre-registered. 'pending' = awaiting supervisor approval.
+  // 'approved' = supervisor approved (or auto when the event doesn't
+  // require approval).
+  walkin_status: WalkinStatus | null;
   created_by_user_id: string | null;
   updated_by_user_id: string | null;
   created_at: string;
@@ -607,6 +660,10 @@ export type EventCheckinAction =
   | 'checkin'
   | 'undo'
   | 'walkin_add'
+  | 'walkin_request'
+  | 'walkin_approve'
+  | 'walkin_reject'
+  | 'substitute_register'
   | 'companion_add'
   | 'table_swap'
   | 'capacity_override';
@@ -616,6 +673,10 @@ export const EVENT_CHECKIN_ACTION_LABEL: Record<EventCheckinAction, string> = {
   checkin: 'Checked in',
   undo: 'Undo check-in',
   walkin_add: 'Walk-in added',
+  walkin_request: 'Walk-in submitted',
+  walkin_approve: 'Walk-in approved',
+  walkin_reject: 'Walk-in rejected',
+  substitute_register: 'Substitute registered',
   companion_add: '+1 companion added',
   table_swap: 'Table changed',
   capacity_override: 'Capacity override',
