@@ -119,6 +119,118 @@ export async function kioskCheckInAction(
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Bulk check-in — used by the browse tabs (By table / By name / By
+// company) when an usher selects multiple guests and taps "Check in".
+// Common case: a whole research desk arrives together and the host
+// wants to flip them all in one action.
+//
+// Same gates as the single-guest action:
+//   • event_id is enforced on every UPDATE so a tampered request can't
+//     write check-ins into a different event;
+//   • walkin_status='pending' rows are excluded — they need supervisor
+//     approval and must not be bulk-bypassed;
+//   • already-checked-in rows are skipped silently (no double audit).
+//
+// We do the work in two passes: a single UPDATE with a status guard,
+// then a single audit insert for the rows that actually flipped. Both
+// scale with the selection size at one round-trip each — fast enough
+// for a usher selecting 30+ rows from a research desk.
+// ─────────────────────────────────────────────────────────────────────
+
+export type KioskBulkCheckInResult =
+  | {
+      ok: true;
+      checked_in: number;
+      skipped_pending: number;
+      skipped_already: number;
+    }
+  | { ok: false; error: string };
+
+export async function kioskBulkCheckInAction(
+  event_id: string,
+  guest_ids: string[],
+): Promise<KioskBulkCheckInResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'You must be signed in.' };
+  if (!event_id) return { ok: false, error: 'Missing event id.' };
+  // De-dupe + bound the input. A 100-row cap keeps a tampered request
+  // from sweeping a whole event in one call.
+  const ids = Array.from(new Set(guest_ids.filter(Boolean))).slice(0, 100);
+  if (ids.length === 0) return { ok: false, error: 'No guests selected.' };
+
+  // Snapshot the current state so we can split the response into
+  // "actually checked in", "skipped because already in", and "skipped
+  // because pending approval" — gives the caller a clean toast.
+  const { data: snapshot, error: snapErr } = await supabase
+    .from('event_guests')
+    .select('guest_id, checked_in, walkin_status')
+    .eq('event_id', event_id)
+    .in('guest_id', ids);
+  if (snapErr) return { ok: false, error: snapErr.message };
+
+  const flipping: string[] = [];
+  let skipped_pending = 0;
+  let skipped_already = 0;
+  for (const row of snapshot ?? []) {
+    if (row.walkin_status === 'pending') {
+      skipped_pending += 1;
+      continue;
+    }
+    if (row.checked_in) {
+      skipped_already += 1;
+      continue;
+    }
+    flipping.push(row.guest_id as string);
+  }
+
+  if (flipping.length === 0) {
+    return {
+      ok: true,
+      checked_in: 0,
+      skipped_pending,
+      skipped_already,
+    };
+  }
+
+  // The `flipping` list already excludes pending walk-ins via the
+  // pre-flight snapshot. We don't add an `.is('walkin_status', null)`
+  // guard here because that would also exclude approved walk-ins —
+  // they have walkin_status='approved' and may legitimately need to be
+  // checked in (though typically approval flips checked_in atomically).
+  const { error: updErr } = await supabase
+    .from('event_guests')
+    .update({ checked_in: true })
+    .eq('event_id', event_id)
+    .in('guest_id', flipping);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  // One audit row per flipped guest. We don't fail the action if the
+  // audit insert errors — the user-visible state (counts) already
+  // updated. Same precedent as the single-guest action.
+  await supabase.from('event_guest_checkins').insert(
+    flipping.map((guest_id) => ({
+      guest_id,
+      event_id,
+      action: 'checkin' as const,
+      source: 'kiosk' as const,
+      performed_by_user_id: user.id,
+      notes: 'Bulk check-in',
+    })),
+  );
+
+  revalidatePath(`/kiosk/${event_id}`);
+  revalidatePath(`/events/${event_id}`);
+
+  return {
+    ok: true,
+    checked_in: flipping.length,
+    skipped_pending,
+    skipped_already,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // Walk-in registration: a guest with no prior record arrives at the door.
 // Inserts a fresh event_guests row, marks them checked-in immediately,
 // and writes audit rows so the post-event report distinguishes the

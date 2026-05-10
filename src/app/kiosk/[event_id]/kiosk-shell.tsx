@@ -22,6 +22,7 @@ import {
   type QueueItem,
 } from '@/lib/kiosk-queue';
 import {
+  kioskBulkCheckInAction,
   kioskCheckInAction,
   kioskUndoCheckInAction,
   type KioskCheckInResult,
@@ -30,6 +31,7 @@ import WalkInModal from './walk-in-modal';
 import CompanionModal from './companion-modal';
 import SubstituteModal from './substitute-modal';
 import ApprovalQueue from './approval-queue';
+import KioskBrowse from './kiosk-browse';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Search classifier — same UX as the in-app kiosk tab:
@@ -341,6 +343,12 @@ export default function KioskShell({
   const [query, setQuery] = useState('');
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<ToastState>({ kind: 'idle' });
+  // Active browse mode. 'search' is the existing search-and-tap flow;
+  // the others are full-list views (grouped or alphabetical) that
+  // also support multi-select bulk check-in.
+  const [browseTab, setBrowseTab] = useState<
+    'search' | 'table' | 'name' | 'company'
+  >('search');
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [substituteOpen, setSubstituteOpen] = useState(false);
@@ -1032,8 +1040,89 @@ export default function KioskShell({
         </div>
       </header>
 
-      {/* ── Search input ──────────────────────────────────────── */}
+      {/* ── Browse tabs ──────────────────────────────────────────
+          Search is the default and primary flow (one-tap from
+          memory of a name). The other three tabs are full-list
+          views grouped by table, name (alphabetical), or company —
+          each supports multi-select bulk check-in for groups
+          arriving together (research desks, media outlets, etc.). */}
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-3 sm:px-6 sm:py-4">
+        <div
+          role="tablist"
+          aria-label="Kiosk browse mode"
+          className="-mx-1 mb-3 flex gap-1 overflow-x-auto border-b border-aegis-gray-100 px-1"
+        >
+          {(
+            [
+              { key: 'search', label: 'Search' },
+              { key: 'table', label: 'By table' },
+              { key: 'name', label: 'By name' },
+              { key: 'company', label: 'By company' },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={browseTab === key}
+              onClick={() => setBrowseTab(key)}
+              className={[
+                '-mb-px shrink-0 border-b-2 px-3 py-2.5 text-xs font-medium uppercase tracking-[0.06em] transition-colors',
+                browseTab === key
+                  ? 'border-aegis-orange text-aegis-navy'
+                  : 'border-transparent text-aegis-gray-500 hover:text-aegis-navy',
+              ].join(' ')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {browseTab !== 'search' && (
+          <KioskBrowse
+            mode={browseTab}
+            guests={guests}
+            isCheckedIn={isCheckedIn}
+            pending={pending}
+            onPick={checkIn}
+            onBulk={async (ids) => {
+              const res = await kioskBulkCheckInAction(eventId, ids);
+              if (!res.ok) {
+                flashToast({ kind: 'error', message: res.error });
+                return;
+              }
+              // Compose a friendly summary toast. The bulk action
+              // returns counts so we can call out edge cases (some
+              // already-in, some pending approval) without lying about
+              // what just happened.
+              const parts: string[] = [`${res.checked_in} checked in`];
+              if (res.skipped_already > 0) {
+                parts.push(`${res.skipped_already} already in`);
+              }
+              if (res.skipped_pending > 0) {
+                parts.push(
+                  `${res.skipped_pending} pending approval (skipped)`,
+                );
+              }
+              flashToast({
+                kind: 'success',
+                guest_id: '',
+                name: parts.join(' · '),
+                company: null,
+                table: null,
+                already: false,
+                queued: false,
+              });
+              router.refresh();
+            }}
+          />
+        )}
+
+        {/* Existing Search-tab body — preserved verbatim, just gated
+            on the active browse tab. Includes the search input,
+            result hint, and direct/fuzzy/colleague-group sections. */}
+        {browseTab === 'search' && (
+        <>
         <form onSubmit={(e) => e.preventDefault()}>
           <label htmlFor="kiosk-search" className="sr-only">
             Search guest by name, company, or contact number
@@ -1265,6 +1354,8 @@ export default function KioskShell({
               {total} guest{total === 1 ? '' : 's'} on the list — start typing to find someone.
             </p>
           </div>
+        )}
+        </>
         )}
       </main>
 
