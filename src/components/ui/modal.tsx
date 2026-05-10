@@ -19,20 +19,49 @@ const SIZE_CLASS: Record<Size, string> = {
   '2xl': 'sm:max-w-2xl',
 };
 
+// ─── Shared body-scroll lock (reference-counted) ──────────────────
+//
+// Multiple modals can stack — e.g. GuestDetailModal opening
+// ConfirmDialog when "Remove guest" is tapped. If each modal
+// independently saves and restores `body.style.overflow`, the inner
+// modal captures the *already-locked* value ('hidden') as its "prev"
+// and ends up restoring the body to 'hidden' on close — leaving the
+// page un-scrollable after the operation completes.
+//
+// A shared counter fixes this: only the FIRST mount captures the
+// pre-modal value and locks; only the LAST unmount restores. All
+// the in-between modals are no-ops on this state.
+let modalLockCount = 0;
+let savedBodyOverflow = '';
+
+function lockBodyScroll() {
+  if (modalLockCount === 0) {
+    savedBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  modalLockCount += 1;
+}
+
+function unlockBodyScroll() {
+  modalLockCount = Math.max(0, modalLockCount - 1);
+  if (modalLockCount === 0) {
+    document.body.style.overflow = savedBodyOverflow;
+  }
+}
+
 export default function Modal({
   open, onClose, title, description, children, dismissible = true, size = 'lg',
 }: Props) {
   // Body scroll lock + (optional) ESC-to-close
   useEffect(() => {
     if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockBodyScroll();
     const onKey = (e: KeyboardEvent) => {
       if (dismissible && e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlockBodyScroll();
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose, dismissible]);
