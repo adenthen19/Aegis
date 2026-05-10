@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       birthdayProfiles={(birthdayProfiles ?? []).map((p) => ({
         user_id: p.user_id as string,
         display_name: (p.display_name as string | null) ?? null,
-        email: p.email as string,
+        email: (p.email as string | null) ?? null,
         avatar_url: (p.avatar_url as string | null) ?? null,
         birthday: p.birthday as string,
       }))}

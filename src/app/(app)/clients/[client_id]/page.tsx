@@ -65,13 +65,13 @@ type Meeting = {
 };
 
 type Todo = ActionItem & {
-  profiles: { display_name: string | null; email: string } | null;
+  profiles: { display_name: string | null; email: string | null } | null;
   meetings: { meeting_id: string; meeting_date: string } | null;
 };
 
-function profileLabel(p: { display_name: string | null; email: string } | null): string {
+function profileLabel(p: { display_name: string | null; email: string | null } | null): string {
   if (!p) return 'Unassigned';
-  return p.display_name || p.email;
+  return p.display_name || p.email || 'Unnamed';
 }
 
 export default async function ClientDetailPage({

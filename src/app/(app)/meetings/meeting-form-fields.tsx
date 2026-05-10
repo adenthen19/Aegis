@@ -68,7 +68,7 @@ export default function MeetingFormFields({
   );
   const [aiOpen, setAiOpen] = useState(false);
 
-  const profileLabel = (p: Profile) => p.display_name || p.email;
+  const profileLabel = (p: Profile) => p.display_name || p.email || '';
   const sortedProfiles = [...profiles].sort((a, b) =>
     profileLabel(a).localeCompare(profileLabel(b)),
   );

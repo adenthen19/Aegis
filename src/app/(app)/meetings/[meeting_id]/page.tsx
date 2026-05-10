@@ -23,7 +23,7 @@ type MeetingWithRefs = Meeting & {
 function profileLabel(p: Profile | null | undefined): string {
   if (!p) return 'Unassigned';
   const friendly = displayName(p.display_name ?? '');
-  return friendly || p.email.toLowerCase();
+  return friendly || p.email?.toLowerCase() || 'Unnamed';
 }
 
 export default async function MeetingDetailPage({

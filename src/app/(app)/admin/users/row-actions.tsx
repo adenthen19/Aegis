@@ -54,7 +54,7 @@ export default function UserRowActions({
         onClose={() => setConfirmOpen(false)}
         onConfirm={() => deleteUserAction(row.user_id)}
         title="Delete user?"
-        description={`This permanently removes ${row.display_name || row.email} and revokes their access.`}
+        description={`This permanently removes ${row.display_name || row.email || 'this user'} and revokes their access.`}
         confirmLabel="Delete user"
         destructive
       />

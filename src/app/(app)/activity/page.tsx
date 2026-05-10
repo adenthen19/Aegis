@@ -16,7 +16,7 @@ const FEED_LIMIT = 100;
 
 type ActorJoin = {
   display_name: string | null;
-  email: string;
+  email: string | null;
   avatar_url: string | null;
 } | null;
 
@@ -35,7 +35,7 @@ type FeedItem = {
 function actorLabel(a: ActorJoin): string {
   if (!a) return 'Someone';
   const friendly = displayName(a.display_name ?? '');
-  return friendly || a.email.toLowerCase();
+  return friendly || a.email?.toLowerCase() || 'Someone';
 }
 
 function actorInitial(a: ActorJoin): string {

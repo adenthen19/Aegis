@@ -15,7 +15,7 @@ import type { Profile } from '@/lib/types';
 import { reassignTodoAction } from './actions';
 
 function profileLabel(p: Profile): string {
-  return (p.display_name && p.display_name.trim()) || p.email;
+  return (p.display_name && p.display_name.trim()) || p.email || '';
 }
 
 function profileInitial(p: Profile): string {

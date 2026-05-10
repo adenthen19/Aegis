@@ -22,7 +22,7 @@ import { displayEmail, displayName } from '@/lib/display-format';
 export type BirthdayProfile = {
   user_id: string;
   display_name: string | null;
-  email: string;
+  email: string | null;
   avatar_url: string | null;
   birthday: string;
 };

@@ -351,11 +351,13 @@ export async function structureMeetingTranscriptAction(
       : Promise.resolve({ data: null }),
     attendee_user_ids.length > 0
       ? supabase.from('profiles').select('user_id, display_name, email').in('user_id', attendee_user_ids)
-      : Promise.resolve({ data: [] as { user_id: string; display_name: string | null; email: string }[] }),
+      : Promise.resolve({ data: [] as { user_id: string; display_name: string | null; email: string | null }[] }),
   ]);
 
-  const attendees = (attendeeRows.data ?? []) as { user_id: string; display_name: string | null; email: string }[];
-  const attendee_names = attendees.map((p) => p.display_name || p.email);
+  const attendees = (attendeeRows.data ?? []) as { user_id: string; display_name: string | null; email: string | null }[];
+  const attendee_names = attendees
+    .map((p) => p.display_name || p.email)
+    .filter((n): n is string => !!n);
 
   let structured;
   try {
@@ -376,7 +378,7 @@ export async function structureMeetingTranscriptAction(
   const nameToId = new Map<string, string>();
   for (const p of attendees) {
     if (p.display_name) nameToId.set(p.display_name.trim().toLowerCase(), p.user_id);
-    nameToId.set(p.email.trim().toLowerCase(), p.user_id);
+    if (p.email) nameToId.set(p.email.trim().toLowerCase(), p.user_id);
   }
   function resolvePic(name: string | null): string | null {
     if (!name) return null;

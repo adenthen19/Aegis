@@ -49,7 +49,7 @@ export default async function AdminUsersPage() {
                   />
                 ) : (
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-aegis-blue-50 text-xs font-semibold text-aegis-navy">
-                    {(displayName(r.display_name ?? '') || r.email)
+                    {(displayName(r.display_name ?? '') || r.email || '?')
                       .charAt(0)
                       .toUpperCase()}
                   </span>

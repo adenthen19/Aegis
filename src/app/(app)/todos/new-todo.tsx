@@ -35,7 +35,7 @@ export default function NewTodo({
     if (state.ok) setOpen(false);
   }, [state]);
 
-  const profileLabel = (p: Profile) => p.display_name || p.email;
+  const profileLabel = (p: Profile) => p.display_name || p.email || '';
   const sortedProfiles = [...profiles].sort((a, b) =>
     profileLabel(a).localeCompare(profileLabel(b)),
   );

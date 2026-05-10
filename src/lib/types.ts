@@ -170,7 +170,9 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
 
 export type Profile = {
   user_id: string;
-  email: string;
+  // Nullable since migration 0040 — anonymous kiosk operators have no
+  // email. Only set for users who signed in via the regular login.
+  email: string | null;
   display_name: string | null;
   avatar_url: string | null;
   username: string | null;

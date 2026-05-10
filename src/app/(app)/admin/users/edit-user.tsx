@@ -31,7 +31,7 @@ export default function EditUser({
       open={open}
       onClose={onClose}
       title="Edit user"
-      description={row.email}
+      description={row.email ?? undefined}
       size="2xl"
     >
       <form action={action} className="space-y-4">
