@@ -38,61 +38,54 @@ const COLORS = {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 36,
+    paddingTop: 40,
     paddingBottom: 56,
-    paddingHorizontal: 40,
+    paddingHorizontal: 44,
     fontFamily: 'Helvetica',
-    fontSize: 9.5,
+    fontSize: 10,
     color: COLORS.gray800,
+    lineHeight: 1.4,
   },
   // ─── Header ──────────────────────────────────────────────────────────
+  // Single tight row at the top of every page. One brand mark on the
+  // left, one report-meta block on the right. The big event identity
+  // sits below in its own block on page 1; on continuation pages we
+  // show a compact version.
   headerBar: {
-    paddingBottom: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.navy,
-    marginBottom: 14,
-  },
-  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingBottom: 8,
+    borderBottomWidth: 0.75,
+    borderBottomColor: COLORS.gray200,
+    marginBottom: 18,
   },
   brand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
   },
-  // Logo aspect ratio is ~1.45:1 (wider than tall) — give it a wider box
-  // and use objectFit: 'contain' so the original aspect is preserved.
   logo: {
-    width: 36,
-    height: 24,
+    width: 32,
+    height: 22,
     objectFit: 'contain',
-  },
-  // Per-client logo on the right of the header — same contain trick.
-  headerClientLogo: {
-    width: 44,
-    height: 24,
-    objectFit: 'contain',
-    marginLeft: 8,
   },
   brandName: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontFamily: 'Helvetica-Bold',
     color: COLORS.navy,
-    letterSpacing: 0.4,
-  },
-  brandSub: {
-    fontSize: 7,
-    color: COLORS.gray400,
-    letterSpacing: 1.3,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
-    marginTop: 1,
+  },
+  // The right-hand "Post-event report" stamp doubles as the page-1
+  // headline; on continuation pages it just becomes the page number.
+  reportMeta: {
+    alignItems: 'flex-end',
   },
   reportLabel: {
     fontSize: 7,
     color: COLORS.orange,
-    letterSpacing: 1.4,
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
     fontFamily: 'Helvetica-Bold',
   },
@@ -101,118 +94,157 @@ const styles = StyleSheet.create({
     color: COLORS.gray600,
     marginTop: 2,
   },
-  // Event identity row sits below the brand bar but above the divider
-  // line, so it appears on every page.
-  headerEventRow: {
+  // ─── Event identity (page 1 only) ───────────────────────────────────
+  // The hero block. Big title, supporting subline, optional client
+  // logo on the right. Sits right under the header bar so the report
+  // reads "AEGIS POST-EVENT REPORT → Q3 Briefing for Aurora Capital"
+  // top-down without any redundancy.
+  eventIdentity: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginTop: 10,
-    gap: 12,
+    gap: 16,
+    marginBottom: 20,
   },
-  headerEventTitle: {
-    fontSize: 13,
+  eventTitle: {
+    fontSize: 22,
     fontFamily: 'Helvetica-Bold',
     color: COLORS.navy,
-    lineHeight: 1.2,
-    flexShrink: 1,
+    lineHeight: 1.15,
+    letterSpacing: -0.3,
+    marginBottom: 6,
   },
-  headerEventClient: {
-    fontSize: 9,
+  eventSubline: {
+    fontSize: 10.5,
     color: COLORS.gray600,
-    marginTop: 2,
+    lineHeight: 1.5,
   },
-  headerEventMeta: {
-    fontSize: 8.5,
-    color: COLORS.gray400,
-    textAlign: 'right',
+  eventClientChip: {
+    fontFamily: 'Helvetica-Bold',
+    color: COLORS.navy,
   },
-  // ─── KPI row ─────────────────────────────────────────────────────────
-  kpiRow: {
+  clientLogoBox: {
+    width: 80,
+    height: 56,
+    borderWidth: 0.5,
+    borderColor: COLORS.gray200,
+    borderRadius: 4,
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clientLogoImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+  },
+  // ─── KPI strip ──────────────────────────────────────────────────────
+  // Single rounded panel split into four cells. Reads as one design
+  // element instead of four competing pastel cards. Vertical dividers
+  // between cells, accent colour driven by the cell's own value.
+  kpiPanel: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  kpiCard: {
-    flex: 1,
     borderRadius: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    backgroundColor: COLORS.gray100,
+    borderWidth: 0.5,
+    borderColor: COLORS.gray200,
+    overflow: 'hidden',
+    marginBottom: 22,
+  },
+  kpiCell: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  kpiCellDivider: {
+    borderLeftWidth: 0.5,
+    borderLeftColor: COLORS.gray200,
   },
   kpiLabel: {
     fontSize: 7.5,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    fontFamily: 'Helvetica-Bold',
-    opacity: 0.75,
-  },
-  kpiValue: {
-    fontSize: 24,
-    fontFamily: 'Helvetica-Bold',
-    marginTop: 4,
-  },
-  // ─── Section heading ─────────────────────────────────────────────────
-  sectionHeading: {
-    fontSize: 8,
     letterSpacing: 1.4,
     textTransform: 'uppercase',
     fontFamily: 'Helvetica-Bold',
     color: COLORS.gray600,
-    marginBottom: 6,
-    marginTop: 10,
+  },
+  kpiValue: {
+    fontSize: 26,
+    fontFamily: 'Helvetica-Bold',
+    color: COLORS.navy,
+    marginTop: 6,
+    letterSpacing: -0.5,
+  },
+  kpiAccent: {
+    color: COLORS.emerald,
+  },
+  // ─── Section heading ─────────────────────────────────────────────────
+  sectionHeading: {
+    fontSize: 8.5,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    fontFamily: 'Helvetica-Bold',
+    color: COLORS.gray600,
+    marginBottom: 8,
+    marginTop: 4,
   },
   attendanceBar: {
-    height: 8,
+    height: 6,
     backgroundColor: COLORS.gray200,
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 4,
   },
   attendanceBarFill: {
-    height: 8,
+    height: 6,
     backgroundColor: COLORS.emerald,
   },
   attendanceCaption: {
-    fontSize: 8,
+    fontSize: 8.5,
     color: COLORS.gray600,
-    marginTop: 2,
-    marginBottom: 14,
+    marginTop: 6,
+    marginBottom: 22,
   },
   // ─── Tables ──────────────────────────────────────────────────────────
+  // Lighter chrome — thin borders, soft header, no aggressive
+  // alternating rows. Easier on the eye when sent as a deliverable.
   table: {
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: COLORS.gray200,
     borderRadius: 4,
     overflow: 'hidden',
   },
   thead: {
     flexDirection: 'row',
-    backgroundColor: COLORS.navy,
+    backgroundColor: COLORS.navyTint,
+    borderBottomWidth: 0.75,
+    borderBottomColor: COLORS.navy,
   },
   th: {
-    color: '#ffffff',
-    fontSize: 8,
+    color: COLORS.navy,
+    fontSize: 7.5,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 0.6,
+    letterSpacing: 1.0,
     textTransform: 'uppercase',
-    paddingVertical: 7,
-    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 9,
   },
   tr: {
     flexDirection: 'row',
-    borderTopWidth: 1,
+    borderTopWidth: 0.5,
     borderTopColor: COLORS.gray200,
   },
   trAlt: {
     backgroundColor: COLORS.gray100,
   },
   trCheckedIn: {
-    backgroundColor: COLORS.emeraldTint,
+    // Faint left-edge accent does the work of "this person showed up"
+    // without flooding every row with green tint.
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.emerald,
   },
   td: {
-    fontSize: 9,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    fontSize: 9.5,
+    paddingVertical: 7,
+    paddingHorizontal: 9,
     color: COLORS.gray800,
   },
   tdMuted: {
@@ -221,8 +253,8 @@ const styles = StyleSheet.create({
   // ─── Footer ──────────────────────────────────────────────────────────
   footer: {
     position: 'absolute',
-    left: 40,
-    right: 40,
+    left: 44,
+    right: 44,
     bottom: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -232,19 +264,35 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     color: COLORS.gray400,
   },
-  // ─── Inline pieces ───────────────────────────────────────────────────
-  badgeIn: {
-    fontSize: 7.5,
+  // ─── Status indicator ───────────────────────────────────────────────
+  // Coloured dot + plain text, no Unicode glyph (✓ renders unevenly
+  // in Helvetica). Reads cleanly at print scale.
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statusDotIn: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.emerald,
+  },
+  statusDotPending: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 0.75,
+    borderColor: COLORS.gray400,
+  },
+  statusTextIn: {
+    fontSize: 8.5,
     fontFamily: 'Helvetica-Bold',
     color: COLORS.emerald,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
-  badgePending: {
-    fontSize: 7.5,
+  statusTextPending: {
+    fontSize: 8.5,
     color: COLORS.gray400,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
 });
 
@@ -267,8 +315,15 @@ const COMPANY_COLS = {
   pct: 1.2,
 } as const;
 
+// PDF generation runs server-side on Vercel, where the host timezone is
+// UTC. Without an explicit timezone option, Malaysia events ended up
+// printed 8 hours off. Pin to Asia/Kuala_Lumpur so the printed times
+// match what the team typed and what the kiosk shows.
+const TZ = 'Asia/Kuala_Lumpur';
+
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString('en-GB', {
+    timeZone: TZ,
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -282,6 +337,7 @@ function fmtDate(iso: string): string {
 function fmtTime(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-GB', {
+    timeZone: TZ,
     day: '2-digit',
     month: 'short',
     hour: '2-digit',
@@ -352,86 +408,72 @@ export function EventAttendancePdf({
       author="Aegis Communication"
     >
       <Page size="A4" style={styles.page} wrap>
-        {/* ── Header bar ──────────────────────────────────────────── */}
-        {/* Repeats on every page (fixed). Top row = brand + report meta;
-            bottom row = event identity. The dedicated cover block has
-            been folded into here so the page-1 real estate goes
-            straight to the KPIs. */}
+        {/* ── Header bar ──────────────────────────────────────────────
+            Single line: brand left, report meta right. Repeats on
+            every page so continuation pages still have context. */}
         <View style={styles.headerBar} fixed>
-          <View style={styles.headerTop}>
-            <View style={styles.brand}>
-              {logo && <Image src={logo} style={styles.logo} />}
-              <View>
-                <Text style={styles.brandName}>
-                  Aegis Communication Sdn Bhd
-                </Text>
-                <Text style={styles.brandSub}>Event Attendance Report</Text>
-              </View>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.reportLabel}>Post-Event Report</Text>
-                <Text style={styles.reportDate}>Generated {generatedAt}</Text>
-              </View>
-              {clientLogo && (
-                <Image src={clientLogo} style={styles.headerClientLogo} />
-              )}
-            </View>
+          <View style={styles.brand}>
+            {logo && <Image src={logo} style={styles.logo} />}
+            <Text style={styles.brandName}>Aegis Communication</Text>
           </View>
-          <View style={styles.headerEventRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerEventTitle}>{displayName(event.name)}</Text>
-              {event.clientLabel && (
-                <Text style={styles.headerEventClient}>
-                  For {displayCompany(event.clientLabel)}
-                </Text>
-              )}
-            </View>
-            <Text style={styles.headerEventMeta}>
-              {fmtDate(event.event_date)}
-              {event.location ? `\n${event.location}` : ''}
-            </Text>
+          <View style={styles.reportMeta}>
+            <Text style={styles.reportLabel}>Post-Event Report</Text>
+            <Text style={styles.reportDate}>Generated {generatedAt}</Text>
           </View>
         </View>
 
-        {/* ── KPI cards ───────────────────────────────────────────── */}
-        <View style={styles.kpiRow}>
-          <View
-            style={[styles.kpiCard, { backgroundColor: COLORS.navyTint }]}
-          >
-            <Text style={[styles.kpiLabel, { color: COLORS.navy }]}>
-              Total guests
-            </Text>
-            <Text style={[styles.kpiValue, { color: COLORS.navy }]}>
-              {total}
+        {/* ── Event identity (hero block) ────────────────────────────
+            Big event title, single subline that combines client +
+            date + location. Optional client logo on the right. */}
+        <View style={styles.eventIdentity}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eventTitle}>{displayName(event.name)}</Text>
+            <Text style={styles.eventSubline}>
+              {event.clientLabel && (
+                <>
+                  For{' '}
+                  <Text style={styles.eventClientChip}>
+                    {displayCompany(event.clientLabel)}
+                  </Text>
+                  {'  ·  '}
+                </>
+              )}
+              {fmtDate(event.event_date)}
+              {event.location ? `  ·  ${event.location}` : ''}
             </Text>
           </View>
-          <View
-            style={[styles.kpiCard, { backgroundColor: COLORS.emeraldTint }]}
-          >
-            <Text style={[styles.kpiLabel, { color: COLORS.emerald }]}>
-              Checked in
-            </Text>
-            <Text style={[styles.kpiValue, { color: COLORS.emerald }]}>
+          {clientLogo && (
+            <View style={styles.clientLogoBox}>
+              <Image src={clientLogo} style={styles.clientLogoImg} />
+            </View>
+          )}
+        </View>
+
+        {/* ── KPI strip ──────────────────────────────────────────────
+            Single rounded panel with four cells separated by thin
+            dividers — reads as one piece of design instead of four
+            competing pastel cards. Accent colours pick out the two
+            quantities the host actually cares about (checked in,
+            attendance %); total + pending stay neutral. */}
+        <View style={styles.kpiPanel}>
+          <View style={styles.kpiCell}>
+            <Text style={styles.kpiLabel}>Total guests</Text>
+            <Text style={styles.kpiValue}>{total}</Text>
+          </View>
+          <View style={[styles.kpiCell, styles.kpiCellDivider]}>
+            <Text style={styles.kpiLabel}>Checked in</Text>
+            <Text style={[styles.kpiValue, styles.kpiAccent]}>
               {checkedIn}
             </Text>
           </View>
-          <View
-            style={[styles.kpiCard, { backgroundColor: COLORS.gray100 }]}
-          >
-            <Text style={[styles.kpiLabel, { color: COLORS.gray600 }]}>
-              Pending
-            </Text>
+          <View style={[styles.kpiCell, styles.kpiCellDivider]}>
+            <Text style={styles.kpiLabel}>Pending</Text>
             <Text style={[styles.kpiValue, { color: COLORS.gray600 }]}>
               {pending}
             </Text>
           </View>
-          <View
-            style={[styles.kpiCard, { backgroundColor: COLORS.orangeTint }]}
-          >
-            <Text style={[styles.kpiLabel, { color: COLORS.orange }]}>
-              Attendance
-            </Text>
+          <View style={[styles.kpiCell, styles.kpiCellDivider]}>
+            <Text style={styles.kpiLabel}>Attendance</Text>
             <Text style={[styles.kpiValue, { color: COLORS.orange }]}>
               {pct}%
             </Text>
@@ -441,9 +483,7 @@ export function EventAttendancePdf({
         {/* ── Attendance bar ──────────────────────────────────────── */}
         <Text style={styles.sectionHeading}>Attendance progress</Text>
         <View style={styles.attendanceBar}>
-          <View
-            style={[styles.attendanceBarFill, { width: `${pct}%` }]}
-          />
+          <View style={[styles.attendanceBarFill, { width: `${pct}%` }]} />
         </View>
         <Text style={styles.attendanceCaption}>
           {checkedIn} of {total} guests checked in ({pct}%)
@@ -614,13 +654,26 @@ export function EventAttendancePdf({
                 >
                   {g.table_number || '—'}
                 </Text>
-                <Text style={[styles.td, { flex: GUEST_COLS.status }]}>
-                  {g.checked_in ? (
-                    <Text style={styles.badgeIn}>✓ Checked in</Text>
-                  ) : (
-                    <Text style={styles.badgePending}>Pending</Text>
-                  )}
-                </Text>
+                <View
+                  style={[
+                    styles.td,
+                    styles.statusRow,
+                    { flex: GUEST_COLS.status },
+                  ]}
+                >
+                  <View
+                    style={
+                      g.checked_in ? styles.statusDotIn : styles.statusDotPending
+                    }
+                  />
+                  <Text
+                    style={
+                      g.checked_in ? styles.statusTextIn : styles.statusTextPending
+                    }
+                  >
+                    {g.checked_in ? 'Checked in' : 'Pending'}
+                  </Text>
+                </View>
                 <Text
                   style={[
                     styles.td,

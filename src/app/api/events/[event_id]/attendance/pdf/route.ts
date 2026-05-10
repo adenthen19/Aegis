@@ -93,7 +93,10 @@ export async function GET(
     ((event.adhoc_client_name as string | null) ?? null);
   const clientLogoUrl = clientRow?.logo_url ?? null;
 
+  // Pin to Asia/Kuala_Lumpur — Vercel runs in UTC and we need the
+  // "Generated" stamp to read in the firm's working timezone.
   const generatedAt = new Date().toLocaleString('en-GB', {
+    timeZone: 'Asia/Kuala_Lumpur',
     day: '2-digit',
     month: 'short',
     year: 'numeric',
