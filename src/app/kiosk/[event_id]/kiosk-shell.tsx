@@ -322,6 +322,7 @@ export default function KioskShell({
   requiresWalkInApproval,
   googleSheetId,
   userRole,
+  isAnonymousOperator,
 }: {
   eventId: string;
   eventName: string;
@@ -338,6 +339,10 @@ export default function KioskShell({
   googleSheetId: string | null;
   /** Logged-in operator's role; gates the Approve / Reject buttons. */
   userRole: UserRole;
+  /** True if the operator entered via the anonymous kiosk gate. Used to
+   *  route Exit through /login instead of dumping them into the backend
+   *  as a perpetual-member anonymous user. */
+  isAnonymousOperator: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -1397,6 +1402,7 @@ export default function KioskShell({
       {exitConfirmOpen && (
         <ExitConfirm
           eventId={eventId}
+          isAnonymousOperator={isAnonymousOperator}
           onCancel={() => setExitConfirmOpen(false)}
         />
       )}
@@ -2102,11 +2108,39 @@ function ToastError({
 
 function ExitConfirm({
   eventId,
+  isAnonymousOperator,
   onCancel,
 }: {
   eventId: string;
+  isAnonymousOperator: boolean;
   onCancel: () => void;
 }) {
+  // Two distinct exit shapes:
+  //
+  //   • Anonymous operator → sign out the anon session and bounce to
+  //     /login with a `next=/events/[id]` redirect. Without the sign-out
+  //     they'd land on the backend still wearing the kiosk-operator anon
+  //     JWT, which can't edit anything and just confuses real staff.
+  //
+  //   • Real signed-in admin → straight to /events/[id]. They already
+  //     have the right session; treat Exit as a navigation, not a
+  //     re-auth.
+  const router = useRouter();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleAnonExit() {
+    setSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Even if signOut fails (network), still send them to login —
+      // the proxy will catch any stale session there.
+    }
+    const next = `/events/${eventId}`;
+    router.push(`/login?next=${encodeURIComponent(next)}`);
+  }
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-end justify-center bg-aegis-navy/40 p-4 sm:items-center"
@@ -2115,27 +2149,39 @@ function ExitConfirm({
     >
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
         <h2 className="text-base font-semibold text-aegis-navy sm:text-lg">
-          Exit kiosk mode?
+          {isAnonymousOperator ? 'Hand over to staff?' : 'Exit kiosk mode?'}
         </h2>
         <p className="mt-1 text-sm text-aegis-gray-500">
-          You&apos;ll return to the event page. Anyone with this device will be
-          able to edit the event — close the browser if you&apos;re handing it
-          back to a guest.
+          {isAnonymousOperator
+            ? 'You’ll be signed out of the kiosk and sent to the login screen. A staff member can sign in there to open the event in the backend.'
+            : 'You’ll return to the event page. Anyone with this device will be able to edit the event — close the browser if you’re handing it back to a guest.'}
         </p>
         <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex h-11 items-center justify-center rounded-lg border border-aegis-gray-200 bg-white px-4 text-sm font-medium text-aegis-navy hover:bg-aegis-gray-50"
+            disabled={signingOut}
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-aegis-gray-200 bg-white px-4 text-sm font-medium text-aegis-navy hover:bg-aegis-gray-50 disabled:opacity-50"
           >
             Stay in kiosk
           </button>
-          <Link
-            href={`/events/${eventId}`}
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-aegis-orange px-4 text-sm font-semibold text-white hover:bg-aegis-orange-600"
-          >
-            Exit
-          </Link>
+          {isAnonymousOperator ? (
+            <button
+              type="button"
+              onClick={handleAnonExit}
+              disabled={signingOut}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-aegis-orange px-4 text-sm font-semibold text-white hover:bg-aegis-orange-600 disabled:opacity-60"
+            >
+              {signingOut ? 'Signing out…' : 'Sign out & go to login'}
+            </button>
+          ) : (
+            <Link
+              href={`/events/${eventId}`}
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-aegis-orange px-4 text-sm font-semibold text-white hover:bg-aegis-orange-600"
+            >
+              Exit
+            </Link>
+          )}
         </div>
       </div>
     </div>

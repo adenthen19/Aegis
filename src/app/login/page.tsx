@@ -2,11 +2,23 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+
+// Whitelist for the post-login `?next=` redirect. Without this, anyone
+// could craft a phishing link like /login?next=https://evil.com that
+// router.push would happily follow after a successful sign-in. We only
+// permit same-origin app paths.
+function safeNext(raw: string | null): string {
+  if (!raw) return '/dashboard';
+  if (!raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
+  return raw;
+}
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safeNext(searchParams.get('next'));
   const supabase = createClient();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -66,7 +78,7 @@ export default function LoginPage() {
       setError(error.message);
       return;
     }
-    router.push('/dashboard');
+    router.push(nextPath);
     router.refresh();
   }
 

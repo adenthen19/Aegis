@@ -29,6 +29,13 @@ export default async function KioskPage({
     return <KioskAnonGate eventId={event_id} />;
   }
 
+  // Anonymous kiosk operators have no email — that's the cheapest tell
+  // since Supabase's anon sign-in skips the email column on auth.users.
+  // We forward this so the kiosk's Exit button can send them to /login
+  // (where a real admin can sign in) instead of dumping them into the
+  // backend as a perpetually-anonymous "member".
+  const isAnonymousOperator = !me.email;
+
   const [eventRes, guestsRes, tablesRes] = await Promise.all([
     supabase
       .from('events')
@@ -79,6 +86,7 @@ export default async function KioskPage({
       requiresWalkInApproval={!!event.requires_walkin_approval}
       googleSheetId={event.google_sheet_id ?? null}
       userRole={me.role}
+      isAnonymousOperator={isAnonymousOperator}
     />
   );
 }
