@@ -5,92 +5,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-// A stylised top-down plan of an event floor: stage strip at the top,
-// round tables in five rows of seven, an aisle, two doors at the
-// bottom. Draws at very low contrast so it lives in the background as
-// atmosphere — the eye reads "Aegis runs floors" without the page
-// having to say so. Single SVG, no images, no orbs.
-function FloorScrim() {
-  // 5 × 7 grid of round-table dots, with the centre two of row 3
-  // dimmed to suggest an aisle.
-  const ROWS = 5;
-  const COLS = 7;
-  const tables: { x: number; y: number; aisle: boolean }[] = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const isAisle = r === 2 && (c === 3);
-      tables.push({
-        x: 80 + c * 70,
-        y: 200 + r * 70,
-        aisle: isAisle,
-      });
-    }
-  }
-  return (
-    <div
-      aria-hidden
-      className="pointer-events-none absolute inset-0 overflow-hidden"
-    >
-      <svg
-        viewBox="0 0 600 700"
-        preserveAspectRatio="xMidYMid slice"
-        className="h-full w-full text-white/[0.08]"
-        fill="none"
-        stroke="currentColor"
-      >
-        {/* Stage rectangle — the only filled element, in gold. */}
-        <rect
-          x="120"
-          y="80"
-          width="360"
-          height="44"
-          rx="4"
-          className="fill-aegis-gold/[0.10] stroke-aegis-gold/30"
-          strokeWidth="1"
-        />
-        <text
-          x="300"
-          y="108"
-          textAnchor="middle"
-          className="fill-aegis-gold/40"
-          style={{
-            font: '500 9px ui-sans-serif, system-ui',
-            letterSpacing: '0.24em',
-          }}
-        >
-          STAGE
-        </text>
-
-        {/* Round tables */}
-        {tables.map((t, i) => (
-          <circle
-            key={i}
-            cx={t.x}
-            cy={t.y}
-            r={t.aisle ? 0 : 14}
-            strokeWidth="1"
-          />
-        ))}
-
-        {/* Aisle line */}
-        <line
-          x1="290"
-          x2="290"
-          y1="160"
-          y2="600"
-          strokeWidth="0.5"
-          strokeDasharray="2 5"
-          className="text-white/[0.04]"
-        />
-
-        {/* Doors at the bottom */}
-        <rect x="180" y="640" width="60" height="6" strokeWidth="1" />
-        <rect x="360" y="640" width="60" height="6" strokeWidth="1" />
-      </svg>
-    </div>
-  );
-}
-
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -159,50 +73,41 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen w-full">
       {/* ─── Brand panel ─────────────────────────────────────────────
-          Distinctive but disciplined. One bold typographic moment
-          (the display headline) carried by a ballroom-floor diagram
-          that ties the brand to what the product actually does —
-          rather than the generic IR-stockphotography vibe of the
-          previous decoration soup. */}
-      <div className="relative hidden w-1/2 flex-col bg-aegis-navy text-white lg:flex">
-        {/* Single, purposeful visual: a stylised plan view of an event
-            floor — stage at the top, round tables in audience zones,
-            entrance at the bottom. Echoes the floor-plan canvas inside
-            the app so the login doesn't feel divorced from the product.
-            Drawn at low contrast so it's atmosphere, not decoration. */}
-        <FloorScrim />
+          Just navy + a typographic moment + a quiet footer. Removed
+          the floor-plan scrim — it was reading as "why is there a
+          seating chart on the login screen?" rather than thematic
+          atmosphere. The display headline carries the page on its
+          own. */}
+      <div className="hidden w-1/2 flex-col justify-between bg-aegis-navy px-14 py-12 text-white lg:flex">
+        <p className="text-[11px] uppercase tracking-[0.24em] text-aegis-blue-100/60">
+          Aegis Communication
+          <span className="ml-3 text-aegis-gold/80">·</span>
+          <span className="ml-3">Kuala Lumpur</span>
+        </p>
 
-        <div className="relative z-10 flex h-full flex-col justify-between px-14 py-12">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-aegis-blue-100/60">
-            Aegis Communication
-            <span className="ml-3 text-aegis-gold/80">·</span>
-            <span className="ml-3">Kuala Lumpur</span>
+        <div className="max-w-lg">
+          {/* Display type: large weight contrast in a single line.
+              Mixed semibold + light italic so the headline reads
+              like a designed mark, not a Tailwind default. */}
+          <h2 className="text-[64px] font-semibold leading-[0.95] tracking-[-0.02em]">
+            Run the
+            <span className="block font-light italic text-aegis-gold/95">
+              floor.
+            </span>
+          </h2>
+          <p className="mt-7 max-w-sm text-[15px] leading-relaxed text-aegis-blue-100/80">
+            The same screen our team reaches for at 06:00 on event
+            day — clients, analysts, media, kiosks, every guest at
+            every table.
           </p>
+        </div>
 
-          <div className="max-w-lg">
-            {/* Display type: large weight contrast in a single line.
-                Mixed semibold + light italic so the headline reads
-                like a designed mark, not a Tailwind default. */}
-            <h2 className="text-[64px] font-semibold leading-[0.95] tracking-[-0.02em]">
-              Run the
-              <span className="block font-light italic text-aegis-gold/95">
-                floor.
-              </span>
-            </h2>
-            <p className="mt-7 max-w-sm text-[15px] leading-relaxed text-aegis-blue-100/80">
-              The same screen our team reaches for at 06:00 on event
-              day — clients, analysts, media, kiosks, every guest at
-              every table.
-            </p>
+        <div className="flex items-end justify-between text-[11px] text-aegis-blue-100/55">
+          <div className="flex items-center gap-3">
+            <span className="h-px w-8 bg-aegis-gold/70" aria-hidden />
+            <span>© {new Date().getFullYear()} Aegis Communication</span>
           </div>
-
-          <div className="flex items-end justify-between text-[11px] text-aegis-blue-100/55">
-            <div className="flex items-center gap-3">
-              <span className="h-px w-8 bg-aegis-gold/70" aria-hidden />
-              <span>© {new Date().getFullYear()} Aegis Communication</span>
-            </div>
-            <span className="tabular-nums">v0.1</span>
-          </div>
+          <span className="tabular-nums">v0.1</span>
         </div>
       </div>
 
