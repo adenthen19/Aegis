@@ -81,8 +81,6 @@ export default function LoginPage() {
       <div className="hidden w-1/2 flex-col justify-between bg-aegis-navy px-14 py-12 text-white lg:flex">
         <p className="text-[11px] uppercase tracking-[0.24em] text-aegis-blue-100/60">
           Aegis Communication
-          <span className="ml-3 text-aegis-gold/80">·</span>
-          <span className="ml-3">Kuala Lumpur</span>
         </p>
 
         <div className="max-w-xl">
@@ -151,20 +149,9 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <label className="block text-xs font-medium uppercase tracking-[0.08em] text-aegis-gray-500">
-                  Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setError('Password reset is handled by IT support — please contact them to set a new password.')
-                  }
-                  className="text-xs text-aegis-navy hover:text-aegis-orange"
-                >
-                  Forgot?
-                </button>
-              </div>
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.08em] text-aegis-gray-500">
+                Password
+              </label>
               <input
                 type="password"
                 required
@@ -217,9 +204,27 @@ export default function LoginPage() {
             </button>
           </form>
 
+          {/* Footer help line — collects every "I'm stuck" path: forgot
+              password and any other sign-in trouble both route to IT,
+              so they sit side-by-side rather than the password reset
+              hiding up next to the password label. */}
           <p className="mt-10 text-center text-xs text-aegis-gray-500">
-            Need help signing in?{' '}
-            <a href="#" className="font-medium text-aegis-navy hover:text-aegis-orange">
+            <button
+              type="button"
+              onClick={() =>
+                setError(
+                  'Password reset is handled by IT support — please contact them to set a new password.',
+                )
+              }
+              className="font-medium text-aegis-navy hover:text-aegis-orange"
+            >
+              Forgot password?
+            </button>
+            <span className="mx-2 text-aegis-gray-300">·</span>
+            <a
+              href="#"
+              className="font-medium text-aegis-navy hover:text-aegis-orange"
+            >
               Contact IT
             </a>
           </p>
