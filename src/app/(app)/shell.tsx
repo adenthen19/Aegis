@@ -12,6 +12,7 @@ import DensityToggle from '@/components/density-toggle';
 import { displayEmail, displayName as formatName } from '@/lib/display-format';
 
 const STORAGE_KEY = 'aegis-sidebar-collapsed';
+const HIDDEN_STORAGE_KEY = 'aegis-sidebar-hidden';
 
 import type { UserRole } from '@/lib/types';
 
@@ -35,6 +36,11 @@ export default function Shell({
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  // Fully-hidden state — distinct from `collapsed`. Collapsed leaves
+  // the icon-only rail visible (64px); hidden tucks the sidebar
+  // off-screen entirely so the main content gets the full viewport
+  // width, with a small floating "show menu" pill to bring it back.
+  const [hidden, setHidden] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const pathname = usePathname();
@@ -44,15 +50,19 @@ export default function Shell({
   const friendlyName = niceDisplayName || niceEmail;
   const initial = (friendlyName || '?').charAt(0).toUpperCase();
 
-  // Restore desktop collapse preference
+  // Restore desktop collapse + hidden preferences
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(STORAGE_KEY) === '1');
+    setHidden(window.localStorage.getItem(HIDDEN_STORAGE_KEY) === '1');
   }, []);
 
-  // Persist desktop collapse preference
+  // Persist desktop collapse + hidden preferences
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
   }, [collapsed]);
+  useEffect(() => {
+    window.localStorage.setItem(HIDDEN_STORAGE_KEY, hidden ? '1' : '0');
+  }, [hidden]);
 
   // Auto-close mobile drawer on route change
   useEffect(() => {
@@ -127,10 +137,16 @@ export default function Shell({
           'fixed inset-y-0 left-0 z-50 flex w-64 flex-col overflow-hidden bg-gradient-to-b from-aegis-navy to-aegis-navy-800 text-white shadow-xl transition-[width,transform] duration-200 ease-out md:shadow-none',
           // below md: slide-in drawer triggered by hamburger
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          // md+: always visible; width depends on collapsed (iPad
-          // portrait at 768px gets the persistent sidebar — usually
-          // collapsed by default to leave room for content)
-          collapsed ? 'md:w-16 md:translate-x-0' : 'md:w-64 md:translate-x-0',
+          // md+: hidden translates fully off-screen; otherwise width
+          // depends on collapsed (iPad portrait at 768px gets the
+          // persistent sidebar — usually collapsed by default to
+          // leave room for content). The transform/width transition
+          // keeps the show/hide motion smooth.
+          hidden
+            ? 'md:-translate-x-full'
+            : collapsed
+              ? 'md:w-16 md:translate-x-0'
+              : 'md:w-64 md:translate-x-0',
         ].join(' ')}
       >
         {/* Atmospheric glow */}
@@ -206,36 +222,74 @@ export default function Shell({
           <SidebarNav collapsed={collapsed} role={role} />
         </div>
 
-        {/* ── Desktop collapse toggle ── */}
+        {/* ── Desktop collapse + hide toggles ──────────────────────
+            Two distinct controls:
+              • Collapse  → icon-only rail (still visible)
+              • Hide      → tucks the whole sidebar off-screen so the
+                             main content gets the full width. A small
+                             floating "show menu" pill brings it back.
+            Hide always renders its label even in collapsed mode (the
+            X icon is small enough to be ambiguous on its own). */}
         <div className="relative z-10 hidden border-t border-white/10 px-3 py-2 md:block">
-          <button
-            type="button"
-            onClick={() => setCollapsed((c) => !c)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          <div
             className={[
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-aegis-blue-100/60 transition-colors hover:bg-white/5 hover:text-white',
-              collapsed ? 'justify-center' : '',
+              'flex items-center gap-1',
+              collapsed ? 'flex-col' : '',
             ].join(' ')}
           >
-            <svg
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               className={[
-                'h-4 w-4 transition-transform duration-200',
-                collapsed ? 'rotate-180' : '',
+                'flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-xs text-aegis-blue-100/60 transition-colors hover:bg-white/5 hover:text-white',
+                collapsed ? 'w-full justify-center' : '',
               ].join(' ')}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
             >
-              <path d="M11 17l-5-5 5-5" />
-              <path d="M18 17l-5-5 5-5" />
-            </svg>
-            {!collapsed && <span>Collapse</span>}
-          </button>
+              <svg
+                className={[
+                  'h-4 w-4 transition-transform duration-200',
+                  collapsed ? 'rotate-180' : '',
+                ].join(' ')}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M11 17l-5-5 5-5" />
+                <path d="M18 17l-5-5 5-5" />
+              </svg>
+              {!collapsed && <span>Collapse</span>}
+            </button>
+            <button
+              type="button"
+              onClick={() => setHidden(true)}
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+              className={[
+                'inline-flex items-center justify-center rounded-md px-2 py-1.5 text-xs text-aegis-blue-100/60 transition-colors hover:bg-white/5 hover:text-white',
+                collapsed ? 'w-full' : '',
+              ].join(' ')}
+            >
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+              >
+                <path d="M19 12H5" />
+                <path d="M11 18l-6-6 6-6" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* ── User card ── */}
@@ -306,11 +360,40 @@ export default function Shell({
       />
       {needsOnboarding && <OnboardingDialog email={userEmail} />}
 
+      {/* ─── Floating "show menu" pill ───────────────────────────
+          Only renders at md+ when the sidebar is hidden. Sticky
+          to the viewport's top-left so it follows the user as they
+          scroll the page. One click brings the sidebar back. */}
+      {hidden && (
+        <button
+          type="button"
+          onClick={() => setHidden(false)}
+          aria-label="Show sidebar"
+          title="Show sidebar"
+          className="fixed left-3 top-3 z-40 hidden h-9 w-9 items-center justify-center rounded-md border border-aegis-gray-200 bg-white text-aegis-navy shadow-sm transition-colors hover:bg-aegis-gray-50 md:inline-flex"
+        >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+      )}
+
       {/* ─── Main ───────────────────────────────────────────────── */}
       <main
         className={[
           'transition-[padding] duration-200 ease-out',
-          collapsed ? 'md:pl-16' : 'md:pl-64',
+          // No left padding when the sidebar is hidden — main content
+          // gets the full viewport width.
+          hidden ? 'md:pl-0' : collapsed ? 'md:pl-16' : 'md:pl-64',
         ].join(' ')}
       >
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
