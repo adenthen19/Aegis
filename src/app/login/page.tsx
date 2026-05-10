@@ -85,20 +85,23 @@ export default function LoginPage() {
           <span className="ml-3">Kuala Lumpur</span>
         </p>
 
-        <div className="max-w-lg">
-          {/* Display type: large weight contrast in a single line.
-              Mixed semibold + light italic so the headline reads
-              like a designed mark, not a Tailwind default. */}
-          <h2 className="text-[64px] font-semibold leading-[0.95] tracking-[-0.02em]">
-            Run the
-            <span className="block font-light italic text-aegis-gold/95">
-              floor.
+        <div className="max-w-xl">
+          {/* Three service lines, each on its own row, separated by
+              a punctuation accent. Names the whole business — IR,
+              PR, capital-markets events — rather than zooming in on
+              one tactical slice. The semibold-then-light progression
+              gives the mark some weight contrast without leaning on
+              decoration. */}
+          <h2 className="text-[44px] font-semibold leading-[1.05] tracking-[-0.02em]">
+            Investor relations.
+            <span className="block">Public relations.</span>
+            <span className="block font-light text-aegis-gold/95">
+              Listings &amp; corporate events.
             </span>
           </h2>
           <p className="mt-7 max-w-sm text-[15px] leading-relaxed text-aegis-blue-100/80">
-            The same screen our team reaches for at 06:00 on event
-            day — clients, analysts, media, kiosks, every guest at
-            every table.
+            The Aegis team&apos;s working portal — every client mandate,
+            every release, every analyst, every event in one place.
           </p>
         </div>
 
