@@ -5,6 +5,58 @@ import { createClient } from '@/lib/supabase/server';
 import { assertDirectorOrAdmin } from '@/lib/auth';
 import type { GuestTier } from '@/lib/types';
 
+// ─────────────────────────────────────────────────────────────────────
+// Kiosk operator registration.
+//
+// The kiosk is open to anyone with the URL (no login screen). Visitors
+// sign in anonymously via Supabase, then call this action with their
+// typed name so the audit trail can attribute check-ins to a person.
+// We upsert a profile row with display_name + a kiosk-operator flag —
+// once that's set, the existing activity-feed JOIN on profiles picks
+// up the operator's name automatically with no further plumbing.
+// ─────────────────────────────────────────────────────────────────────
+export async function kioskRegisterOperatorAction(
+  name: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return {
+      ok: false,
+      error: 'No active kiosk session. Try refreshing the page.',
+    };
+  }
+
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: 'Name is required.' };
+  if (trimmed.length > 80) {
+    return { ok: false, error: 'Name is too long (max 80 chars).' };
+  }
+
+  // Upsert the profile. RLS already permits authenticated users to
+  // write their own profile (anon counts as authenticated). We set
+  // role explicitly to 'member' so an anon kiosk operator can never
+  // accidentally be promoted via this action.
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .upsert(
+      {
+        user_id: user.id,
+        display_name: trimmed,
+        role: 'member' as const,
+      },
+      { onConflict: 'user_id' },
+    );
+  if (profileErr) return { ok: false, error: profileErr.message };
+
+  // Mirror the name into auth user_metadata so any code that reads
+  // `user.user_metadata.display_name` (rather than profiles) shows the
+  // right thing too.
+  await supabase.auth.updateUser({ data: { display_name: trimmed } });
+
+  return { ok: true };
+}
+
 const VALID_TIERS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
 
 function normaliseTier(value: unknown): GuestTier {
