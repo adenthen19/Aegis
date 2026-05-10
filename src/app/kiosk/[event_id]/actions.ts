@@ -33,20 +33,17 @@ export async function kioskRegisterOperatorAction(
     return { ok: false, error: 'Name is too long (max 80 chars).' };
   }
 
-  // Upsert the profile. RLS already permits authenticated users to
-  // write their own profile (anon counts as authenticated). We set
-  // role explicitly to 'member' so an anon kiosk operator can never
-  // accidentally be promoted via this action.
+  // The profile row was created by the handle_new_user trigger
+  // (security definer, migration 0007) the moment the anon auth user
+  // was created — so we just update display_name on it. We deliberately
+  // avoid upsert here: there is no INSERT policy on profiles, so an
+  // INSERT path would be denied by RLS. The "self update profile"
+  // policy from migration 0012 permits this update because the row
+  // matches auth.uid().
   const { error: profileErr } = await supabase
     .from('profiles')
-    .upsert(
-      {
-        user_id: user.id,
-        display_name: trimmed,
-        role: 'member' as const,
-      },
-      { onConflict: 'user_id' },
-    );
+    .update({ display_name: trimmed })
+    .eq('user_id', user.id);
   if (profileErr) return { ok: false, error: profileErr.message };
 
   // Mirror the name into auth user_metadata so any code that reads
