@@ -588,8 +588,20 @@ export default function KioskShell({
       },
     );
 
+    // Polling fallback. Realtime can quietly stop delivering when the
+    // device sleeps, the WebSocket reconnect fails after a hand-off
+    // between Wi-Fi and cellular, or another tab in the same browser
+    // overwrites the session JWT and ours goes stale. A 15-second
+    // tick guarantees admin-side check-ins / undos surface on every
+    // kiosk within at most one polling interval, regardless of WS
+    // health.
+    const poll = setInterval(() => {
+      if (!cancelled) router.refresh();
+    }, 15_000);
+
     return () => {
       cancelled = true;
+      clearInterval(poll);
       authSub.subscription.unsubscribe();
       if (channel) supabase.removeChannel(channel);
     };
