@@ -35,8 +35,14 @@ export async function updateSession(request: NextRequest) {
 
     const { pathname } = request.nextUrl;
     const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/auth');
+    // The kiosk is an open route — it has its own anon-sign-in flow
+    // (KioskAnonGate). Without this exemption the proxy bounces every
+    // unauthenticated visitor to /login before the kiosk page can
+    // even render its gate, defeating the whole "no login required"
+    // architecture.
+    const isPublicRoute = pathname.startsWith('/kiosk');
 
-    if (!user && !isAuthRoute) {
+    if (!user && !isAuthRoute && !isPublicRoute) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
   } catch (err) {
