@@ -4,12 +4,29 @@ import { useMemo, useState } from 'react';
 import type { EventGuest } from '@/lib/types';
 import { displayCompany, displayName } from '@/lib/display-format';
 
+// Browse mode for the admin guest list. Mirrors the kiosk's three-way
+// breakdown so the admin can scan the same way an usher does:
+//   • all       — flat list, sortable (default; legacy view)
+//   • table     — grouped by table_number, "No table" bucket last
+//   • name      — flat alphabetical list with A/B/C letter dividers
+//   • company   — grouped by company, "No company" bucket last
+//
+// Pending walk-ins are NOT filtered (unlike the kiosk) — admins see the
+// full state including rows awaiting supervisor approval.
+type ViewMode = 'all' | 'table' | 'name' | 'company';
+
 type SortKey = 'default' | 'table' | 'name';
 
 const SORT_LABEL: Record<SortKey, string> = {
   default: 'Status, then name',
   table: 'Table number',
   name: 'Name (A → Z)',
+};
+
+type Group = {
+  key: string;
+  label: string;
+  guests: EventGuest[];
 };
 
 // Numeric tables sort numerically (Table 2 before Table 10), text falls
@@ -46,6 +63,87 @@ function sortGuests(guests: EventGuest[], key: SortKey): EventGuest[] {
   return copy;
 }
 
+// Build groups for the three grouped modes. Returns sections in the
+// natural reading order for each mode (numeric for table, alpha for
+// name + company), with the "no value" bucket always last.
+function groupGuests(guests: EventGuest[], mode: ViewMode): Group[] {
+  if (mode === 'all') return [];
+
+  if (mode === 'name') {
+    // Alphabetical sections — first letter of full_name, with non-letter
+    // first chars (digits, punctuation) bucketed under '#' at the end.
+    const sorted = [...guests].sort((a, b) =>
+      a.full_name.localeCompare(b.full_name, undefined, { numeric: true }),
+    );
+    const map = new Map<string, EventGuest[]>();
+    for (const g of sorted) {
+      const first = g.full_name.trim().charAt(0).toUpperCase();
+      const key = /^[A-Z]$/.test(first) ? first : '#';
+      const arr = map.get(key) ?? [];
+      arr.push(g);
+      map.set(key, arr);
+    }
+    const keys = Array.from(map.keys()).sort();
+    const idx = keys.indexOf('#');
+    if (idx > -1) {
+      keys.splice(idx, 1);
+      keys.push('#');
+    }
+    return keys.map((k) => ({
+      key: k,
+      label: k,
+      guests: map.get(k) ?? [],
+    }));
+  }
+
+  // table or company
+  const map = new Map<string, EventGuest[]>();
+  for (const g of guests) {
+    const raw =
+      mode === 'table' ? g.table_number?.trim() : g.company?.trim();
+    const key = raw && raw.length > 0 ? raw : '__none__';
+    const arr = map.get(key) ?? [];
+    arr.push(g);
+    map.set(key, arr);
+  }
+
+  const noneGuests = map.get('__none__');
+  map.delete('__none__');
+
+  const keys = Array.from(map.keys());
+  if (mode === 'table') {
+    keys.sort((a, b) => {
+      const an = Number.parseInt(a.replace(/\D+/g, ''), 10);
+      const bn = Number.parseInt(b.replace(/\D+/g, ''), 10);
+      if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) {
+        return an - bn;
+      }
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
+  } else {
+    keys.sort((a, b) => a.localeCompare(b));
+  }
+
+  const result: Group[] = keys.map((k) => ({
+    key: k,
+    label: mode === 'table' ? `Table ${k}` : displayCompany(k),
+    guests: (map.get(k) ?? [])
+      .slice()
+      .sort((a, b) => a.full_name.localeCompare(b.full_name)),
+  }));
+
+  if (noneGuests && noneGuests.length > 0) {
+    noneGuests.sort((a, b) => a.full_name.localeCompare(b.full_name));
+    result.push({
+      key: '__none__',
+      label: mode === 'table' ? 'No table' : 'No company',
+      guests: noneGuests,
+    });
+  }
+
+  return result;
+}
+
 export default function GuestListView({
   guests,
   onPick,
@@ -53,8 +151,14 @@ export default function GuestListView({
   guests: EventGuest[];
   onPick: (guest: EventGuest) => void;
 }) {
+  const [view, setView] = useState<ViewMode>('all');
   const [sortKey, setSortKey] = useState<SortKey>('default');
-  const sorted = useMemo(() => sortGuests(guests, sortKey), [guests, sortKey]);
+
+  const sortedFlat = useMemo(
+    () => sortGuests(guests, sortKey),
+    [guests, sortKey],
+  );
+  const groups = useMemo(() => groupGuests(guests, view), [guests, view]);
 
   if (guests.length === 0) {
     return (
@@ -66,27 +170,89 @@ export default function GuestListView({
 
   return (
     <>
-      <div className="flex items-center justify-end gap-2 border-b border-aegis-gray-100 px-4 py-2 text-[11px] sm:px-5">
-        <label
-          htmlFor="guest-sort"
-          className="font-medium uppercase tracking-[0.08em] text-aegis-gray-500"
+      {/* View picker — same orange-underline tab style as elsewhere in
+          the app. Sort is only meaningful on the flat "All" view; for
+          grouped views the in-group ordering is name-A→Z and the
+          group order is mode-specific (numeric for table, alpha for
+          letter / company), so we hide the sort dropdown there. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-aegis-gray-100 px-4 py-2 sm:px-5">
+        <div
+          role="tablist"
+          aria-label="Guest list view"
+          className="-mx-1 flex gap-1 overflow-x-auto px-1"
         >
-          Sort
-        </label>
-        <select
-          id="guest-sort"
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
-          className="rounded-md border border-aegis-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-aegis-navy outline-none focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
-        >
-          {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
-            <option key={k} value={k}>
-              {SORT_LABEL[k]}
-            </option>
+          {(
+            [
+              { key: 'all', label: 'All' },
+              { key: 'table', label: 'By table' },
+              { key: 'name', label: 'By name' },
+              { key: 'company', label: 'By company' },
+            ] as const
+          ).map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={[
+                'shrink-0 rounded-md px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] transition-colors',
+                view === key
+                  ? 'bg-aegis-navy text-white'
+                  : 'text-aegis-gray-500 hover:bg-aegis-gray-50 hover:text-aegis-navy',
+              ].join(' ')}
+            >
+              {label}
+            </button>
           ))}
-        </select>
+        </div>
+
+        {view === 'all' && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <label
+              htmlFor="guest-sort"
+              className="font-medium uppercase tracking-[0.08em] text-aegis-gray-500"
+            >
+              Sort
+            </label>
+            <select
+              id="guest-sort"
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              className="rounded-md border border-aegis-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-aegis-navy outline-none focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10"
+            >
+              {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+                <option key={k} value={k}>
+                  {SORT_LABEL[k]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
+      {view === 'all' ? (
+        <FlatList guests={sortedFlat} onPick={onPick} />
+      ) : (
+        <GroupedList groups={groups} onPick={onPick} />
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Flat list (the legacy view) — table on sm+, cards on mobile.
+// ─────────────────────────────────────────────────────────────────────
+
+function FlatList({
+  guests,
+  onPick,
+}: {
+  guests: EventGuest[];
+  onPick: (guest: EventGuest) => void;
+}) {
+  return (
+    <>
       <div className="hidden overflow-x-auto sm:block">
         <table className="w-full text-left text-sm">
           <thead>
@@ -99,71 +265,152 @@ export default function GuestListView({
             </tr>
           </thead>
           <tbody className="divide-y divide-aegis-gray-100">
-            {sorted.map((g) => (
-              <tr
-                key={g.guest_id}
-                onClick={() => onPick(g)}
-                className={[
-                  'cursor-pointer transition-colors',
-                  g.checked_in
-                    ? 'bg-emerald-50/40 hover:bg-emerald-50'
-                    : 'hover:bg-aegis-navy-50/40',
-                ].join(' ')}
-              >
-                <td className="px-5 py-3.5 font-medium text-aegis-navy">
-                  {displayName(g.full_name)}
-                </td>
-                <td className="px-5 py-3.5 text-aegis-gray">
-                  {g.title ? displayName(g.title) : '—'}
-                </td>
-                <td className="px-5 py-3.5 text-aegis-gray">
-                  {g.company ? displayCompany(g.company) : '—'}
-                </td>
-                <td className="px-5 py-3.5">
-                  <TableBadge value={g.table_number} />
-                </td>
-                <td className="px-5 py-3.5">
-                  <StatusPill checkedIn={g.checked_in} />
-                </td>
-              </tr>
+            {guests.map((g) => (
+              <GuestRow key={g.guest_id} guest={g} onPick={onPick} />
             ))}
           </tbody>
         </table>
       </div>
 
       <ul className="divide-y divide-aegis-gray-100 sm:hidden">
-        {sorted.map((g) => (
-          <li key={g.guest_id}>
-            <button
-              type="button"
-              onClick={() => onPick(g)}
-              className={[
-                'flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors',
-                g.checked_in ? 'bg-emerald-50/40' : 'hover:bg-aegis-navy-50/40',
-              ].join(' ')}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-aegis-navy">
-                  {displayName(g.full_name)}
-                </p>
-                <p className="text-[11px] text-aegis-gray-500">
-                  {[
-                    g.title ? displayName(g.title) : null,
-                    g.company ? displayCompany(g.company) : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || '—'}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <StatusPill checkedIn={g.checked_in} />
-                <TableBadge value={g.table_number} />
-              </div>
-            </button>
-          </li>
+        {guests.map((g) => (
+          <GuestCard key={g.guest_id} guest={g} onPick={onPick} />
         ))}
       </ul>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Grouped list — section header per group, same row UI underneath.
+// ─────────────────────────────────────────────────────────────────────
+
+function GroupedList({
+  groups,
+  onPick,
+}: {
+  groups: Group[];
+  onPick: (guest: EventGuest) => void;
+}) {
+  return (
+    <div>
+      {groups.map((group) => {
+        const checkedIn = group.guests.filter((g) => g.checked_in).length;
+        return (
+          <section key={group.key}>
+            <div className="sticky top-0 z-[1] flex items-baseline justify-between gap-2 border-b border-aegis-gray-100 bg-aegis-gray-50/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-aegis-gray-50/80 sm:px-5">
+              <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+                {group.label}
+              </h4>
+              <span className="text-[11px] tabular-nums text-aegis-gray-400">
+                {checkedIn}
+                <span className="opacity-60"> / </span>
+                {group.guests.length}
+              </span>
+            </div>
+
+            {/* Table on sm+ — but no thead inside groups, since the
+                section header already names the bucket. Keeps the
+                visual hierarchy tight (no repeated column headers). */}
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full text-left text-sm">
+                <tbody className="divide-y divide-aegis-gray-100">
+                  {group.guests.map((g) => (
+                    <GuestRow key={g.guest_id} guest={g} onPick={onPick} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <ul className="divide-y divide-aegis-gray-100 sm:hidden">
+              {group.guests.map((g) => (
+                <GuestCard key={g.guest_id} guest={g} onPick={onPick} />
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+// Shared row + card components so the flat and grouped views stay
+// visually identical at the leaf level.
+
+function GuestRow({
+  guest,
+  onPick,
+}: {
+  guest: EventGuest;
+  onPick: (guest: EventGuest) => void;
+}) {
+  return (
+    <tr
+      onClick={() => onPick(guest)}
+      className={[
+        'cursor-pointer transition-colors',
+        guest.checked_in
+          ? 'bg-emerald-50/40 hover:bg-emerald-50'
+          : 'hover:bg-aegis-navy-50/40',
+      ].join(' ')}
+    >
+      <td className="px-5 py-3.5 font-medium text-aegis-navy">
+        {displayName(guest.full_name)}
+      </td>
+      <td className="px-5 py-3.5 text-aegis-gray">
+        {guest.title ? displayName(guest.title) : '—'}
+      </td>
+      <td className="px-5 py-3.5 text-aegis-gray">
+        {guest.company ? displayCompany(guest.company) : '—'}
+      </td>
+      <td className="px-5 py-3.5">
+        <TableBadge value={guest.table_number} />
+      </td>
+      <td className="px-5 py-3.5">
+        <StatusPill checkedIn={guest.checked_in} />
+      </td>
+    </tr>
+  );
+}
+
+function GuestCard({
+  guest,
+  onPick,
+}: {
+  guest: EventGuest;
+  onPick: (guest: EventGuest) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onPick(guest)}
+        className={[
+          'flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors',
+          guest.checked_in
+            ? 'bg-emerald-50/40'
+            : 'hover:bg-aegis-navy-50/40',
+        ].join(' ')}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-aegis-navy">
+            {displayName(guest.full_name)}
+          </p>
+          <p className="text-[11px] text-aegis-gray-500">
+            {[
+              guest.title ? displayName(guest.title) : null,
+              guest.company ? displayCompany(guest.company) : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || '—'}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StatusPill checkedIn={guest.checked_in} />
+          <TableBadge value={guest.table_number} />
+        </div>
+      </button>
+    </li>
   );
 }
 
