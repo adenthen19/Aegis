@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import Modal from '@/components/ui/modal';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { FormActions, FormError } from '@/components/ui/form';
@@ -51,6 +53,75 @@ export default function GuestList({
   const [addOpen, setAddOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const router = useRouter();
+
+  // ─── Live sync from kiosk check-ins ───────────────────────────────
+  // The admin's event-detail page mirrors the kiosk's check-in state;
+  // without a realtime subscription, an usher's tap on the kiosk
+  // doesn't visibly update the admin's screen until the page is
+  // refreshed. We subscribe to event_guests changes for this event
+  // and call router.refresh() — which re-fetches the server component
+  // and rolls in the new state.
+  //
+  // RLS on event_guests is `for select to authenticated`, so the
+  // websocket needs the user's JWT. Without supabase.realtime.setAuth,
+  // the channel reaches SUBSCRIBED but RLS silently drops every event.
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+
+      channel = supabase
+        .channel(`event-detail-${eventId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_guests',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_guest_checkins',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .subscribe();
+    })();
+
+    // Token-refresh listener so a 60-minute admin session survives the
+    // hourly JWT rotation without losing realtime mid-shift.
+    const { data: authSub } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.access_token) {
+          supabase.realtime.setAuth(session.access_token);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [eventId, router]);
 
   // Re-resolve the selected guest from props on every render so the modal
   // reflects the latest server state after a check-in toggle.

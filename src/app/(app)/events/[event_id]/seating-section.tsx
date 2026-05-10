@@ -1,6 +1,8 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import Modal from '@/components/ui/modal';
 import { FormError, NumberField, SelectField, TextField } from '@/components/ui/form';
 import { Section } from '@/components/detail-shell';
@@ -72,6 +74,77 @@ export default function SeatingSection({
     () => buildTableRows(guests, tables, defaultCapacity),
     [guests, tables, defaultCapacity],
   );
+
+  // Live sync from kiosk check-ins, walk-ins, table edits, and floor
+  // plan saves. Without this, the seating tab is a stale snapshot at
+  // page load — an usher's tap on the kiosk wouldn't update the
+  // section totals, the per-table guest count, or the canvas. Same
+  // pattern as the kiosk's realtime hook (auth-aware, token-refresh
+  // listener), watching every event-scoped table the seating UI
+  // renders from.
+  const router = useRouter();
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token);
+      }
+      channel = supabase
+        .channel(`seating-${eventId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_guests',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_tables',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'event_room_markers',
+            filter: `event_id=eq.${eventId}`,
+          },
+          () => router.refresh(),
+        )
+        .subscribe();
+    })();
+
+    const { data: authSub } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.access_token) {
+          supabase.realtime.setAuth(session.access_token);
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      authSub.subscription.unsubscribe();
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [eventId, router]);
 
   const [defaultModalOpen, setDefaultModalOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);

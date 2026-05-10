@@ -248,12 +248,42 @@ export default function KioskBrowse({
                   </button>
                 )}
               </div>
-              <ul className="divide-y divide-aegis-gray-100 overflow-hidden rounded-xl border border-aegis-gray-100 bg-white">
-                {group.guests.map((g) => {
+              {/* Multi-column grid: 1 col on mobile, 2 on tablet, 3 on
+                  desktop. A 200-row list reads in 1/3 the scroll
+                  height on a desktop kiosk. Grid flows linearly
+                  (left → right → next row) so "section header then
+                  rows" still makes sense. Borders between rows are
+                  drawn per-cell rather than via divide-y so the
+                  column separators stay clean across breakpoints. */}
+              <ul className="grid grid-cols-1 overflow-hidden rounded-xl border border-aegis-gray-100 bg-white sm:grid-cols-2 xl:grid-cols-3">
+                {group.guests.map((g, idx) => {
                   const checked = isCheckedIn(g);
                   const isSelected = selected.has(g.guest_id);
                   return (
-                    <li key={g.guest_id}>
+                    <li
+                      key={g.guest_id}
+                      className={[
+                        // Mobile: every row except the first gets a
+                        // top border for separation.
+                        idx > 0 ? 'border-t border-aegis-gray-100' : '',
+                        // Tablet (2 cols): top border on rows beyond
+                        // the first PAIR.
+                        idx > 1 ? 'sm:border-t' : 'sm:border-t-0',
+                        idx % 2 === 1
+                          ? 'sm:border-l sm:border-aegis-gray-100'
+                          : '',
+                        // Desktop (3 cols): top border on rows beyond
+                        // the first TRIO; vertical separators between
+                        // columns 2 and 3 of each visual row. We reset
+                        // the 2-col tablet border choices at xl: so a
+                        // viewport that crosses the breakpoint doesn't
+                        // inherit the wrong dividers.
+                        idx > 2 ? 'xl:border-t' : 'xl:border-t-0',
+                        idx % 3 === 0
+                          ? 'xl:border-l-0'
+                          : 'xl:border-l xl:border-aegis-gray-100',
+                      ].join(' ')}
+                    >
                       <button
                         type="button"
                         disabled={pending}
@@ -269,7 +299,7 @@ export default function KioskBrowse({
                           }
                         }}
                         className={[
-                          'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors disabled:opacity-60 sm:px-5 sm:py-3',
+                          'flex h-full w-full items-center gap-2.5 px-3 py-2 text-left transition-colors disabled:opacity-60 sm:px-4',
                           checked
                             ? 'bg-emerald-50/60 hover:bg-emerald-50'
                             : isSelected
@@ -340,21 +370,28 @@ export default function KioskBrowse({
                             {GUEST_TIER_LABEL[g.tier]}
                           </span>
                         )}
+                        {/* Compact "checked-in" indicator: an emerald
+                            check disc rather than a chip with text.
+                            Pairs visually with the tier chip and saves
+                            ~32px per row — meaningful when the rows
+                            run two-up across a tablet. */}
                         {checked && (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-inset ring-emerald-200">
+                          <span
+                            aria-label="Checked in"
+                            className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white"
+                          >
                             <svg
                               className="h-3 w-3"
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
-                              strokeWidth="3"
+                              strokeWidth="3.5"
                               strokeLinecap="round"
                               strokeLinejoin="round"
                               aria-hidden
                             >
                               <path d="M5 12l5 5 9-11" />
                             </svg>
-                            In
                           </span>
                         )}
                       </button>
