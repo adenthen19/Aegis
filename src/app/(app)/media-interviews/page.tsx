@@ -11,6 +11,7 @@ import {
   type InterviewStatus,
   type MediaInterview,
 } from '@/lib/types';
+import { formatEventDateTime } from '@/lib/display-format';
 import { sanitizeIlikeTerm } from '@/lib/postgrest';
 
 const PAGE_SIZE = 25;
@@ -29,12 +30,9 @@ type Row = MediaInterview & {
   media_contacts: { full_name: string; company_name: string | null } | null;
 };
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
+// KL-timezone formatter — server-rendered, so plain toLocaleString
+// would emit UTC (8h off for the firm).
+const formatDateTime = (iso: string) => formatEventDateTime(iso);
 
 function outletLabel(row: Row): string {
   if (row.media_contacts) {

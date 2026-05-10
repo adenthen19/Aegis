@@ -6,7 +6,7 @@ import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import FilterTabs from '@/components/ui/filter-tabs';
 import type { ActionItem, Meeting } from '@/lib/types';
-import { displayCompany } from '@/lib/display-format';
+import { displayCompany, formatEventDateTime } from '@/lib/display-format';
 import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewMeeting from './new-meeting';
 import MeetingRowActions from './row-actions';
@@ -114,9 +114,7 @@ export default async function MeetingsPage({
                 href={`/meetings/${r.meeting_id}`}
                 className="tabular-nums font-medium text-aegis-navy hover:text-aegis-orange"
               >
-                {new Date(r.meeting_date).toLocaleString(undefined, {
-                  dateStyle: 'medium', timeStyle: 'short',
-                })}
+                {formatEventDateTime(r.meeting_date)}
               </Link>
             ),
           },

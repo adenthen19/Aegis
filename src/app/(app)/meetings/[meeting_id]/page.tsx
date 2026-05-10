@@ -5,7 +5,11 @@ import {
   Breadcrumbs, DetailHeader, EmptyMini, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
 import type { ActionItem, Meeting, Profile } from '@/lib/types';
-import { displayCompany, displayName } from '@/lib/display-format';
+import {
+  displayCompany,
+  displayName,
+  formatEventDateTime,
+} from '@/lib/display-format';
 import MeetingRowActions from '../row-actions';
 import ActionItemToggle from '../action-item-toggle';
 
@@ -58,8 +62,9 @@ export default async function MeetingDetailPage({
   const profilesList = profilesRes.data ?? [];
   const attendeeUserIds = meeting.meeting_attendees.map((a) => a.user_id);
 
-  const dateLabel = new Date(meeting.meeting_date).toLocaleString(undefined, {
-    dateStyle: 'full', timeStyle: 'short',
+  const dateLabel = formatEventDateTime(meeting.meeting_date, {
+    dateStyle: 'full',
+    timeStyle: 'short',
   });
   const isInternal = meeting.meeting_type === 'internal';
   const linked = [

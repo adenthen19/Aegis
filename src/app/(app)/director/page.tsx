@@ -10,7 +10,12 @@ import {
   type PressReleaseStatus,
   type ScheduleStatus,
 } from '@/lib/types';
-import { displayCompany, displayName } from '@/lib/display-format';
+import {
+  displayCompany,
+  displayName,
+  formatEventDate,
+  formatEventDateTime,
+} from '@/lib/display-format';
 import { currentBlackout } from '../clients/blackout-helpers';
 
 const PRESS_BADGE: Record<PressReleaseStatus, string> = {
@@ -28,16 +33,10 @@ const SCHEDULE_BADGE: Record<ScheduleStatus, string> = {
 };
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: 'medium' });
+  return formatEventDate(iso) || '—';
 }
 
-function fmtDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
+const fmtDateTime = (iso: string) => formatEventDateTime(iso);
 
 function daysFromNow(iso: string | null): number | null {
   if (!iso) return null;

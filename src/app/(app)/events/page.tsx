@@ -10,7 +10,11 @@ import {
   type EventRow,
   type EventStatus,
 } from '@/lib/types';
-import { displayCompany, displayName } from '@/lib/display-format';
+import {
+  displayCompany,
+  displayName,
+  formatEventDateTime,
+} from '@/lib/display-format';
 import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewEvent from './new-event';
 import EventRowActions from './row-actions';
@@ -32,12 +36,10 @@ type EventListRow = EventRow & {
   checked_in_count: number;
 };
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
+// Renders in KL timezone regardless of where the page is generated
+// (server / Vercel = UTC, browser = user's local tz). Without the
+// shared helper this displayed UTC times on the events list.
+const formatDate = (iso: string) => formatEventDateTime(iso);
 
 export default async function EventsPage({
   searchParams,

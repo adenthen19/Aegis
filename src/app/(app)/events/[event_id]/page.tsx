@@ -7,6 +7,7 @@ import {
   type EventRow,
   type EventTable,
 } from '@/lib/types';
+import { formatEventDateTime } from '@/lib/display-format';
 import GuestList from './guest-list';
 
 // Overview page: event metadata + guest list (with check-in tools).
@@ -21,12 +22,11 @@ export type CheckinFeedEntry = EventGuestCheckin & {
   performed_by_label: string | null;
 };
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'full',
-    timeStyle: 'short',
-  });
-}
+// Use the shared KL-timezone formatter so the event detail's date
+// matches what the kiosk shows (and what the user actually picked
+// in the form). Plain `toLocaleString` on the server runs in UTC.
+const formatDateTime = (iso: string) =>
+  formatEventDateTime(iso, { dateStyle: 'full', timeStyle: 'short' });
 
 export default async function EventOverviewPage({
   params,

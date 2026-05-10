@@ -163,3 +163,53 @@ export function displayEmail(raw: string | null | undefined): string {
   if (!raw) return '';
   return raw.trim().toLowerCase();
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Date / time — always render in the firm's working timezone.
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Server components run in UTC on Vercel. Calling `.toLocaleString()`
+// without a timezone option on the server emits UTC strings — so a 9:00 AM
+// Malaysia event ends up showing as 1:00 AM on the events list and detail
+// pages while client components (kiosk shell) render correctly because
+// they use the user's browser timezone.
+//
+// All user-facing date formatting should go through these helpers so the
+// output is consistent regardless of where it's rendered. We hardcode
+// Asia/Kuala_Lumpur because the firm + clients + venues are all in KL;
+// when that changes we'll wire it through to a per-user setting.
+//
+// Locale is pinned to en-GB for predictable formatting ("9 May 2026, 09:00")
+// instead of en-US which the server defaults to ("May 9, 2026, 9:00 AM").
+
+export const APP_TIMEZONE = 'Asia/Kuala_Lumpur';
+const APP_LOCALE = 'en-GB';
+
+export function formatEventDateTime(
+  iso: string | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString(APP_LOCALE, {
+    timeZone: APP_TIMEZONE,
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    ...options,
+  });
+}
+
+export function formatEventDate(
+  iso: string | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(APP_LOCALE, {
+    timeZone: APP_TIMEZONE,
+    dateStyle: 'medium',
+    ...options,
+  });
+}

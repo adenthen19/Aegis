@@ -27,7 +27,11 @@ import {
   type Profile,
   type ServiceTier,
 } from '@/lib/types';
-import { displayCompany, displayName } from '@/lib/display-format';
+import {
+  displayCompany,
+  displayName,
+  formatEventDateTime,
+} from '@/lib/display-format';
 import ClientRowActions from '../row-actions';
 import ActionItemToggle from '../../meetings/action-item-toggle';
 import NewTodo from '../../todos/new-todo';
@@ -692,9 +696,7 @@ export default async function ClientDetailPage({
                             href={`/meetings/${m.meeting_id}`}
                             className="text-xs font-medium tabular-nums text-aegis-navy hover:text-aegis-orange"
                           >
-                            {new Date(m.meeting_date).toLocaleString(undefined, {
-                              dateStyle: 'medium', timeStyle: 'short',
-                            })}
+                            {formatEventDateTime(m.meeting_date)}
                           </Link>
                           <span className="text-aegis-gray-200">·</span>
                           <span className="text-[11px] uppercase tracking-wide text-aegis-gray-500">
