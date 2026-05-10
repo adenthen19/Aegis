@@ -292,13 +292,19 @@ function GroupedList({
   groups: Group[];
   onPick: (guest: EventGuest) => void;
 }) {
+  // Grouped views (by table / by name / by company) used to render the
+  // same wide 5-column table as the All view, which made each group eat
+  // an entire screen-width of vertical space — scrolling 200 guests
+  // through 30+ groups was painful. Switch to a compact card grid:
+  // 1 column on mobile, 2 on tablet, 3 on desktop. Keeps the section
+  // header but lets ~3× as many guests fit per screen.
   return (
-    <div>
+    <div className="divide-y divide-aegis-gray-100">
       {groups.map((group) => {
         const checkedIn = group.guests.filter((g) => g.checked_in).length;
         return (
-          <section key={group.key}>
-            <div className="sticky top-0 z-[1] flex items-baseline justify-between gap-2 border-b border-aegis-gray-100 bg-aegis-gray-50/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-aegis-gray-50/80 sm:px-5">
+          <section key={group.key} className="px-4 py-3 sm:px-5">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
               <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
                 {group.label}
               </h4>
@@ -309,28 +315,69 @@ function GroupedList({
               </span>
             </div>
 
-            {/* Table on sm+ — but no thead inside groups, since the
-                section header already names the bucket. Keeps the
-                visual hierarchy tight (no repeated column headers). */}
-            <div className="hidden overflow-x-auto sm:block">
-              <table className="w-full text-left text-sm">
-                <tbody className="divide-y divide-aegis-gray-100">
-                  {group.guests.map((g) => (
-                    <GuestRow key={g.guest_id} guest={g} onPick={onPick} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <ul className="divide-y divide-aegis-gray-100 sm:hidden">
+            <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
               {group.guests.map((g) => (
-                <GuestCard key={g.guest_id} guest={g} onPick={onPick} />
+                <CompactGuestCard
+                  key={g.guest_id}
+                  guest={g}
+                  onPick={onPick}
+                />
               ))}
             </ul>
           </section>
         );
       })}
     </div>
+  );
+}
+
+// Compact card used in the grouped views. Tighter than GuestCard so
+// three fit comfortably side-by-side without truncating long names —
+// status pill + table badge are stacked on the right rather than the
+// row spreading horizontally.
+function CompactGuestCard({
+  guest,
+  onPick,
+}: {
+  guest: EventGuest;
+  onPick: (guest: EventGuest) => void;
+}) {
+  const meta = [
+    guest.title ? displayName(guest.title) : null,
+    guest.company ? displayCompany(guest.company) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onPick(guest)}
+        className={[
+          'flex w-full items-start justify-between gap-2 rounded-md border px-3 py-2 text-left transition-colors',
+          guest.checked_in
+            ? 'border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50'
+            : 'border-aegis-gray-100 bg-white hover:border-aegis-navy-100 hover:bg-aegis-navy-50/40',
+        ].join(' ')}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-aegis-navy">
+            {displayName(guest.full_name)}
+          </p>
+          {meta && (
+            <p className="truncate text-[11px] text-aegis-gray-500">
+              {meta}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StatusPill checkedIn={guest.checked_in} />
+          {guest.table_number && (
+            <TableBadge value={guest.table_number} />
+          )}
+        </div>
+      </button>
+    </li>
   );
 }
 

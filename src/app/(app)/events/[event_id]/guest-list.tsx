@@ -56,16 +56,22 @@ export default function GuestList({
   const router = useRouter();
 
   // ─── Live sync from kiosk check-ins ───────────────────────────────
-  // The admin's event-detail page mirrors the kiosk's check-in state;
-  // without a realtime subscription, an usher's tap on the kiosk
-  // doesn't visibly update the admin's screen until the page is
-  // refreshed. We subscribe to event_guests changes for this event
-  // and call router.refresh() — which re-fetches the server component
-  // and rolls in the new state.
+  // The admin's event-detail page mirrors the kiosk's check-in state.
+  // Two paths keep it fresh:
   //
-  // RLS on event_guests is `for select to authenticated`, so the
-  // websocket needs the user's JWT. Without supabase.realtime.setAuth,
-  // the channel reaches SUBSCRIBED but RLS silently drops every event.
+  //   1. Realtime postgres_changes → instant updates when both sides
+  //      share a working WebSocket and a healthy session JWT. RLS on
+  //      event_guests is `for select to authenticated`, so we push the
+  //      access token onto realtime before subscribing — without it the
+  //      channel reaches SUBSCRIBED but RLS silently drops every event.
+  //
+  //   2. 15-second polling fallback → unconditional. Realtime can quietly
+  //      stop delivering when the admin's session JWT goes stale (which
+  //      happens if the same browser opens the kiosk in another tab and
+  //      the kiosk's anonymous sign-in overwrites the shared auth cookie),
+  //      or when the network drops the WS without a clean reconnect.
+  //      Polling guarantees that "live" state is never more than ~15s
+  //      behind, even if the channel has gone dead.
   useEffect(() => {
     const supabase = createClient();
     let cancelled = false;
@@ -116,8 +122,16 @@ export default function GuestList({
       },
     );
 
+    // Polling fallback. Cheap — Next.js's RSC fetch is incremental and
+    // we already paid for the page render. 15s feels live enough for a
+    // door-control UI without hammering the server.
+    const poll = setInterval(() => {
+      if (!cancelled) router.refresh();
+    }, 15_000);
+
     return () => {
       cancelled = true;
+      clearInterval(poll);
       authSub.subscription.unsubscribe();
       if (channel) supabase.removeChannel(channel);
     };
