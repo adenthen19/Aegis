@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { CheckinFeedEntry } from './page';
 import {
   EVENT_CHECKIN_SOURCE_LABEL,
@@ -8,6 +8,8 @@ import {
   type EventGuest,
 } from '@/lib/types';
 import PushToSheetButton from './push-to-sheet-button';
+
+type ReportTab = 'company' | 'table' | 'activity';
 
 // Activity feed micro-copy. Slots into "<guest_name> <verb> by <user>".
 const ACTIVITY_VERB: Record<EventCheckinAction, string> = {
@@ -60,6 +62,12 @@ export default function GuestReport({
   const checkedIn = guests.filter((g) => g.checked_in).length;
   const pending = total - checkedIn;
   const pct = total === 0 ? 0 : Math.round((checkedIn / total) * 100);
+
+  // Sub-tab inside the report. Defaults to "By company" — the most
+  // commonly-asked question post-event ("which firms turned up?"). The
+  // stat cards + attendance bar above the tabs stay visible on every
+  // tab so the host always sees the headline numbers.
+  const [tab, setTab] = useState<ReportTab>('company');
 
   // Per-company breakdown — useful for spotting which firms turned up.
   // Anything without a company is grouped as "Independent / unknown".
@@ -163,54 +171,98 @@ export default function GuestReport({
         </div>
       )}
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <section>
-          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
-            By company
-          </h4>
-          {byCompany.length === 0 ? (
-            <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
-              No guests yet.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-md border border-aegis-gray-100">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-aegis-gray-50/60 text-[10px] uppercase tracking-[0.08em] text-aegis-gray-500">
-                  <tr>
-                    <th className="px-3 py-2 font-semibold">Company</th>
-                    <th className="px-3 py-2 text-right font-semibold">In / total</th>
-                    <th className="px-3 py-2 text-right font-semibold">%</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-aegis-gray-100">
-                  {byCompany.map((row) => {
-                    const rowPct =
-                      row.total === 0
-                        ? 0
-                        : Math.round((row.checkedIn / row.total) * 100);
-                    return (
-                      <tr key={row.company}>
-                        <td className="px-3 py-2 text-aegis-gray">{row.company}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-aegis-gray">
-                          <span className="font-medium text-aegis-navy">
-                            {row.checkedIn}
-                          </span>
-                          <span className="text-aegis-gray-300"> / {row.total}</span>
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-aegis-gray-500">
-                          {rowPct}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+      {/* ── Sub-tabs ────────────────────────────────────────────────
+          Three categories — By company, By table, Recent activity —
+          used to render stacked. The page got long and the host had
+          to scroll a lot to find the section they wanted. Tabs let
+          them jump straight to whichever breakdown matters and keep
+          the rest hidden. */}
+      <div
+        role="tablist"
+        aria-label="Report breakdowns"
+        className="mt-6 -mx-1 flex gap-1 overflow-x-auto border-b border-aegis-gray-100 px-1"
+      >
+        {(
+          [
+            { key: 'company', label: 'By company' },
+            { key: 'table', label: 'By table' },
+            { key: 'activity', label: 'Recent activity' },
+          ] as const
+        ).map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={[
+              '-mb-px shrink-0 border-b-2 px-3 py-2.5 text-xs font-medium uppercase tracking-[0.06em] transition-colors',
+              tab === key
+                ? 'border-aegis-orange text-aegis-navy'
+                : 'border-transparent text-aegis-gray-500 hover:text-aegis-navy',
+            ].join(' ')}
+          >
+            {label}
+            {key === 'activity' && (
+              <span className="ml-1.5 text-aegis-gray-300 tabular-nums">
+                {activity.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-        {byTable.length > 0 && (
-          <section className="lg:col-span-2">
+      <div className="mt-4">
+        {tab === 'company' && (
+          <section>
+            {byCompany.length === 0 ? (
+              <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
+                No guests yet.
+              </p>
+            ) : (
+              // CSS columns flow top-to-bottom, then jump to col 2 —
+              // preserves the descending-by-total reading order. Each
+              // row is `break-inside-avoid` so a single firm never
+              // splits across the column boundary.
+              <div className="columns-1 gap-x-6 sm:columns-2">
+                {byCompany.map((row) => {
+                  const rowPct =
+                    row.total === 0
+                      ? 0
+                      : Math.round((row.checkedIn / row.total) * 100);
+                  return (
+                    <div
+                      key={row.company}
+                      className="flex break-inside-avoid items-baseline justify-between gap-3 border-b border-aegis-gray-100 py-2 text-sm"
+                    >
+                      <span className="min-w-0 truncate text-aegis-gray">
+                        {row.company}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        <span className="font-medium text-aegis-navy">
+                          {row.checkedIn}
+                        </span>
+                        <span className="text-aegis-gray-300"> / {row.total}</span>
+                        <span className="ml-2 inline-block w-9 text-right text-[11px] text-aegis-gray-500">
+                          {rowPct}%
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === 'table' && byTable.length === 0 && (
+          <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
+            No guests assigned to tables yet.
+          </p>
+        )}
+
+        {tab === 'table' && byTable.length > 0 && (
+          <section>
             <div className="mb-2 flex items-center justify-between">
               <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
                 By table
@@ -334,15 +386,8 @@ export default function GuestReport({
           </section>
         )}
 
+        {tab === 'activity' && (
         <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
-              Recent activity
-            </h4>
-            <span className="text-[10px] uppercase tracking-[0.08em] text-aegis-gray-400">
-              {activity.length} entr{activity.length === 1 ? 'y' : 'ies'}
-            </span>
-          </div>
           {activity.length === 0 ? (
             <p className="rounded-md border border-dashed border-aegis-gray-200 bg-aegis-gray-50/40 px-4 py-6 text-center text-xs text-aegis-gray-500">
               No check-in activity yet — the audit feed shows kiosk and admin
@@ -405,6 +450,7 @@ export default function GuestReport({
             </ul>
           )}
         </section>
+        )}
       </div>
     </div>
   );
