@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { createClient } from '@/lib/supabase/server';
 import {
   EVENT_CHECKIN_ACTION_LABEL,
+  GUEST_TIER_LABEL,
   type EventCheckinAction,
   type EventCheckinSource,
   type EventGuest,
@@ -13,6 +14,11 @@ import {
   displayName,
   displayPhone,
 } from '@/lib/display-format';
+import {
+  applyExportFilter,
+  describeExportFilter,
+  parseExportFilter,
+} from '@/lib/event-export-filter';
 
 type AuditRow = {
   performed_at: string;
@@ -62,7 +68,7 @@ function fmtDate(iso: string): string {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ event_id: string }> },
 ) {
   const supabase = await createClient();
@@ -70,6 +76,8 @@ export async function GET(
   if (!user) return new Response('Unauthorized', { status: 401 });
 
   const { event_id } = await params;
+  const filter = parseExportFilter(req.url);
+  const filterLabel = describeExportFilter(filter, GUEST_TIER_LABEL);
 
   const { data: event, error: eventErr } = await supabase
     .from('events')
@@ -90,33 +98,41 @@ export async function GET(
   const { data: auditRaw } = await supabase
     .from('event_guest_checkins')
     .select(
-      'performed_at, action, source,'
+      'performed_at, action, source, guest_id,'
         + ' event_guests ( full_name, company ),'
         + ' profiles:performed_by_user_id ( display_name, email )',
     )
     .eq('event_id', event_id)
     .order('performed_at', { ascending: true });
 
+  const rows = applyExportFilter((guests ?? []) as EventGuest[], filter);
+
+  // Audit log mirrors the guest filter so the Activity Log sheet only
+  // surfaces actions on guests that made it into the Guest List sheet —
+  // otherwise a filtered export would carry contextless rows.
+  const filteredGuestIds = new Set(rows.map((g) => g.guest_id));
   const audit: AuditRow[] = (
     (auditRaw ?? []) as unknown as Array<
       Pick<EventGuestCheckin, 'performed_at' | 'action' | 'source'> & {
+        guest_id: string;
         event_guests: { full_name: string; company: string | null } | null;
         profiles: { display_name: string | null; email: string } | null;
       }
     >
-  ).map((row) => ({
-    performed_at: row.performed_at,
-    action: row.action,
-    source: row.source,
-    guest_name: row.event_guests?.full_name ?? null,
-    guest_company: row.event_guests?.company ?? null,
-    performed_by_label:
-      row.profiles?.display_name?.trim() ||
-      row.profiles?.email ||
-      null,
-  }));
+  )
+    .filter((row) => filteredGuestIds.has(row.guest_id))
+    .map((row) => ({
+      performed_at: row.performed_at,
+      action: row.action,
+      source: row.source,
+      guest_name: row.event_guests?.full_name ?? null,
+      guest_company: row.event_guests?.company ?? null,
+      performed_by_label:
+        row.profiles?.display_name?.trim() ||
+        row.profiles?.email ||
+        null,
+    }));
 
-  const rows = (guests ?? []) as EventGuest[];
   const total = rows.length;
   const checkedIn = rows.filter((g) => g.checked_in).length;
   const pending = total - checkedIn;
@@ -170,6 +186,11 @@ export async function GET(
     r.getCell(1).font = { bold: true, color: { argb: COLORS.gray400 } };
     r.getCell(2).alignment = { wrapText: true, vertical: 'top' };
     r.height = Math.min(120, 18 + Math.ceil((event.description as string).length / 60) * 14);
+  }
+  if (filterLabel) {
+    const r = summary.addRow(['Filter applied', filterLabel]);
+    r.getCell(1).font = { bold: true, color: { argb: COLORS.gray400 } };
+    r.getCell(2).font = { italic: true, color: { argb: COLORS.orange } };
   }
 
   summary.addRow([]);
@@ -256,6 +277,7 @@ export async function GET(
     { header: 'Company', key: 'company', width: 28 },
     { header: 'Email', key: 'email', width: 28 },
     { header: 'Contact number', key: 'contact_number', width: 18 },
+    { header: 'Tier', key: 'tier', width: 10 },
     { header: 'Table', key: 'table_number', width: 8 },
     { header: 'Status', key: 'status', width: 14 },
     { header: 'Checked in at', key: 'checked_in_at', width: 18 },
@@ -285,6 +307,7 @@ export async function GET(
       company: g.company ? displayCompany(g.company) : '',
       email: displayEmail(g.email),
       contact_number: g.contact_number ? displayPhone(g.contact_number) : '',
+      tier: GUEST_TIER_LABEL[g.tier],
       table_number: g.table_number ?? '',
       status: g.checked_in ? 'Checked in' : 'Pending',
       checked_in_at: g.checked_in_at

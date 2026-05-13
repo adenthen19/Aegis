@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { createClient } from '@/lib/supabase/server';
 import { EventAttendancePdf } from '@/lib/pdf/event-attendance-pdf';
-import type { EventGuest } from '@/lib/types';
+import { GUEST_TIER_LABEL, type EventGuest } from '@/lib/types';
+import {
+  applyExportFilter,
+  describeExportFilter,
+  parseExportFilter,
+} from '@/lib/event-export-filter';
 
 // React-PDF needs Node APIs (fs, stream, fonts) — keep this off the Edge.
 export const runtime = 'nodejs';
@@ -53,7 +58,7 @@ function safeFilename(name: string): string {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ event_id: string }> },
 ) {
   const supabase = await createClient();
@@ -61,6 +66,8 @@ export async function GET(
   if (!user) return new Response('Unauthorized', { status: 401 });
 
   const { event_id } = await params;
+  const filter = parseExportFilter(req.url);
+  const filterLabel = describeExportFilter(filter, GUEST_TIER_LABEL);
 
   const { data: event, error: eventErr } = await supabase
     .from('events')
@@ -110,6 +117,11 @@ export async function GET(
     fetchClientLogo(clientLogoUrl),
   ]);
 
+  const filteredGuests = applyExportFilter(
+    (guests ?? []) as EventGuest[],
+    filter,
+  );
+
   const buffer = await renderToBuffer(
     EventAttendancePdf({
       event: {
@@ -119,7 +131,8 @@ export async function GET(
         description: (event.description as string | null) ?? null,
         clientLabel,
       },
-      guests: (guests ?? []) as EventGuest[],
+      guests: filteredGuests,
+      filterLabel,
       generatedAt,
       generatedBy: user.email ?? 'Aegis',
       logo,

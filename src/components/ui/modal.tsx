@@ -52,16 +52,31 @@ function unlockBodyScroll() {
 export default function Modal({
   open, onClose, title, description, children, dismissible = true, size = 'lg',
 }: Props) {
-  // Body scroll lock + (optional) ESC-to-close
+  // Body scroll lock — depends ONLY on `open`. If we also depended on
+  // `onClose` here, every parent re-render that recreates the callback
+  // (e.g. GuestList polls every 15s and refreshes via realtime, churning
+  // its `() => setAddOpen(false)` arrow) would cycle unlock→lock. During
+  // the unlock half of that cycle savedBodyOverflow gets re-captured —
+  // and if any code reads body.style.overflow while it's transiently
+  // 'hidden' (or another lock briefly co-exists), the saved value sticks
+  // as 'hidden' and the page stays scroll-locked after the modal closes.
   useEffect(() => {
     if (!open) return;
     lockBodyScroll();
+    return () => {
+      unlockBodyScroll();
+    };
+  }, [open]);
+
+  // ESC-to-close lives in its own effect so it can depend on onClose +
+  // dismissible without disturbing the scroll lock above.
+  useEffect(() => {
+    if (!open || !dismissible) return;
     const onKey = (e: KeyboardEvent) => {
-      if (dismissible && e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      unlockBodyScroll();
       window.removeEventListener('keydown', onKey);
     };
   }, [open, onClose, dismissible]);

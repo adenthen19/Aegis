@@ -123,6 +123,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
     color: COLORS.navy,
   },
+  filterChip: {
+    marginTop: 4,
+    fontSize: 9.5,
+    color: COLORS.orange,
+    fontFamily: 'Helvetica-Oblique',
+  },
   clientLogoBox: {
     width: 80,
     height: 56,
@@ -355,6 +361,11 @@ export type EventAttendancePdfProps = {
     clientLabel: string | null;
   };
   guests: EventGuest[];
+  /** Human-readable description of any export-time filter (tier / table)
+   *  that was applied — surfaced under the event subline so a downstream
+   *  reader can tell the report is a slice, not the full list. Null
+   *  when no filter is active. */
+  filterLabel?: string | null;
   generatedAt: string;
   generatedBy: string;
   logo?: Buffer | null;
@@ -364,6 +375,7 @@ export type EventAttendancePdfProps = {
 export function EventAttendancePdf({
   event,
   guests,
+  filterLabel,
   generatedAt,
   generatedBy,
   logo,
@@ -441,6 +453,9 @@ export function EventAttendancePdf({
               {fmtDate(event.event_date)}
               {event.location ? `  ·  ${event.location}` : ''}
             </Text>
+            {filterLabel && (
+              <Text style={styles.filterChip}>Filtered: {filterLabel}</Text>
+            )}
           </View>
           {clientLogo && (
             <View style={styles.clientLogoBox}>

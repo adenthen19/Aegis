@@ -1,8 +1,13 @@
 import { createClient } from '@/lib/supabase/server';
 import { csvEscape } from '@/lib/csv';
+import {
+  applyExportFilter,
+  parseExportFilter,
+} from '@/lib/event-export-filter';
+import type { EventGuest } from '@/lib/types';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ event_id: string }> },
 ) {
   const supabase = await createClient();
@@ -10,6 +15,7 @@ export async function GET(
   if (!user) return new Response('Unauthorized', { status: 401 });
 
   const { event_id } = await params;
+  const filter = parseExportFilter(req.url);
 
   const { data: event, error: eventErr } = await supabase
     .from('events')
@@ -19,14 +25,16 @@ export async function GET(
   if (eventErr) return new Response(`Database error: ${eventErr.message}`, { status: 500 });
   if (!event) return new Response('Event not found', { status: 404 });
 
+  // Pull the full guest row so the shared filter helper has tier + table
+  // available; we only emit the export columns below.
   const { data: guests, error: guestErr } = await supabase
     .from('event_guests')
-    .select(
-      'full_name, title, company, contact_number, email, table_number, checked_in, checked_in_at, notes',
-    )
+    .select('*')
     .eq('event_id', event_id)
     .order('full_name', { ascending: true });
   if (guestErr) return new Response(`Database error: ${guestErr.message}`, { status: 500 });
+
+  const filtered = applyExportFilter((guests ?? []) as EventGuest[], filter);
 
   const headers = [
     'full_name',
@@ -35,24 +43,26 @@ export async function GET(
     'contact_number',
     'email',
     'table_number',
+    'tier',
     'checked_in',
     'checked_in_at',
     'notes',
   ] as const;
 
   const lines = [headers.join(',')];
-  for (const g of guests ?? []) {
+  for (const g of filtered) {
     lines.push(
       [
-        csvEscape((g.full_name as string) ?? ''),
-        csvEscape((g.title as string | null) ?? ''),
-        csvEscape((g.company as string | null) ?? ''),
-        csvEscape((g.contact_number as string | null) ?? ''),
-        csvEscape((g.email as string | null) ?? ''),
-        csvEscape((g.table_number as string | null) ?? ''),
+        csvEscape(g.full_name ?? ''),
+        csvEscape(g.title ?? ''),
+        csvEscape(g.company ?? ''),
+        csvEscape(g.contact_number ?? ''),
+        csvEscape(g.email ?? ''),
+        csvEscape(g.table_number ?? ''),
+        csvEscape(g.tier ?? ''),
         g.checked_in ? 'true' : 'false',
-        csvEscape((g.checked_in_at as string | null) ?? ''),
-        csvEscape((g.notes as string | null) ?? ''),
+        csvEscape(g.checked_in_at ?? ''),
+        csvEscape(g.notes ?? ''),
       ].join(','),
     );
   }

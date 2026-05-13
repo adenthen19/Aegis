@@ -57,7 +57,8 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(git stash *)",
       "Bash(echo \"TSC EXIT: $?\")",
-      "Bash(echo \"TSC: $?\")"
+      "Bash(echo \"TSC: $?\")",
+      "Bash(echo \"EXIT $?\")"
     ]
   }
 }

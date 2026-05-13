@@ -4,10 +4,15 @@ import { useMemo, useState } from 'react';
 import type { CheckinFeedEntry } from './page';
 import {
   EVENT_CHECKIN_SOURCE_LABEL,
+  GUEST_TIER_LABEL,
   type EventCheckinAction,
   type EventGuest,
+  type GuestTier,
 } from '@/lib/types';
+import { NO_TABLE_SENTINEL } from '@/lib/event-export-filter';
 import PushToSheetButton from './push-to-sheet-button';
+
+const ALL_TIERS: GuestTier[] = ['vip', 'analyst', 'kol', 'media', 'standard'];
 
 type ReportTab = 'company' | 'table' | 'activity';
 
@@ -58,6 +63,77 @@ export default function GuestReport({
   googleConnected: boolean;
   googleEmail: string | null;
 }) {
+  // Export filter — selected tier(s) / table(s). Empty set = "no filter
+  // on this dimension" (the API treats a missing param the same way).
+  // The summary stat cards stay on the full event so the host can see
+  // the unfiltered headline numbers above the filtered downloads.
+  const [selectedTiers, setSelectedTiers] = useState<Set<GuestTier>>(
+    () => new Set(),
+  );
+  const [selectedTables, setSelectedTables] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // Distinct tables present in this event's guest list — used to render
+  // the table filter checklist. NO_TABLE_SENTINEL covers unassigned
+  // guests as its own selectable group.
+  const tableOptions = useMemo(() => {
+    const set = new Set<string>();
+    let hasNone = false;
+    for (const g of guests) {
+      const t = g.table_number?.trim();
+      if (t && t.length > 0) set.add(t);
+      else hasNone = true;
+    }
+    const arr = Array.from(set).sort((a, b) => {
+      const an = Number(a);
+      const bn = Number(b);
+      if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
+      return a.localeCompare(b);
+    });
+    if (hasNone) arr.push(NO_TABLE_SENTINEL);
+    return arr;
+  }, [guests]);
+
+  const filterQuery = useMemo(() => {
+    const sp = new URLSearchParams();
+    if (selectedTiers.size > 0) {
+      sp.set('tiers', Array.from(selectedTiers).join(','));
+    }
+    if (selectedTables.size > 0) {
+      sp.set('tables', Array.from(selectedTables).join(','));
+    }
+    const s = sp.toString();
+    return s ? `?${s}` : '';
+  }, [selectedTiers, selectedTables]);
+
+  // Live count so the host knows roughly how many rows the export will
+  // contain before they click download.
+  const filteredCount = useMemo(() => {
+    if (selectedTiers.size === 0 && selectedTables.size === 0) {
+      return guests.length;
+    }
+    return guests.filter((g) => {
+      if (selectedTiers.size > 0 && !selectedTiers.has(g.tier)) return false;
+      if (selectedTables.size > 0) {
+        const t = g.table_number?.trim();
+        const key = t && t.length > 0 ? t : NO_TABLE_SENTINEL;
+        if (!selectedTables.has(key)) return false;
+      }
+      return true;
+    }).length;
+  }, [guests, selectedTiers, selectedTables]);
+
+  const filterActive =
+    selectedTiers.size > 0 || selectedTables.size > 0;
+
+  function toggle<T>(set: Set<T>, value: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  }
+
   const total = guests.length;
   const checkedIn = guests.filter((g) => g.checked_in).length;
   const pending = total - checkedIn;
@@ -122,25 +198,37 @@ export default function GuestReport({
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <a
-            href={`/api/events/${eventId}/attendance/pdf`}
+            href={`/api/events/${eventId}/attendance/pdf${filterQuery}`}
             className="inline-flex items-center gap-1.5 rounded-md bg-aegis-orange px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-aegis-orange-600"
-            title="Branded PDF report — designed for sharing with the client."
+            title={
+              filterActive
+                ? `Branded PDF report — filtered to ${filteredCount} guest${filteredCount === 1 ? '' : 's'}.`
+                : 'Branded PDF report — designed for sharing with the client.'
+            }
           >
             <DownloadIcon />
             PDF report
           </a>
           <a
-            href={`/api/events/${eventId}/attendance/xlsx`}
+            href={`/api/events/${eventId}/attendance/xlsx${filterQuery}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-            title="Formatted Excel workbook with Summary + Guest List sheets."
+            title={
+              filterActive
+                ? `Excel workbook — filtered to ${filteredCount} guest${filteredCount === 1 ? '' : 's'}.`
+                : 'Formatted Excel workbook with Summary + Guest List sheets.'
+            }
           >
             <DownloadIcon />
             Excel
           </a>
           <a
-            href={`/api/events/${eventId}/attendance`}
+            href={`/api/events/${eventId}/attendance${filterQuery}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-aegis-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-aegis-gray hover:bg-aegis-gray-50"
-            title="Raw CSV — handy for spreadsheet imports."
+            title={
+              filterActive
+                ? `Raw CSV — filtered to ${filteredCount} guest${filteredCount === 1 ? '' : 's'}.`
+                : 'Raw CSV — handy for spreadsheet imports.'
+            }
           >
             <DownloadIcon />
             CSV
@@ -153,6 +241,26 @@ export default function GuestReport({
           />
         </div>
       </div>
+
+      {/* Export filter — checkboxes for tier + table. Empty selection on
+          a dimension means "no filter" (export everyone). The download
+          links above pick up the query string built from this state, so
+          the filter never alters what the host sees on this page — only
+          what they take away. */}
+      <ExportFilter
+        tiers={selectedTiers}
+        onToggleTier={(t) => setSelectedTiers((prev) => toggle(prev, t))}
+        tables={selectedTables}
+        onToggleTable={(t) => setSelectedTables((prev) => toggle(prev, t))}
+        tableOptions={tableOptions}
+        onClear={() => {
+          setSelectedTiers(new Set());
+          setSelectedTables(new Set());
+        }}
+        filteredCount={filteredCount}
+        totalCount={guests.length}
+        active={filterActive}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Total guests" value={total} accent="navy" />
@@ -520,6 +628,182 @@ function ActivityIcon({ action }: { action: EventCheckinAction }) {
         <path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
       </svg>
     </span>
+  );
+}
+
+// ─── Export filter (collapsible) ─────────────────────────────────────
+//
+// Tier + table checkboxes that drive the ?tiers=…&tables=… query string
+// on the export links. Collapsed by default so the report tab still
+// reads as one short page; expands on first interaction. Selection
+// state lives in the parent so the URL stays in sync even when the
+// panel is closed.
+
+function ExportFilter({
+  tiers,
+  onToggleTier,
+  tables,
+  onToggleTable,
+  tableOptions,
+  onClear,
+  filteredCount,
+  totalCount,
+  active,
+}: {
+  tiers: Set<GuestTier>;
+  onToggleTier: (t: GuestTier) => void;
+  tables: Set<string>;
+  onToggleTable: (t: string) => void;
+  tableOptions: string[];
+  onClear: () => void;
+  filteredCount: number;
+  totalCount: number;
+  active: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  // Auto-expand when the user has already filtered — closing then
+  // re-opening the tab shouldn't hide their active selection.
+  const expanded = open || active;
+
+  return (
+    <div className="mb-4 rounded-md border border-aegis-gray-100 bg-aegis-gray-50/40 print:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+        aria-expanded={expanded}
+      >
+        <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+          <svg
+            className="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M3 6h18M6 12h12M10 18h4" />
+          </svg>
+          Filter exports
+          {active && (
+            <span className="rounded-full bg-aegis-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-aegis-orange-600 ring-1 ring-inset ring-aegis-orange/30">
+              {filteredCount} / {totalCount}
+            </span>
+          )}
+        </span>
+        <span className="text-[11px] text-aegis-gray-400">
+          {expanded ? 'Hide' : 'Show'}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="space-y-3 border-t border-aegis-gray-100 px-3 py-3">
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+              By tier
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ALL_TIERS.map((t) => {
+                const checked = tiers.has(t);
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => onToggleTier(t)}
+                    aria-pressed={checked}
+                    className={[
+                      'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                      checked
+                        ? 'border-aegis-navy bg-aegis-navy text-white'
+                        : 'border-aegis-gray-200 bg-white text-aegis-gray hover:border-aegis-navy-100',
+                    ].join(' ')}
+                  >
+                    {checked && (
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <path d="M5 12l5 5 9-11" />
+                      </svg>
+                    )}
+                    {GUEST_TIER_LABEL[t]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {tableOptions.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-aegis-gray-500">
+                By table
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {tableOptions.map((t) => {
+                  const checked = tables.has(t);
+                  const label = t === NO_TABLE_SENTINEL ? 'No table' : `Table ${t}`;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => onToggleTable(t)}
+                      aria-pressed={checked}
+                      className={[
+                        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium tabular-nums transition-colors',
+                        checked
+                          ? 'border-aegis-navy bg-aegis-navy text-white'
+                          : 'border-aegis-gray-200 bg-white text-aegis-gray hover:border-aegis-navy-100',
+                      ].join(' ')}
+                    >
+                      {checked && (
+                        <svg
+                          className="h-3 w-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path d="M5 12l5 5 9-11" />
+                        </svg>
+                      )}
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-aegis-gray-500">
+            <span>
+              {active
+                ? `Exports will include ${filteredCount} of ${totalCount} guests.`
+                : `No filter — exports include all ${totalCount} guests.`}
+            </span>
+            {active && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="font-medium text-aegis-navy hover:text-aegis-orange"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

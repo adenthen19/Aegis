@@ -250,14 +250,21 @@ export default function GuestList({
         />
       )}
 
-      <NewGuestModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        eventId={eventId}
-        guests={guests}
-        tables={tables}
-        defaultCapacity={defaultCapacity}
-      />
+      {/* Unmount NewGuestModal on close so useActionState resets between
+          opens. Otherwise state.ok stays true after the first successful
+          add and the modal's `if (state.ok) onClose()` effect re-fires on
+          every subsequent open — flashing the modal and risking
+          out-of-order scroll-lock cycles. */}
+      {addOpen && (
+        <NewGuestModal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          eventId={eventId}
+          guests={guests}
+          tables={tables}
+          defaultCapacity={defaultCapacity}
+        />
+      )}
 
       <ConfirmDialog
         open={resetOpen}
