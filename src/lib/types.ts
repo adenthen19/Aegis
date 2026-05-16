@@ -19,7 +19,39 @@ export const IPO_STATUS_LABEL: Record<IpoStatus, string> = {
 };
 export type AnalystType = 'buy_side' | 'sell_side' | 'kol';
 export type MeetingFormat = 'physical' | 'online';
-export type MeetingType = 'internal' | 'briefing';
+// 'internal' and 'briefing' are the original two values from migration 0001.
+// Migration 0041 added the four briefing subtypes so the 1-Year Engagement
+// Summary PDF can bucket meetings into the analyst / investor / deck / webinar
+// columns. New rows should pick a subtype; the bare 'briefing' value stays
+// usable for legacy data.
+export type MeetingType =
+  | 'internal'
+  | 'briefing'
+  | 'analyst_briefing'
+  | 'investor_one_to_one'
+  | 'investor_deck_delivery'
+  | 'webinar';
+
+export const MEETING_TYPE_LABEL: Record<MeetingType, string> = {
+  internal: 'Internal',
+  briefing: 'Briefing (legacy)',
+  analyst_briefing: 'Analyst briefing',
+  investor_one_to_one: 'Investor one-to-one',
+  investor_deck_delivery: 'Investor deck delivery',
+  webinar: 'Webinar',
+};
+
+// Meeting types that count as "analyst / investor briefings" for the
+// engagement summary PDF — section 2 of the SAG sample report. The legacy
+// 'briefing' value is included so rows entered before migration 0041 still
+// show up in the report until the user re-classifies them.
+export const BRIEFING_MEETING_TYPES: MeetingType[] = [
+  'briefing',
+  'analyst_briefing',
+  'investor_one_to_one',
+  'investor_deck_delivery',
+  'webinar',
+];
 export type ActionItemStatus = 'open' | 'done';
 export type ProjectStatus = 'pending' | 'upcoming' | 'completed';
 

@@ -3,7 +3,12 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { structureMeetingTranscript } from '@/lib/gemini';
-import type { ActionItemStatus, MeetingFormat, MeetingType } from '@/lib/types';
+import {
+  BRIEFING_MEETING_TYPES,
+  type ActionItemStatus,
+  type MeetingFormat,
+  type MeetingType,
+} from '@/lib/types';
 
 export type ActionState = { ok: boolean; error: string | null };
 
@@ -19,7 +24,10 @@ export type StructureMeetingState = {
 };
 
 const FORMATS: MeetingFormat[] = ['physical', 'online'];
-const TYPES: MeetingType[] = ['internal', 'briefing'];
+// Migration 0041 split 'briefing' into four subtypes; all five non-internal
+// values are accepted here so the form can submit either the legacy bucket
+// (existing rows) or one of the new subtypes.
+const TYPES: MeetingType[] = ['internal', ...BRIEFING_MEETING_TYPES];
 
 type MeetingPayload = {
   meeting_type: MeetingType;
@@ -64,7 +72,7 @@ function readForm(formData: FormData): { ok: true; value: ParsedForm } | { ok: f
   }
   if (!meeting_date) return { ok: false, error: 'Meeting date is required.' };
 
-  if (meeting_type === 'briefing' && !client_id && !investor_id) {
+  if (meeting_type !== 'internal' && !client_id && !investor_id) {
     return { ok: false, error: 'Briefings must be linked to a client or investor.' };
   }
 
@@ -330,8 +338,14 @@ export async function structureMeetingTranscriptAction(
   }
 
   const meeting_type_raw = formData.get('meeting_type')?.toString();
+  // Anything in the briefing family — including the legacy bucket and the
+  // four new subtypes from migration 0041 — is treated as 'briefing' for the
+  // Gemini structuring prompt, which only cares about the client-facing vs
+  // internal distinction.
   const meeting_type: MeetingType =
-    meeting_type_raw === 'briefing' ? 'briefing' : 'internal';
+    BRIEFING_MEETING_TYPES.includes(meeting_type_raw as MeetingType)
+      ? 'briefing'
+      : 'internal';
 
   const meeting_date = formData.get('meeting_date')?.toString().trim() || null;
   const client_id = formData.get('client_id')?.toString().trim() || null;

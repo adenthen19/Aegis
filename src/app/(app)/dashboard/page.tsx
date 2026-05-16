@@ -1,7 +1,12 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
-import type { ProjectStatus, ServiceTier } from '@/lib/types';
+import {
+  MEETING_TYPE_LABEL,
+  type MeetingType,
+  type ProjectStatus,
+  type ServiceTier,
+} from '@/lib/types';
 import { displayCompany, displayName } from '@/lib/display-format';
 
 type ProjectRow = {
@@ -15,7 +20,7 @@ type ProjectRow = {
 type MeetingRow = {
   meeting_id: string;
   meeting_format: 'physical' | 'online';
-  meeting_type: 'internal' | 'briefing';
+  meeting_type: MeetingType;
   meeting_date: string;
   summary: string | null;
   other_remarks: string | null;
@@ -390,7 +395,7 @@ export default async function DashboardPage() {
                   ]
                     .filter(Boolean)
                     .join(' × ') ||
-                  (m.meeting_type === 'internal' ? 'Internal meeting' : '—');
+                  (m.meeting_type === 'internal' ? 'Internal meeting' : MEETING_TYPE_LABEL[m.meeting_type]);
                 return (
                   <li key={m.meeting_id} className="py-3">
                     <div className="flex items-center gap-2">
@@ -406,7 +411,7 @@ export default async function DashboardPage() {
                             : 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20',
                         ].join(' ')}
                       >
-                        {m.meeting_type}
+                        {MEETING_TYPE_LABEL[m.meeting_type]}
                       </span>
                     </div>
                     <p className="mt-1 truncate text-sm font-medium text-aegis-navy">{title}</p>

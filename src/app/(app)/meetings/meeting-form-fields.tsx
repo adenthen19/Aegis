@@ -7,8 +7,26 @@ import {
   TextAreaField,
   TextField,
 } from '@/components/ui/form';
-import type { ActionItem, Meeting, MeetingType, Profile } from '@/lib/types';
+import {
+  MEETING_TYPE_LABEL,
+  type ActionItem,
+  type Meeting,
+  type MeetingType,
+  type Profile,
+} from '@/lib/types';
 import { structureMeetingTranscriptAction } from './actions';
+
+// Subtype values shown under the briefing toggle. Order = preferred default
+// (analyst_briefing is the most common, so it's first). The legacy 'briefing'
+// value is kept selectable for existing rows so a user editing a pre-0041
+// meeting doesn't lose the value silently — but it's flagged as legacy.
+const BRIEFING_SUBTYPES: MeetingType[] = [
+  'analyst_briefing',
+  'investor_one_to_one',
+  'investor_deck_delivery',
+  'webinar',
+  'briefing',
+];
 
 const inputClass =
   'w-full rounded-md border border-aegis-gray-200 bg-white px-3 py-2 text-sm text-aegis-gray-900 placeholder:text-aegis-gray-300 outline-none transition-colors focus:border-aegis-navy focus:ring-2 focus:ring-aegis-navy/10';
@@ -50,6 +68,10 @@ export default function MeetingFormFields({
   profiles: Profile[];
 }) {
   const [meetingType, setMeetingType] = useState<MeetingType>(initial?.meeting_type ?? 'internal');
+  // Derived. The form's overall shape (summary vs. agenda+action items, client
+  // picker on/off) is driven by this binary — all non-internal values are
+  // briefing-family.
+  const isBriefing = meetingType !== 'internal';
   const [attendeeIds, setAttendeeIds] = useState<Set<string>>(new Set(initialAttendeeIds));
   const [agendaItems, setAgendaItems] = useState<string[]>(
     initial?.agenda_items?.length ? initial.agenda_items : [''],
@@ -86,34 +108,64 @@ export default function MeetingFormFields({
     <>
       {initial && <input type="hidden" name="meeting_id" value={initial.meeting_id} />}
 
-      {/* Type toggle */}
+      {/* Type toggle. Top-level: internal vs client/investor-facing. When the
+          user picks the briefing track, a subtype selector appears below so the
+          1-Year Engagement Summary PDF can bucket the meeting correctly. */}
       <div>
         <label className={labelClass}>Meeting type</label>
         <div className="grid grid-cols-2 gap-2">
-          {(['internal', 'briefing'] as const).map((t) => {
-            const active = meetingType === t;
-            return (
-              <button
-                type="button"
-                key={t}
-                onClick={() => setMeetingType(t)}
-                className={[
-                  'rounded-md border px-3 py-2 text-sm font-medium capitalize transition-colors',
-                  active
-                    ? 'border-aegis-navy bg-aegis-navy text-white'
-                    : 'border-aegis-gray-200 bg-white text-aegis-gray hover:bg-aegis-gray-50',
-                ].join(' ')}
-              >
-                {t === 'internal' ? 'Internal meeting' : 'Client / investor briefing'}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={() => setMeetingType('internal')}
+            className={[
+              'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+              !isBriefing
+                ? 'border-aegis-navy bg-aegis-navy text-white'
+                : 'border-aegis-gray-200 bg-white text-aegis-gray hover:bg-aegis-gray-50',
+            ].join(' ')}
+          >
+            Internal meeting
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              // Switching from internal → briefing defaults to analyst_briefing
+              // (the most common case). User can refine in the subtype picker.
+              setMeetingType(
+                isBriefing ? meetingType : 'analyst_briefing',
+              )
+            }
+            className={[
+              'rounded-md border px-3 py-2 text-sm font-medium transition-colors',
+              isBriefing
+                ? 'border-aegis-navy bg-aegis-navy text-white'
+                : 'border-aegis-gray-200 bg-white text-aegis-gray hover:bg-aegis-gray-50',
+            ].join(' ')}
+          >
+            Client / investor briefing
+          </button>
         </div>
+        {isBriefing && (
+          <div className="mt-2">
+            <select
+              value={meetingType}
+              onChange={(e) => setMeetingType(e.target.value as MeetingType)}
+              className={inputClass}
+              aria-label="Briefing subtype"
+            >
+              {BRIEFING_SUBTYPES.map((t) => (
+                <option key={t} value={t}>
+                  {MEETING_TYPE_LABEL[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <input type="hidden" name="meeting_type" value={meetingType} />
         <p className="mt-1 text-[11px] text-aegis-gray-300">
-          {meetingType === 'internal'
+          {!isBriefing
             ? 'Use the agenda + action items template.'
-            : 'Paste the Notta summary; link to the client or investor.'}
+            : 'Paste the Notta summary; link to the client or investor. The subtype drives where this meeting appears in the engagement summary PDF.'}
         </p>
       </div>
 
@@ -142,7 +194,7 @@ export default function MeetingFormFields({
         defaultValue={initial?.location ?? undefined}
       />
 
-      {meetingType === 'briefing' && (
+      {isBriefing && (
         <>
           <SelectField
             name="client_id"
@@ -189,7 +241,7 @@ export default function MeetingFormFields({
       </div>
 
       <Repeater
-        label={meetingType === 'briefing' ? 'Topics covered' : 'Agenda items'}
+        label={isBriefing ? 'Topics covered' : 'Agenda items'}
         rows={agendaItems}
         onChange={setAgendaItems}
         renderRow={(value, onUpdate) => (
@@ -198,15 +250,15 @@ export default function MeetingFormFields({
             name="agenda_item"
             value={value}
             onChange={(e) => onUpdate(e.target.value)}
-            placeholder={meetingType === 'briefing' ? 'Topic discussed' : 'Topic to discuss'}
+            placeholder={isBriefing ? 'Topic discussed' : 'Topic to discuss'}
             className={inputClass}
           />
         )}
         newRow={() => ''}
-        addLabel={meetingType === 'briefing' ? 'Add topic' : 'Add agenda item'}
+        addLabel={isBriefing ? 'Add topic' : 'Add agenda item'}
       />
 
-      {meetingType === 'briefing' && (
+      {isBriefing && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <label className={labelClass}>Summary (paste from Notta)</label>

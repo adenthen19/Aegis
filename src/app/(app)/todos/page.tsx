@@ -3,7 +3,12 @@ import { createClient } from '@/lib/supabase/server';
 import PageHeader from '@/components/page-header';
 import FilterTabs from '@/components/ui/filter-tabs';
 import ActionItemToggle from '../meetings/action-item-toggle';
-import type { ActionItem, Profile } from '@/lib/types';
+import {
+  MEETING_TYPE_LABEL,
+  type ActionItem,
+  type MeetingType,
+  type Profile,
+} from '@/lib/types';
 import NewTodo from './new-todo';
 import TodoRowActions from './row-actions';
 import RegulatoryPreworkButtons, {
@@ -151,7 +156,13 @@ export default async function TodosPage({
               ? [a.meetings.clients?.corporate_name, a.meetings.analysts?.institution_name]
                   .filter(Boolean)
                   .join(' × ') ||
-                (a.meetings.meeting_type === 'internal' ? 'Internal meeting' : 'Briefing')
+                // meeting_type comes back as a free-form string from the embed
+                // (no enum narrowing on joins); MEETING_TYPE_LABEL handles any
+                // briefing-family value, and the fallback covers anything
+                // unrecognised.
+                (a.meetings.meeting_type === 'internal'
+                  ? 'Internal meeting'
+                  : (MEETING_TYPE_LABEL[a.meetings.meeting_type as MeetingType] ?? 'Briefing'))
               : null;
             const isManual = !a.meeting_id;
             return (

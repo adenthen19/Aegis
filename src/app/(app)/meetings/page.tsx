@@ -5,7 +5,12 @@ import DataTable, { type SortState } from '@/components/data-table';
 import SearchInput from '@/components/ui/search-input';
 import Pagination from '@/components/ui/pagination';
 import FilterTabs from '@/components/ui/filter-tabs';
-import type { ActionItem, Meeting } from '@/lib/types';
+import {
+  BRIEFING_MEETING_TYPES,
+  MEETING_TYPE_LABEL,
+  type ActionItem,
+  type Meeting,
+} from '@/lib/types';
 import { displayCompany, formatEventDateTime } from '@/lib/display-format';
 import { sanitizeIlikeTerm } from '@/lib/postgrest';
 import NewMeeting from './new-meeting';
@@ -50,7 +55,14 @@ export default async function MeetingsPage({
         }
       }
       if (format === 'physical' || format === 'online') query = query.eq('meeting_format', format);
-      if (type === 'internal' || type === 'briefing') query = query.eq('meeting_type', type);
+      // Filter pills are coarse: 'internal' picks just the internal value, and
+      // 'briefing' covers the whole briefing family (legacy 'briefing' bucket
+      // plus the four subtypes added in migration 0041).
+      if (type === 'internal') {
+        query = query.eq('meeting_type', 'internal');
+      } else if (type === 'briefing') {
+        query = query.in('meeting_type', BRIEFING_MEETING_TYPES);
+      }
       query = query.order(sort, { ascending: dir === 'asc' });
       query = query.range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
       return query;
@@ -86,7 +98,7 @@ export default async function MeetingsPage({
           options={[
             { value: '', label: 'All types' },
             { value: 'internal', label: 'Internal' },
-            { value: 'briefing', label: 'Briefing' },
+            { value: 'briefing', label: 'Briefings' },
           ]}
         />
         <FilterTabs
@@ -124,13 +136,13 @@ export default async function MeetingsPage({
             cell: (r) => (
               <span
                 className={[
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset',
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
                   r.meeting_type === 'internal'
                     ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
                     : 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20',
                 ].join(' ')}
               >
-                {r.meeting_type}
+                {MEETING_TYPE_LABEL[r.meeting_type]}
               </span>
             ),
           },

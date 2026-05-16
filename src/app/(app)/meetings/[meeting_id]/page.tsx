@@ -4,7 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import {
   Breadcrumbs, DetailHeader, EmptyMini, Field, FieldGrid, Section,
 } from '@/components/detail-shell';
-import type { ActionItem, Meeting, Profile } from '@/lib/types';
+import {
+  MEETING_TYPE_LABEL,
+  type ActionItem,
+  type Meeting,
+  type Profile,
+} from '@/lib/types';
 import {
   displayCompany,
   displayName,
@@ -91,13 +96,13 @@ export default async function MeetingDetailPage({
         badges={
           <span
             className={[
-              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ring-inset',
+              'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
               isInternal
                 ? 'bg-aegis-blue-50 text-aegis-navy ring-aegis-blue/30'
                 : 'bg-aegis-navy-50 text-aegis-navy ring-aegis-navy/20',
             ].join(' ')}
           >
-            {meeting.meeting_type}
+            {MEETING_TYPE_LABEL[meeting.meeting_type]}
           </span>
         }
         actions={
